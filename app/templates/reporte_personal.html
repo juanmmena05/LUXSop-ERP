@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP Diario — {{ persona.nombre }} ({{ fecha.strftime('%Y-%m-%d') }})</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#fafafa; --fg:#222; --muted:#666; --card:#ffffff;
+      --line:#ddd; --accent:#0d6efd; --ok:#198754;
+    }
+    html,body{background:var(--bg); color:var(--fg); font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;}
+    .wrap{max-width:1000px; margin:0 auto; padding:24px;}
+    h1{font-size:1.4rem; margin:.25rem 0 .5rem;}
+    h2{font-size:1.1rem; margin:1.5rem 0 .5rem;}
+    .sub{color:var(--muted); font-size:.9rem;}
+    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+    .spacer{flex:1}
+    .btn{display:inline-block; background:var(--accent); color:#fff; border:none; padding:.55rem .8rem; border-radius:8px; text-decoration:none; font-weight:600; font-size:.9rem;}
+    .btn.ok{background:var(--ok)}
+    .btn.secondary{background:#6c757d}
+    .btn:hover{filter:brightness(.95)}
+    .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;}
+    .accordion{display:grid; gap:10px;}
+    .acc-item{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff}
+    .acc-head{display:flex; gap:10px; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; background:#f8f9fa}
+    .acc-head h3{margin:0; font-size:1rem}
+    .acc-meta{font-size:.85rem; color:var(--muted)}
+    .acc-body{display:none; padding:14px}
+    .acc-item.open .acc-body{display:block}
+    .muted{color:var(--muted); font-size:.85rem}
+    ol.list{margin:.5rem 0 0 1.2rem; padding-left:0}
+    li{margin-bottom:.6rem;}
+    .footer{margin:22px 0 6px; color:var(--muted); font-size:.85rem; text-align:center}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Encabezado -->
+  <div class="row" style="margin-bottom:10px">
+    <div>
+      <h1>SOP Diario — {{ fecha.strftime('%Y-%m-%d') }}</h1>
+      <div class="sub">Operario: <strong>{{ persona.nombre }}</strong> ({{ persona.personal_id }})</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="row">
+      <a class="btn secondary" href="/">⬅ Volver</a>
+
+      <!-- ✅ BOTÓN CORREGIDO: descarga el PDF directamente -->
+      <a class="btn ok"
+         href="{{ url_for('main.reporte_persona_dia_pdf',
+                          fecha=fecha.strftime('%Y-%m-%d'),
+                          personal_id=persona.personal_id) }}"
+         target="_blank"
+         title="Descargar reporte completo en PDF">
+        📥 Descargar SOP Macro (PDF)
+      </a>
+    </div>
+  </div>
+
+  <!-- SOP MICRO (acordeones por subárea) -->
+  <div class="card">
+    <h2>SOP - SUBÁREA</h2>
+    {% if detalles and detalles|length > 0 %}
+      <div class="accordion" id="micro-accordion">
+        {% for d in detalles %}
+          <div class="acc-item" id="micro-{{ loop.index }}">
+            <div class="acc-head" data-acc-toggle="micro-{{ loop.index }}">
+              <h3>{{ d.subarea }}</h3>
+              <span class="acc-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
+              <div class="spacer"></div>
+              <span class="muted">SOP {{ d.sop_codigo if d.sop_codigo else 'N/D' }}</span>
+            </div>
+            <div class="acc-body">
+
+              {% if d.observacion_critica %}
+                <p><strong>⚠ Observaciones críticas:</strong><br>{{ d.observacion_critica }}</p>
+              {% endif %}
+
+              {% if d.fracciones and d.fracciones|length > 0 %}
+                <ol class="list">
+                  {% for f in d.fracciones %}
+                    <li>
+                      <strong>{{ f.orden }}. {{ f.fraccion_nombre }}</strong><br>
+                      <span class="muted">Nivel: {{ f.nivel_limpieza|capitalize }}</span><br>
+                      {% if f.descripcion %}<div>{{ f.descripcion }}</div>{% endif %}
+                    </li>
+                  {% endfor %}
+                </ol>
+              {% else %}
+                <p class="muted">Sin fracciones para el nivel asignado.</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No hay SOP asignado para este día.</p>
+    {% endif %}
+  </div>
+
+  <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
+</div>
+
+<script>
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-acc-toggle]');
+    if (!t) return;
+    const id = t.getAttribute('data-acc-toggle');
+    const item = document.getElementById(id);
+    if (!item) return;
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.acc-item.open').forEach(el => el.classList.remove('open'));
+    if (!isOpen) item.classList.add('open');
+  });
+</script>
+</body>
+</html>

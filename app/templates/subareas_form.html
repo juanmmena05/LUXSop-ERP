@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva Subárea</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 600px; }
+        h1 { font-size: 1.2rem; margin-top: 0; }
+        form { display: grid; gap: 1rem; }
+        label { font-size: .9rem; font-weight: 500; color: #333; display: block; margin-bottom: .25rem; }
+        input, select {
+            width: 100%;
+            padding: .6rem .7rem;
+            border-radius: 6px;
+            border: 1px solid #999;
+            font-size: 1rem;
+        }
+
+        button {
+            background:#198754;
+            color:#fff;
+            border:none;
+            border-radius:6px;
+            padding:.6rem .9rem;
+            font-size:1rem;
+            cursor:pointer;
+        }
+        button:hover { filter:brightness(.9); }
+
+        a { color:#0d6efd; text-decoration:none; font-size:.9rem; }
+        a:hover { text-decoration:underline; }
+
+        .card {
+            border: 1px solid #ccc;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .row-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Nueva Subárea</h1>
+    <p>Da de alta una subárea dentro de un área existente (por ejemplo "Oficina Memo" dentro de "Planta Principal").</p>
+
+    <form method="POST">
+        <div>
+            <label for="subarea_id">ID de Subárea (ej. SUB_MEMO)</label>
+            <input required type="text" id="subarea_id" name="subarea_id" />
+        </div>
+
+        <div>
+            <label for="area_id">Área a la que pertenece</label>
+            <select required id="area_id" name="area_id">
+                <option value="">-- seleccionar área --</option>
+                {% for a in areas %}
+                    <option value="{{ a.area_id }}">{{ a.area_id }} - {{ a.area_nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="subarea_nombre">Nombre de la Subárea</label>
+            <input type="text" id="subarea_nombre" name="subarea_nombre" />
+        </div>
+
+        <div class="row-2col">
+            <div>
+                <label for="superficie_subarea">Superficie (m²)</label>
+                <input type="number" step="0.01" id="superficie_subarea" name="superficie_subarea" />
+            </div>
+
+            <div>
+                <label for="frecuencia">Frecuencia (veces / periodo)</label>
+                <input type="number" step="0.01" id="frecuencia" name="frecuencia" />
+            </div>
+        </div>
+
+        <div class="row-2col">
+            <div>
+                <label for="nivel_limpieza">Nivel de Limpieza Base</label>
+                <select id="nivel_limpieza" name="nivel_limpieza">
+                    <option value="">-- seleccionar nivel --</option>
+                    <option value="basica">Básica</option>
+                    <option value="media">Media</option>
+                    <option value="profunda">Profunda</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="tiempo_total_subarea">Tiempo total estimado</label>
+                <input type="number" step="0.01" id="tiempo_total_subarea" name="tiempo_total_subarea" />
+            </div>
+        </div>
+
+        <div>
+            <button type="submit">Guardar Subárea</button>
+            <a href="/subareas">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<p style="margin-top:2rem;">
+    <a href="/">⬅ Inicio</a>
+</p>
+
+</body>
+</html>

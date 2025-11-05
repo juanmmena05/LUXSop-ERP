@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Áreas</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 2rem; }
+        table { border-collapse: collapse; width: 100%; max-width: 900px; }
+        th, td { border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; }
+        th { background: #efefef; }
+        .topbar { display:flex; justify-content:space-between; align-items:center; max-width:900px; margin-bottom:1rem; }
+        a.button {
+            display:inline-block;
+            background:#0d6efd;
+            color:#fff;
+            padding:.5rem .75rem;
+            border-radius:6px;
+            text-decoration:none;
+            font-size:.9rem;
+        }
+        a.button:hover { filter:brightness(.9); }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>Áreas registradas</h1>
+        <a class="button" href="/areas/nueva">+ Nueva Área</a>
+    </div>
+
+    {% if areas and areas|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID Área</th>
+                <th>Nombre</th>
+                <th>Superficie</th>
+                <th>Tipo</th>
+                <th># Subáreas</th>
+                <th>Tiempo Total Área</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in areas %}
+            <tr>
+                <td>{{ a.area_id }}</td>
+                <td>{{ a.area_nombre }}</td>
+                <td>{{ a.superficie_area }}</td>
+                <td>{{ a.tipo_area }}</td>
+                <td>{{ a.cantidad_subareas }}</td>
+                <td>{{ a.tiempo_total_area }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p>No hay áreas todavía. Agrega la primera 👇</p>
+        <p><a class="button" href="/areas/nueva">Crear Área</a></p>
+    {% endif %}
+
+    <p style="margin-top:2rem;">
+        <a href="/">⬅ Inicio</a>
+    </p>
+</body>
+</html>

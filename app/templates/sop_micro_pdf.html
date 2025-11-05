@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP Micro — {{ persona.nombre }} — {{ subarea.subarea_nombre }}</title>
+  <style>
+    body{font-family: system-ui, sans-serif; font-size:12px; color:#222; margin:24px;}
+    h1{font-size:18px; margin:0 0 8px}
+    h2{font-size:14px; margin:14px 0 6px; border-bottom:1px solid #ccc; padding-bottom:4px}
+    .meta{font-size:12px; color:#555; margin-bottom:10px}
+    ol{margin:6px 0 0 18px}
+    .kv{margin:4px 0}
+    .k{display:inline-block; width:160px; color:#555}
+  </style>
+</head>
+<body>
+  <h1>SOP Micro — {{ persona.nombre }} ({{ persona.personal_id }})</h1>
+  <div class="meta">
+    Área: <strong>{{ area.area_nombre }}</strong><br>
+    Subárea: <strong>{{ subarea.subarea_nombre }}</strong><br>
+    Nivel: <strong>{{ nivel|capitalize }}</strong><br>
+    {% if sop %}Código SOP: <strong>{{ sop.sop_codigo }}</strong>{% endif %}
+  </div>
+
+  {% if sop and sop.observacion_critica_sop %}
+    <div class="kv"><span class="k">Observaciones críticas:</span> {{ sop.observacion_critica_sop }}</div>
+  {% endif %}
+
+  <h2>Fracciones incluidas</h2>
+  {% if fracciones and fracciones|length > 0 %}
+    <ol>
+      {% for f in fracciones %}
+        <li>
+          <strong>{{ f.orden }}. {{ f.fraccion_nombre }}</strong>
+          {% if f.descripcion %}<div>{{ f.descripcion }}</div>{% endif %}
+          <div style="color:#666">Nivel: {{ f.nivel_limpieza|capitalize }}</div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p>No hay fracciones para el nivel asignado.</p>
+  {% endif %}
+</body>
+</html>

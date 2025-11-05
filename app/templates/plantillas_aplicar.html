@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Aplicar plantilla semanal</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f9f9f9; color:#222; margin:0; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.3rem; margin: 0 0 16px; }
+    .card { background:#fff; border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:16px; }
+    .row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+    label { font-weight:600; font-size:.9rem; }
+    select,input[type="date"],input[type="text"]{ padding:.45rem .6rem; border:1px solid #ddd; border-radius:8px; font-size:.9rem; }
+    .muted { color:#666; font-size:.85rem; }
+    .btn { background:#0d6efd; color:#fff; border:none; border-radius:8px; padding:.6rem .9rem; font-weight:600; cursor:pointer; }
+    .btn.secondary { background:#6c757d; }
+    .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
+    .inline { display:inline-flex; gap:10px; align-items:center; }
+    .section-title { font-size:1rem; font-weight:700; margin-bottom:8px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Aplicar plantilla semanal</h1>
+
+  <form method="POST" action="{{ url_for('main.plantillas_aplicar_post') }}">
+    <div class="card">
+      <div class="section-title">Semana destino</div>
+      <div class="row">
+        <label for="lunes_destino">Lunes destino</label>
+        <input type="date" id="lunes_destino" name="lunes_destino" value="{{ lunes_destino.strftime('%Y-%m-%d') }}" required>
+        <span class="muted">Debes seleccionar el lunes de la semana a poblar (Lun–Sáb).</span>
+      </div>
+      <div class="row">
+        <label class="inline"><input type="checkbox" name="overwrite"> Sobrescribir (borrar lo ya asignado en esa semana)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Modo de aplicación</div>
+
+      <div class="grid">
+        <!-- 1) Ruta base -->
+        <label class="inline">
+          <input type="radio" name="modo" value="ruta_base" checked>
+          Usar ruta base del personal (AsignacionPersonal)
+        </label>
+
+        <!-- 2) Desde otra semana -->
+        <div>
+          <label class="inline">
+            <input type="radio" name="modo" value="semana">
+            Clonar desde otra semana
+          </label>
+          <div class="row" style="margin-top:8px;">
+            <label for="lunes_origen">Lunes origen</label>
+            <input type="date" id="lunes_origen" name="lunes_origen" value="{{ lunes_anterior.strftime('%Y-%m-%d') }}">
+            <span class="muted">Ejemplo: lunes de la semana pasada.</span>
+          </div>
+        </div>
+
+        <!-- 3) Plantilla guardada -->
+        <div>
+          <label class="inline">
+            <input type="radio" name="modo" value="plantilla">
+            Usar plantilla guardada
+          </label>
+          <div class="row" style="margin-top:8px;">
+            <label for="plantilla_id">Plantilla</label>
+            <select id="plantilla_id" name="plantilla_id">
+              {% for p in plantillas %}
+                <option value="{{ p.plantilla_id }}">{{ p.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn secondary" href="{{ url_for('main.home') }}">Volver</a>
+    </div>
+  </form>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="section-title">Guardar la semana actual como plantilla</div>
+    <form method="POST" action="{{ url_for('main.guardar_semana_como_plantilla') }}">
+      <div class="row">
+        <label for="lunes_ref">Lunes referencia</label>
+        <input type="date" id="lunes_ref" name="lunes_ref" value="{{ lunes_destino.strftime('%Y-%m-%d') }}" required>
+        <label for="nombre">Nombre</label>
+        <input type="text" id="nombre" name="nombre" placeholder="Ej. Planta 1 — Semana estándar" required>
+        <button class="btn" type="submit">Guardar</button>
+      </div>
+      <div class="muted" style="margin-top:6px;">Se guardarán las tareas (persona, área, subárea, nivel) de Lun–Sáb.</div>
+    </form>
+  </div>
+</div>
+</body>
+</html>

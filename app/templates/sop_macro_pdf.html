@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP Macro — {{ persona.nombre }} ({{ fecha.strftime('%Y-%m-%d') }})</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 40px;
+      color: #222;
+      font-size: 11pt;
+      line-height: 1.5;
+      max-width: 1000px;
+    }
+    h1 {
+      font-size: 1.1rem;
+      margin-bottom: 6px;
+    }
+    .meta {
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+    }
+    .meta div {
+      margin-bottom: 4px;
+    }
+    h2 {
+      font-size: 1rem;
+      margin: 24px 0 6px;
+      color: #333;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 2px;
+    }
+    .fraccion {
+      margin-bottom: 12px;
+    }
+    .fraccion-title {
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    .fraccion-meta {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+    th, td {
+      text-align: left;
+      padding: 6px;
+      font-size: 10pt;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 0.85rem;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Encabezado -->
+  <h1>SOP MACRO</h1>
+  <div class="meta">
+    <div><strong>Personal:</strong> {{ persona.nombre }}</div>
+    <div><strong>Fecha:</strong> {{ fecha.strftime('%Y-%m-%d') }}</div>
+    <div><strong>ID:</strong> {{ persona.personal_id }}</div>
+  </div>
+
+  {% for d in detalles %}
+    <h2>{{ d.subarea }}</h2>
+
+    <!-- Tabla de cabecera -->
+    <table>
+      <tr>
+        <th>Área</th>
+        <th>Subárea</th>
+        <th>Nivel de limpieza</th>
+      </tr>
+      <tr>
+        <td>{{ d.area }}</td>
+        <td>{{ d.subarea }}</td>
+        <td>{{ d.nivel|capitalize }}</td>
+      </tr>
+    </table>
+
+    {% if d.observacion_critica %}
+      <div class="fraccion-meta"><strong>⚠ Observación crítica:</strong> {{ d.observacion_critica }}</div>
+    {% endif %}
+
+    {% if d.fracciones and d.fracciones|length > 0 %}
+      <ol style="margin-top: 10px;">
+        {% for f in d.fracciones %}
+          <li class="fraccion">
+            <div class="fraccion-title">{{ f.orden }}. {{ f.fraccion_nombre }}</div>
+            <div class="fraccion-meta">Nivel: {{ f.nivel_limpieza|capitalize }}</div>
+            {% if f.descripcion %}
+              <div>{{ f.descripcion }}</div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="fraccion-meta">Sin fracciones disponibles para este nivel.</p>
+    {% endif %}
+  {% endfor %}
+
+  <div class="footer">
+    LuxSOP ERP — Documento macro SOP por operario, día y nivel de limpieza.
+  </div>
+
+</body>
+</html>
