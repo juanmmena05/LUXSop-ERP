@@ -1,24 +1,39 @@
 import io
 import pdfkit
 import os
+from sqlalchemy.orm import joinedload
 from datetime import datetime, date, timedelta
 from typing import Optional
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response
 from .models import (
     db,
     Area,
     SubArea,
     SOP,
     Fraccion,
+    FraccionDetalle,
+    Metodologia,
+    NivelLimpieza,
     Personal,
     LanzamientoSemana,
     LanzamientoDia,
     LanzamientoTarea,
-    AsignacionPersonal, 
+    AsignacionPersonal,
     PlantillaSemanal,
     PlantillaItem,
     PlantillaSemanaAplicada,
+    Elemento,
+    ElementoSet,
+    ElementoDetalle,
+    Kit,
+    KitDetalle,
+    Herramienta,
+    Receta,
+    RecetaDetalle,
+    Quimico
 )
+
+
 
 
 # =========================
@@ -339,206 +354,278 @@ def plan_dia_asignar(fecha):
         tiempos_por_tarea=tiempos_por_tarea
     )
 
+
 # =========================
-# REPORTE (fecha + persona)
+# REPORTE (fecha + persona) — versión extendida con ElementoSet
 # =========================
 @main_bp.route('/reporte/<fecha>/<personal_id>')
 def reporte_persona_dia(fecha, personal_id):
-    """
-    SOP del día por persona: filtra por fecha + persona y
-    arma fracciones según nivel (basica/media/profunda).
-    """
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
-
-    # Ubicar día
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
 
-    # Tareas de esa persona en ese día
-    tareas = LanzamientoTarea.query.filter_by(
-        dia_id=dia.dia_id,
-        personal_id=personal_id
-    ).all()
+    tareas = LanzamientoTarea.query.filter_by(dia_id=dia.dia_id, personal_id=personal_id).all()
     if not tareas:
         persona = Personal.query.filter_by(personal_id=personal_id).first()
         nombre = persona.nombre if persona else personal_id
         return f"No hay tareas para {nombre} el {fecha}.", 404
 
-    # Persona (desde relación o consulta)
-    persona = getattr(tareas[0], "personal", None)
-    if persona is None:
-        persona = Personal.query.filter_by(personal_id=personal_id).first()
-
+    persona = tareas[0].personal if tareas else None
     detalles = []
+    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
+
     for t in tareas:
-        # Área y subárea
-        area = getattr(t, "area", None) or Area.query.get(t.area_id)
-        subarea = getattr(t, "subarea", None) or SubArea.query.get(t.subarea_id)
+        area = t.area
+        subarea = t.subarea
         if not area or not subarea:
             continue
 
-        # SOP por subárea
         sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first()
+        if not sop:
+            continue
 
-        # Niveles a incluir según nivel asignado
         nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-        niveles_incluir = ["basica"]
-        if nivel_asignado == "media":
-            niveles_incluir.append("media")
-        elif nivel_asignado == "profunda":
-            niveles_incluir.extend(["media", "profunda"])
+        nivel_id = nivel_map.get(nivel_asignado)
+        if not nivel_id:
+            continue
 
+        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
         fracciones_filtradas = []
-        if sop:
-            fracciones = (
-                Fraccion.query
-                .filter_by(sop_id=sop.sop_id)
-                .order_by(Fraccion.orden)
-                .all()
-            )
-            for f in fracciones:
-                nivel_f = (f.nivel_limpieza or "").strip().lower()
-                if nivel_f in niveles_incluir:
-                    fracciones_filtradas.append(f)
 
+        for f in fracciones:
+            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
+            if not fd:
+                continue
+
+            metodologia = Metodologia.query.get(fd.metodologia_id)
+            receta = fd.receta
+            kit = fd.kit
+
+            producto_txt = ""
+            herramienta_txt = ""
+            elementos_tabla = []
+
+            # 🧩 Si la fracción usa ElementoSet → mostrar detalle por elemento
+            if fd.elemento_set_id:
+                elementos_detalle = (
+                    db.session.query(ElementoDetalle)
+                    .filter_by(elemento_set_id=fd.elemento_set_id)
+                    .all()
+                )
+                for ed in elementos_detalle:
+                    elemento = ed.elemento
+                    receta_ed = ed.receta
+                    kit_ed = ed.kit
+
+                    # Producto / Químico (desde receta)
+                    producto_str = ""
+                    if receta_ed:
+                        if receta_ed.detalles:
+                            productos = [
+                                f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
+                                for d in receta_ed.detalles
+                            ]
+                            producto_str = " + ".join(productos)
+                        else:
+                            producto_str = receta_ed.nombre
+
+                    # Herramienta / Material (desde kit)
+                    herramienta_str = ""
+                    if kit_ed:
+                        herramientas = [kd.herramienta.nombre for kd in kit_ed.detalles]
+                        herramienta_str = " - ".join(herramientas) if herramientas else kit_ed.nombre
+
+                    elementos_tabla.append({
+                        "nombre": elemento.nombre if elemento else "",
+                        "material": elemento.material if elemento else "",
+                        "cantidad": elemento.cantidad if elemento else "",
+                        "producto": producto_str,
+                        "herramienta": herramienta_str
+                    })
+
+            # 🧴 Si no hay ElementoSet → usar receta y kit directos
+            else:
+                if receta:
+                    if receta.detalles:
+                        productos = [
+                            f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
+                            for d in receta.detalles
+                        ]
+                        producto_txt = " + ".join(productos)
+                    else:
+                        producto_txt = receta.nombre
+
+                if kit:
+                    herramientas = [det.herramienta.nombre for det in kit.detalles]
+                    herramienta_txt = " - ".join(herramientas)
+
+            # Fracción final
+            fracciones_filtradas.append({
+                "orden": f.orden,
+                "fraccion_nombre": f.fraccion_nombre,
+                "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
+                "nivel_limpieza": t.nivel_limpieza_asignado,
+                "tiempo_base": f.tiempo_base_min,
+                "metodologia": metodologia,
+                "producto": producto_txt or None,
+                "herramienta": herramienta_txt or None,
+                "elementos_tabla": elementos_tabla or None
+            })
+
+        # Detalle por subárea
         detalles.append({
-            "tarea_id": t.tarea_id,  
+            "tarea_id": t.tarea_id,
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
-            "nivel": t.nivel_limpieza_asignado,
-            "sop_codigo": sop.sop_codigo if sop else None,
+            "nivel": nivel_asignado,
+            "sop_codigo": sop.sop_codigo,
             "observacion_critica": sop.observacion_critica_sop if sop else None,
             "fracciones": fracciones_filtradas
         })
 
-    return render_template(
-        'reporte_personal.html',    # <-- usa este template
-        persona=persona,
-        fecha=fecha_obj,
-        detalles=detalles
-    )
+    # Renderizar plantilla
+    return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
+
+
 
 
 # =========================
-# REPORTE Persona PDF
+# REPORTE Persona PDF MACRO
 # =========================
-from flask import make_response
-
 @main_bp.route('/reporte/<fecha>/<personal_id>/pdf')
 def reporte_persona_dia_pdf(fecha, personal_id):
     """
-    PDF MACRO: documento plano que concatena TODAS las subáreas asignadas
-    con TODAS sus fracciones (filtradas por nivel) en orden.
+    PDF MACRO — SOP completo de la persona (todas las subáreas y fracciones filtradas por nivel).
     """
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
 
-    tareas = LanzamientoTarea.query.filter_by(
-        dia_id=dia.dia_id,
-        personal_id=personal_id
-    ).all()
+    tareas = LanzamientoTarea.query.filter_by(dia_id=dia.dia_id, personal_id=personal_id).all()
     if not tareas:
         persona = Personal.query.filter_by(personal_id=personal_id).first()
         nombre = persona.nombre if persona else personal_id
         return f"No hay tareas para {nombre} el {fecha}.", 404
 
-    persona = getattr(tareas[0], "personal", None)
-    if persona is None:
-        persona = Personal.query.filter_by(personal_id=personal_id).first()
-
-    # construir 'detalles' (área, subárea, nivel, sop_codigo, observaciones, fracciones filtradas)
+    persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
     detalles = []
+
+    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
+
     for t in tareas:
-        area = getattr(t, "area", None) or Area.query.get(t.area_id)
-        subarea = getattr(t, "subarea", None) or SubArea.query.get(t.subarea_id)
-        if not area or not subarea:
+        area = Area.query.get(t.area_id)
+        subarea = SubArea.query.get(t.subarea_id)
+        if not subarea or not area:
             continue
+
         sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first()
+        if not sop:
+            continue
 
         nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-        niveles_incluir = ["basica"]
-        if nivel_asignado == "media":
-            niveles_incluir.append("media")
-        elif nivel_asignado == "profunda":
-            niveles_incluir.extend(["media", "profunda"])
+        nivel_id = nivel_map.get(nivel_asignado)
+        if not nivel_id:
+            continue
 
+        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
         fracciones_filtradas = []
-        if sop:
-            fracciones = (Fraccion.query
-                          .filter_by(sop_id=sop.sop_id)
-                          .order_by(Fraccion.orden)
-                          .all())
-            for f in fracciones:
-                nf = (f.nivel_limpieza or "").strip().lower()
-                if nf in niveles_incluir:
-                    fracciones_filtradas.append(f)
+
+        for f in fracciones:
+            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
+            if not fd:
+                continue
+
+            metodologia = Metodologia.query.get(fd.metodologia_id)
+            nivel_obj = NivelLimpieza.query.get(fd.nivel_limpieza_id)
+
+            fracciones_filtradas.append({
+                "orden": f.orden,
+                "fraccion_nombre": f.fraccion_nombre,
+                "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
+                "nivel_limpieza": nivel_obj.nombre if nivel_obj else "",
+                "metodologia_nombre": metodologia.nombre if metodologia else "",
+                "tiempo_base": f.tiempo_base_min,
+                "tipo_formula": f.tipo_formula,
+                "ajuste_factor": fd.ajuste_factor
+            })
 
         detalles.append({
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
-            "nivel": t.nivel_limpieza_asignado,
+            "nivel": nivel_asignado,
             "sop_codigo": sop.sop_codigo if sop else None,
             "observacion_critica": sop.observacion_critica_sop if sop else None,
             "fracciones": fracciones_filtradas
         })
 
-    # Ordenar por Área, luego Subárea (opcional pero queda más limpio)
+    # Ordenar por área, subárea
     detalles.sort(key=lambda d: (d["area"], d["subarea"]))
 
-    # ⬇️ usa el template especial "plano" para PDF macro
-    html = render_template('sop_macro_pdf.html',
-                           persona=persona, fecha=fecha_obj, detalles=detalles)
+    html = render_template("reporte_personal_dia.html",
+                           persona=persona, fecha=fecha_obj, reporte_data=detalles)
 
     pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
-    from flask import make_response
     return make_response((pdf_bytes, 200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
     }))
 
 
+
 # =========================
-# REPORTE Persona PDF
+# REPORTE Persona PDF MICRO
 # =========================
 @main_bp.route('/tarea/<int:tarea_id>/pdf')
 def reporte_tarea_pdf(tarea_id):
     """
-    Genera PDF MICRO: solo la subárea de una tarea (con nivel y fracciones).
+    PDF MICRO — genera un reporte de una sola subárea/tarea con fracciones y metodología.
     """
     t = LanzamientoTarea.query.get_or_404(tarea_id)
     persona = getattr(t, "personal", None) or Personal.query.filter_by(personal_id=t.personal_id).first()
-    area = getattr(t, "area", None) or Area.query.get(t.area_id)
-    subarea = getattr(t, "subarea", None) or SubArea.query.get(t.subarea_id)
+    area = Area.query.get(t.area_id)
+    subarea = SubArea.query.get(t.subarea_id)
     sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first() if subarea else None
 
+    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
     nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-    niveles_incluir = ["basica"]
-    if nivel_asignado == "media":
-        niveles_incluir.append("media")
-    elif nivel_asignado == "profunda":
-        niveles_incluir.extend(["media", "profunda"])
-
+    nivel_id = nivel_map.get(nivel_asignado)
     fracciones_filtradas = []
-    if sop:
-        fracciones = (Fraccion.query
-                      .filter_by(sop_id=sop.sop_id)
-                      .order_by(Fraccion.orden)
-                      .all())
-        for f in fracciones:
-            nf = (f.nivel_limpieza or "").strip().lower()
-            if nf in niveles_incluir:
-                fracciones_filtradas.append(f)
 
-    html = render_template('sop_micro_pdf.html',
+    if sop and nivel_id:
+        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
+
+        for f in fracciones:
+            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
+            if not fd:
+                continue
+
+            metodologia = Metodologia.query.get(fd.metodologia_id)
+            nivel_obj = NivelLimpieza.query.get(fd.nivel_limpieza_id)
+
+            fracciones_filtradas.append({
+                "orden": f.orden,
+                "fraccion_nombre": f.fraccion_nombre,
+                "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
+                "nivel_limpieza": nivel_obj.nombre if nivel_obj else "",
+                "metodologia_nombre": metodologia.nombre if metodologia else "",
+                "tiempo_base": f.tiempo_base_min,
+                "tipo_formula": f.tipo_formula,
+                "ajuste_factor": fd.ajuste_factor
+            })
+
+    html = render_template("reporte_personal_dia.html",  # usa el mismo template
                            persona=persona,
-                           area=area,
-                           subarea=subarea,
-                           sop=sop,
-                           nivel=t.nivel_limpieza_asignado,
-                           fracciones=fracciones_filtradas)
+                           fecha=date.today(),
+                           reporte_data=[{
+                               "area": area.area_nombre,
+                               "subarea": subarea.subarea_nombre,
+                               "nivel": nivel_asignado,
+                               "sop_codigo": sop.sop_codigo if sop else None,
+                               "observacion_critica": sop.observacion_critica_sop if sop else None,
+                               "fracciones": fracciones_filtradas
+                           }])
 
     pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
     return make_response((pdf_bytes, 200, {
@@ -547,34 +634,91 @@ def reporte_tarea_pdf(tarea_id):
     }))
 
 
-
 # =========================
 # Calcular Tiempo Tarea
 # =========================
+# import necesario arriba del archivo routes.py
 def calcular_tiempo_tarea(tarea):
     """
-    Suma tiempos de fracciones del SOP de la subárea,
-    filtrando por nivel asignado (basica ⊂ media ⊂ profunda).
-    Retorna minutos (float).
+    Nuevo cálculo de tiempo por tarea:
+      - busca las fracciones del SOP de la subárea
+      - intenta localizar FraccionDetalle para cada fracción + nivel
+      - usa la formula:
+         tiempo_total = tiempo_base_min * superficie * ajuste_factor * factor_nivel
+      - si tipo_formula == 'fijo' -> no multiplicar por superficie
+    Retorna minutos totales (float) sumando todas las fracciones aplicables.
     """
-    sop = SOP.query.filter_by(subarea_id=tarea.subarea_id).first()
+
+    # obtener subarea y superficie (fallback a 1.0 si no existe)
+    subarea = getattr(tarea, "subarea", None) or SubArea.query.get(tarea.subarea_id)
+    superficie = float(getattr(subarea, "superficie_subarea", 0) or 0)
+    if superficie <= 0:
+        # si no hay superficie en DB, asumimos 1 para fórmulas fijas/por pieza
+        superficie = 1.0
+
+    # obtener nivel asignado y su factor (fallback 1.0)
+    nivel_text = (tarea.nivel_limpieza_asignado or "").strip().lower()
+    nivel_obj = None
+    factor_nivel = 1.0
+    # intento buscar por nombre o por id (según cómo lo guardes)
+    # preferible que la tabla NivelLimpieza tenga 'nombre' con "basica","media","profunda"
+    if nivel_text:
+        nivel_obj = NivelLimpieza.query.filter(
+            NivelLimpieza.nombre.ilike(nivel_text)
+        ).first()
+    if not nivel_obj and getattr(tarea, "nivel_limpieza_asignado", None):
+        # fallback: buscar por id si guardas nivel_limpieza_id en tarea (no aplicable hoy pero por si acaso)
+        try:
+            nivel_obj = NivelLimpieza.query.get(int(tarea.nivel_limpieza_asignado))
+        except Exception:
+            nivel_obj = None
+    if nivel_obj:
+        factor_nivel = float(nivel_obj.factor_nivel or 1.0)
+
+    # localizar SOP de la subarea
+    sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first() if subarea else None
     if not sop:
         return 0.0
 
-    lvl = (tarea.nivel_limpieza_asignado or "").strip().lower()
-    niveles = ["basica"]
-    if lvl == "media":
-        niveles.append("media")
-    elif lvl == "profunda":
-        niveles += ["media", "profunda"]
+    # traer fracciones (ordenadas)
+    fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
 
-    total = 0.0
-    fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).all()
+    total_min = 0.0
+
     for f in fracciones:
-        nf = (f.nivel_limpieza or "").strip().lower()
-        if nf in niveles:
-            total += float(f.tiempo_fraccion or 0)
-    return total
+        tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
+        tipo_formula = (getattr(f, "tipo_formula", "") or "").lower()
+
+        # intentar obtener FraccionDetalle que coincida con este fraccion + nivel asignado
+        fd = None
+        if nivel_obj:
+            fd = FraccionDetalle.query.filter_by(
+                fraccion_id=f.fraccion_id,
+                nivel_limpieza_id=nivel_obj.nivel_limpieza_id
+            ).first()
+
+        ajuste = 1.0
+        if fd:
+            ajuste = float(getattr(fd, "ajuste_factor", 1.0) or 1.0)
+
+        # calcular superficie aplicable según tipo_formula
+        if tipo_formula in ("por_m2", "por_m²", "por_m2"):
+            superficie_app = superficie
+        elif tipo_formula == "por_pieza":
+            # en este caso, esperamos que 'superficie' represente cantidad de piezas,
+            # si no, se usará 1
+            superficie_app = max(1.0, superficie)
+        else:  # 'fijo' u otro -> no multiplicar
+            superficie_app = 1.0
+
+        # fórmula principal
+        tiempo_fraccion_total = tiempo_base * superficie_app * ajuste * factor_nivel
+
+        total_min += float(tiempo_fraccion_total or 0)
+
+    return round(total_min, 2)
+
+ 
 
 
 # =========================
@@ -879,3 +1023,4 @@ def borrar_plantilla(plantilla_id):
     from flask import flash
     flash(f'Plantilla "{plantilla.nombre}" eliminada correctamente.', 'success')
     return redirect(url_for('main.home'))
+

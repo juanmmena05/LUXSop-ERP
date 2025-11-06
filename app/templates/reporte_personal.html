@@ -5,61 +5,211 @@
   <title>SOP Diario — {{ persona.nombre }} ({{ fecha.strftime('%Y-%m-%d') }})</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{
-      --bg:#fafafa; --fg:#222; --muted:#666; --card:#ffffff;
-      --line:#ddd; --accent:#0d6efd; --ok:#198754;
+    :root {
+      --bg: #fafafa;
+      --fg: #222;
+      --muted: #666;
+      --card: #ffffff;
+      --line: #ddd;
+      --accent: #0d6efd;
+      --ok: #198754;
     }
-    html,body{background:var(--bg); color:var(--fg); font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;}
-    .wrap{max-width:1000px; margin:0 auto; padding:24px;}
-    h1{font-size:1.4rem; margin:.25rem 0 .5rem;}
-    h2{font-size:1.1rem; margin:1.5rem 0 .5rem;}
-    .sub{color:var(--muted); font-size:.9rem;}
-    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
-    .spacer{flex:1}
-    .btn{display:inline-block; background:var(--accent); color:#fff; border:none; padding:.55rem .8rem; border-radius:8px; text-decoration:none; font-weight:600; font-size:.9rem;}
-    .btn.ok{background:var(--ok)}
-    .btn.secondary{background:#6c757d}
-    .btn:hover{filter:brightness(.95)}
-    .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px;}
-    .accordion{display:grid; gap:10px;}
-    .acc-item{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff}
-    .acc-head{display:flex; gap:10px; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; background:#f8f9fa}
-    .acc-head h3{margin:0; font-size:1rem}
-    .acc-meta{font-size:.85rem; color:var(--muted)}
-    .acc-body{display:none; padding:14px}
-    .acc-item.open .acc-body{display:block}
-    .muted{color:var(--muted); font-size:.85rem}
-    ol.list{margin:.5rem 0 0 1.2rem; padding-left:0}
-    li{margin-bottom:.6rem;}
-    .footer{margin:22px 0 6px; color:var(--muted); font-size:.85rem; text-align:center}
+    html, body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    .wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: .25rem 0 .5rem;
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 1.5rem 0 .5rem;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .spacer {
+      flex: 1;
+    }
+    .btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: .55rem .8rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+    .btn.ok { background: var(--ok); }
+    .btn.secondary { background: #6c757d; }
+    .btn:hover { filter: brightness(.95); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .accordion {
+      display: grid;
+      gap: 10px;
+    }
+    .acc-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .acc-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+      background: #f8f9fa;
+    }
+    .acc-head h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+    .acc-meta {
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    .acc-body {
+      display: none;
+      padding: 14px;
+    }
+    .acc-item.open .acc-body {
+      display: block;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: .85rem;
+    }
+    ol.list {
+      margin: .5rem 0 0 1.2rem;
+      padding-left: 0;
+    }
+    li {
+      margin-bottom: .6rem;
+    }
+    .footer {
+      margin: 22px 0 6px;
+      color: var(--muted);
+      font-size: .85rem;
+      text-align: center;
+    }
+    .tiempo-box {
+      background: #f8f9fa;
+      font-size: 0.75rem;
+      color: var(--muted);
+      padding: 4px 10px;
+      margin-top: 6px;
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .section-line {
+      border-top: 1px solid #eee;
+      margin: 10px 0;
+    }
+    .metodologia ol {
+      margin-left: 1.2rem;
+      padding-left: 0;
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+    .nota-tecnica {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* 🔹 Título principal de cada fracción */
+    .list li > div strong {
+      font-size: 1.1rem;
+      color: var(--fg);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    /* 🔸 Subtítulo 'Metodología' más ligero */
+    .metodologia strong {
+      font-size: 1rem !important;
+      font-weight: 400 !important;
+      letter-spacing: 0.10px;
+    }
+
+    .list li {
+      border-bottom: none;
+      box-shadow: 0 1px 0 0 rgba(0,0,0,0.06);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .list li:last-child {
+      box-shadow: none;
+    }
+
+    /* 🔹 Tabla de elementos / superficies */
+    table.elementos-tabla {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+    table.elementos-tabla th, table.elementos-tabla td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+    }
+    table.elementos-tabla th {
+      background-color: #f3f3f3;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.elementos-tabla td {
+      vertical-align: top;
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
-
-  <!-- Encabezado -->
   <div class="row" style="margin-bottom:10px">
     <div>
-      <h1>SOP Diario — {{ fecha.strftime('%Y-%m-%d') }}</h1>
+      <h1>SOP - {{ fecha.strftime('%Y-%m-%d') }}</h1>
       <div class="sub">Operario: <strong>{{ persona.nombre }}</strong> ({{ persona.personal_id }})</div>
     </div>
     <div class="spacer"></div>
     <div class="row">
       <a class="btn secondary" href="/">⬅ Volver</a>
-
-      <!-- ✅ BOTÓN CORREGIDO: descarga el PDF directamente -->
       <a class="btn ok"
-         href="{{ url_for('main.reporte_persona_dia_pdf',
-                          fecha=fecha.strftime('%Y-%m-%d'),
-                          personal_id=persona.personal_id) }}"
-         target="_blank"
-         title="Descargar reporte completo en PDF">
+         href="{{ url_for('main.reporte_persona_dia_pdf', fecha=fecha.strftime('%Y-%m-%d'), personal_id=persona.personal_id) }}"
+         target="_blank" title="Descargar reporte completo en PDF">
         📥 Descargar SOP Macro (PDF)
       </a>
     </div>
   </div>
 
-  <!-- SOP MICRO (acordeones por subárea) -->
   <div class="card">
     <h2>SOP - SUBÁREA</h2>
     {% if detalles and detalles|length > 0 %}
@@ -70,21 +220,76 @@
               <h3>{{ d.subarea }}</h3>
               <span class="acc-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
               <div class="spacer"></div>
-              <span class="muted">SOP {{ d.sop_codigo if d.sop_codigo else 'N/D' }}</span>
+              <span class="muted">{{ d.sop_codigo if d.sop_codigo else 'N/D' }}</span>
             </div>
             <div class="acc-body">
-
               {% if d.observacion_critica %}
                 <p><strong>⚠ Observaciones críticas:</strong><br>{{ d.observacion_critica }}</p>
+                <div class="section-line"></div>
               {% endif %}
 
               {% if d.fracciones and d.fracciones|length > 0 %}
                 <ol class="list">
                   {% for f in d.fracciones %}
                     <li>
-                      <strong>{{ f.orden }}. {{ f.fraccion_nombre }}</strong><br>
-                      <span class="muted">Nivel: {{ f.nivel_limpieza|capitalize }}</span><br>
-                      {% if f.descripcion %}<div>{{ f.descripcion }}</div>{% endif %}
+                      <div><strong>{{ f.fraccion_nombre }}</strong></div>
+                      {% if f.tiempo_base %}
+                        <div class="tiempo-box">⏱ Tiempo estimado: {{ f.tiempo_base }} min</div>
+                      {% endif %}
+
+                      {% if f.metodologia and f.metodologia.pasos|length > 0 %}
+                        <div class="section-line"></div>
+                        <div class="metodologia">
+                          <strong>🧼 Metodología:</strong>
+                          <ol>
+                            {% for paso in f.metodologia.pasos %}
+                              <li>{{ paso.instruccion }}</li>
+                            {% endfor %}
+                          </ol>
+                        </div>
+                      {% endif %}
+
+                      {% if f.elementos_tabla %}
+                        <div class="section-line"></div>
+                        <div class="elementos">
+                          <strong>🧩 Inmobiliario / Superficies:</strong>
+                          <table class="elementos-tabla">
+                            <thead>
+                              <tr>
+                                <th>Inmobiliario / Superficie</th>
+                                <th>Material</th>
+                                <th>Cantidad</th>
+                                <th>Producto / Químico</th>
+                                <th>Herramienta / Material</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {% for e in f.elementos_tabla %}
+                                <tr>
+                                  <td>{{ e.nombre }}</td>
+                                  <td>{{ e.material }}</td>
+                                  <td style="text-align:center;">{{ e.cantidad }}</td>
+                                  <td>{{ e.producto }}</td>
+                                  <td>{{ e.herramienta }}</td>
+                                </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                      {% endif %}
+
+                      {% if f.producto or f.herramienta %}
+                        <div class="section-line"></div>
+                      {% endif %}
+                      {% if f.producto %}
+                        <div><strong>🧪 Producto:</strong> {{ f.producto }}</div>
+                      {% endif %}
+                      {% if f.herramienta %}
+                        <div><strong>🧰 Herramientas:</strong> {{ f.herramienta }}</div>
+                      {% endif %}
+                      {% if f.observacion_critica %}
+                        <div class="nota-tecnica">📝 Nota técnica: {{ f.observacion_critica }}</div>
+                      {% endif %}
                     </li>
                   {% endfor %}
                 </ol>
