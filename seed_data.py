@@ -212,48 +212,37 @@ with app.app_context():
 
     # 🧩 SOP Oficina 01
     fracciones_of1 = [
-    Fraccion(fraccion_id="F_AD_DI_OF01_BASURA", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y desechar bolsas de basura, reponer con nuevas.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1),
-    Fraccion(fraccion_id="F_AD_DI_OF01_MUEBLES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Sacudir muebles", descripcion="Retirar polvo de escritorios, archiveros y superficies.", unidad_medida="pzas", tiempo_base_min=0.25, tipo_formula="por_pieza", orden=2),
-    Fraccion(fraccion_id="F_AD_DI_OF01_BANO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Lavar baño", descripcion="Limpieza general y desinfección de sanitarios y lavamanos.", unidad_medida="pzas", tiempo_base_min=10.0, tipo_formula="por_pieza", orden=3),
-    Fraccion(fraccion_id="F_AD_DI_OF01_VIDRIOS", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior de ventanas y cristales.", unidad_medida="m²", tiempo_base_min=0.15, tipo_formula="por_m2", orden=4),
-    Fraccion(fraccion_id="F_AD_DI_OF01_PISO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento de pisos interiores.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=5),
-    Fraccion(fraccion_id="F_AD_DI_OF01_TAPETES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Barrer tapetes", descripcion="Limpieza y aspirado de tapetes decorativos.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=6),
+    Fraccion(fraccion_id="F_AD_DI_OF01_BASURA", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y desechar bolsas de basura, reponer con nuevas.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1, nota_tecnica="Verificar que los botes estén secos antes de colocar la bolsa nueva."),
+    Fraccion(fraccion_id="F_AD_DI_OF01_MUEBLES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Sacudir muebles", descripcion="Retirar polvo de escritorios, archiveros y superficies.", unidad_medida="pzas", tiempo_base_min=0.25, tipo_formula="por_pieza", orden=2, nota_tecnica="Evitar el uso de líquidos directamente sobre superficies de madera."),
+    Fraccion(fraccion_id="F_AD_DI_OF01_BANO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Lavar baño", descripcion="Limpieza general y desinfección de sanitarios y lavamanos.", unidad_medida="pzas", tiempo_base_min=10.0, tipo_formula="por_pieza", orden=3, nota_tecnica="Revisar que no haya fugas en sanitarios o llaves."),
+    Fraccion(fraccion_id="F_AD_DI_OF01_VIDRIOS", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior de ventanas y cristales.", unidad_medida="m²", tiempo_base_min=0.15, tipo_formula="por_m2", orden=4, nota_tecnica="Evitar limpiar bajo luz solar directa para evitar manchas."),
+    Fraccion(fraccion_id="F_AD_DI_OF01_PISO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento de pisos interiores.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=5, nota_tecnica="Verificar que el piso esté completamente seco antes de habilitar el tránsito."),
+    Fraccion(fraccion_id="F_AD_DI_OF01_TAPETES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Barrer tapetes", descripcion="Limpieza y aspirado de tapetes decorativos.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=6, nota_tecnica="No usar productos líquidos en tapetes textiles."),
     ]
+
 
     db.session.add_all(fracciones_of1)
     
     detalles_of1 = [
-    # Retirar basura
     FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_B", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_M", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.1, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_P", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.2, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-
-    # Sacudir muebles
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_B", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_M", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.15, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_P", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.25, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-
-    # Lavar baño
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_B", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=1, metodologia_id="M_BANO_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ESET_BANO_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_M", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=2, metodologia_id="M_BANO_M", ajuste_factor=1.2, kit_id=None, receta_id=None, elemento_set_id="ESET_BANO_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_P", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=3, metodologia_id="M_BANO_P", ajuste_factor=1.3, kit_id=None, receta_id=None, elemento_set_id="ESET_BANO_OFICINA"),
-
-    # Limpieza de vidrios
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_B", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_M", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_P", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.25, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-
-    # Limpieza de piso
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_B", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_M", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_P", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-
-    # Barrer tapetes
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_B", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_M", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.15, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_P", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.25, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_B", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=1, metodologia_id="M_BANO_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_M", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=2, metodologia_id="M_BANO_M", ajuste_factor=1.2, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_P", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=3, metodologia_id="M_BANO_P", ajuste_factor=1.3, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_B", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_M", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_P", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.25, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_B", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_M", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_P", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_B", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_M", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.15, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_P", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.25, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None)
     ]
-
     db.session.add_all(detalles_of1)
 
  
@@ -261,76 +250,60 @@ with app.app_context():
     # FRACCIONES — SOP-AD-DI-SA-01 (Sala Juntas 01)
     # ======================================================
     fracciones_sa1 = [
-        Fraccion(fraccion_id="F_AD_DI_SA01_BASURA", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y reemplazar bolsas de basura en contenedores.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1),
-        Fraccion(fraccion_id="F_AD_DI_SA01_VIDRIOS", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior y exterior de cristales de la sala de juntas.", unidad_medida="m²", tiempo_base_min=0.18, tipo_formula="por_m2", orden=2),
-        Fraccion(fraccion_id="F_AD_DI_SA01_PISO", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento del piso de la sala.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=3),
-        Fraccion(fraccion_id="F_AD_DI_SA01_TAPETES", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Barrer tapetes", descripcion="Aspirar o sacudir tapetes de entrada o decorativos.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=4),
+    Fraccion(fraccion_id="F_AD_DI_SA01_BASURA", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y reemplazar bolsas de basura en contenedores.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1, nota_tecnica="Asegurar que no queden residuos en el fondo del contenedor antes de colocar la bolsa nueva."),
+    Fraccion(fraccion_id="F_AD_DI_SA01_VIDRIOS", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior y exterior de cristales de la sala de juntas.", unidad_medida="m²", tiempo_base_min=0.18, tipo_formula="por_m2", orden=2, nota_tecnica="Evitar limpiar bajo luz solar directa para prevenir marcas o manchas."),
+    Fraccion(fraccion_id="F_AD_DI_SA01_PISO", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento del piso de la sala.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=3, nota_tecnica="Asegurar que el piso quede seco para evitar resbalones antes de reingresar al área."),
+    Fraccion(fraccion_id="F_AD_DI_SA01_TAPETES", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Barrer tapetes", descripcion="Aspirar o sacudir tapetes de entrada o decorativos.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=4, nota_tecnica="No utilizar productos líquidos ni cepillos duros en tapetes de tela o con bordes decorativos."),
     ]
+
+
     db.session.add_all(fracciones_sa1)
 
     detalles_sa1 = [
-    # Retirar basura
     FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_B", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_M", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.1, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_P", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.2, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-
-    # Limpieza de vidrios
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_B", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_M", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_P", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.3, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-
-    # Limpieza de piso
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_B", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_M", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_P", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-
-    # Barrer tapetes
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_B", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_M", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_P", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.3, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_B", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_M", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_P", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_B", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_M", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.1, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_P", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.25, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None)
     ]
-
     db.session.add_all(detalles_sa1)
 
     # ======================================================
     # FRACCIONES — SOP-AD-DI-OF-02 (Oficina 02)
     # ======================================================
     fracciones_of2 = [
-        Fraccion(fraccion_id="F_AD_DI_OF02_BASURA", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Retirar basura", descripcion="Recolectar, reemplazar bolsas y revisar contenedores de oficina.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1),
-        Fraccion(fraccion_id="F_AD_DI_OF02_MUEBLES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Sacudir muebles", descripcion="Limpieza general de mobiliario, sillas y escritorios.", unidad_medida="pzas", tiempo_base_min=0.25, tipo_formula="por_pieza", orden=2),
-        Fraccion(fraccion_id="F_AD_DI_OF02_VIDRIOS", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza de ventanas interiores y divisiones de vidrio.", unidad_medida="m²", tiempo_base_min=0.15, tipo_formula="por_m2", orden=3),
-        Fraccion(fraccion_id="F_AD_DI_OF02_PISO", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de piso", descripcion="Trapeado de piso con producto neutro y revisión de esquinas.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=4),
-        Fraccion(fraccion_id="F_AD_DI_OF02_TAPETES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Barrer tapetes", descripcion="Aspirado y sacudido de tapetes individuales.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=5),
+    Fraccion(fraccion_id="F_AD_DI_OF02_BASURA", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Retirar basura", descripcion="Recolectar, reemplazar bolsas y revisar contenedores de oficina.", unidad_medida="pzas", tiempo_base_min=5.0, tipo_formula="fijo", orden=1, nota_tecnica="No sobrecargar las bolsas y revisar que los botes estén limpios antes de colocar una nueva."),
+    Fraccion(fraccion_id="F_AD_DI_OF02_MUEBLES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Sacudir muebles", descripcion="Limpieza general de mobiliario, sillas y escritorios.", unidad_medida="pzas", tiempo_base_min=0.25, tipo_formula="por_pieza", orden=2, nota_tecnica="No aplicar producto directamente sobre madera o pantallas; usar paño humedecido."),
+    Fraccion(fraccion_id="F_AD_DI_OF02_VIDRIOS", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza de ventanas interiores y divisiones de vidrio.", unidad_medida="m²", tiempo_base_min=0.15, tipo_formula="por_m2", orden=3, nota_tecnica="Limpia en sentido vertical y luego horizontal para asegurar acabado sin rayas."),
+    Fraccion(fraccion_id="F_AD_DI_OF02_PISO", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de piso", descripcion="Trapeado de piso con producto neutro y revisión de esquinas.", unidad_medida="m²", tiempo_base_min=0.25, tipo_formula="por_m2", orden=4, nota_tecnica="Evitar exceso de humedad cerca de escritorios o conexiones eléctricas."),
+    Fraccion(fraccion_id="F_AD_DI_OF02_TAPETES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Barrer tapetes", descripcion="Aspirado y sacudido de tapetes individuales.", unidad_medida="pzas", tiempo_base_min=3.0, tipo_formula="por_pieza", orden=5, nota_tecnica="Revisar que los tapetes estén completamente secos antes de recolocarlos."),
     ]
     db.session.add_all(fracciones_of2)
 
     detalles_of2 = [
-    # Retirar basura
     FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_B", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_M", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.1, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_P", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.2, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-
-    # Sacudir muebles
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_B", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_M", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.15, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_P", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.25, kit_id=None, receta_id=None, elemento_set_id="ESET_MUEBLES_OFICINA"),
-
-    # Limpieza de vidrios
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_B", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_M", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_P", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.25, kit_id="KIT_CRISTALES", receta_id="REC_LIMPIACRISTALES", elemento_set_id=None),
-
-    # Limpieza de piso
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_B", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_M", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_P", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISO", receta_id="REC_DESINFECTANTE_PISO", elemento_set_id=None),
-
-    # Barrer tapetes
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_B", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_M", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.15, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_P", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.25, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_B", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_M", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.15, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_P", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.25, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_B", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_M", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.2, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_P", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.3, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_B", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_M", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.1, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_P", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.25, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None)
     ]
-
     db.session.add_all(detalles_of2)
     
     # ======================================================

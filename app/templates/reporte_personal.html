@@ -178,6 +178,65 @@
       margin-top: 10px;
       font-size: 0.85rem;
     }
+
+    /* ==== OBSERVACIÓN CRÍTICA DEL SOP ==== */
+    .observacion-critica {
+      background-color: #fff3cd;      /* amarillo pálido tipo warning */
+      border-left: 4px solid #f0ad4e; /* línea amarilla */
+      padding: 8px 12px;
+      margin: 8px 0 12px 40px;        /* 🔹 este "40px" es el desplazamiento lateral */
+      border-radius: 6px;
+      font-size: 0.9rem;
+      color: #5c4400;
+      font-style: italic;
+      max-width: 85%;
+    }
+
+    
+    .nota-tecnica {
+    background-color: #fff8e1;
+    border-left: 4px solid #f4c542;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    font-style: italic;
+    }
+
+    hr.separador {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 10px 0;
+    }
+
+    /* ==== ESTILO PRODUCTO Y HERRAMIENTA ==== */
+    .detalle-item {
+      font-size: 0.9rem;           /* un poco más grande que pasos */
+      color: #444;                 /* gris medio, menos contraste que strong */
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+
+    .detalle-item .emoji {
+      font-size: 0.9rem;           /* más pequeño que el emoji original */
+      opacity: 0.8;                /* lo suaviza un poco */
+      margin-right: 4px;
+    }
+
+    .detalle-item .label {
+      font-weight: 500;            /* intermedio: ni bold ni normal */
+      color: #333;
+      margin-right: 3px;
+    }
+
+    /* Variante opcional para distinguirlos visualmente */
+    .detalle-item.producto .label {
+      color: #2a7f62;  /* verde tenue, opcional */
+    }
+
+    .detalle-item.herramienta .label {
+      color: #2b5876;  /* azul suave, opcional */
+    }
+
     table.elementos-tabla th, table.elementos-tabla td {
       border: 1px solid #ddd;
       padding: 6px 8px;
@@ -196,7 +255,7 @@
 <div class="wrap">
   <div class="row" style="margin-bottom:10px">
     <div>
-      <h1>SOP - {{ fecha.strftime('%Y-%m-%d') }}</h1>
+      <h1>[{{ fecha.strftime('%Y-%m-%d') }}]</h1>
       <div class="sub">Operario: <strong>{{ persona.nombre }}</strong> ({{ persona.personal_id }})</div>
     </div>
     <div class="spacer"></div>
@@ -211,7 +270,6 @@
   </div>
 
   <div class="card">
-    <h2>SOP - SUBÁREA</h2>
     {% if detalles and detalles|length > 0 %}
       <div class="accordion" id="micro-accordion">
         {% for d in detalles %}
@@ -252,15 +310,15 @@
                       {% if f.elementos_tabla %}
                         <div class="section-line"></div>
                         <div class="elementos">
-                          <strong>🧩 Inmobiliario / Superficies:</strong>
+                          <strong>🧩 Elementos:</strong>
                           <table class="elementos-tabla">
                             <thead>
                               <tr>
-                                <th>Inmobiliario / Superficie</th>
+                                <th>Elementos</th>
                                 <th>Material</th>
                                 <th>Cantidad</th>
-                                <th>Producto / Químico</th>
-                                <th>Herramienta / Material</th>
+                                <th>Químico</th>
+                                <th>Herramienta</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -281,12 +339,15 @@
                       {% if f.producto or f.herramienta %}
                         <div class="section-line"></div>
                       {% endif %}
+
                       {% if f.producto %}
-                        <div><strong>🧪 Producto:</strong> {{ f.producto }}</div>
+                        <p class="detalle-item producto"><span class="emoji">🧴</span> <span class="label">Producto:</span> {{ f.producto }}</p>
                       {% endif %}
                       {% if f.herramienta %}
-                        <div><strong>🧰 Herramientas:</strong> {{ f.herramienta }}</div>
+                        <p class="detalle-item herramienta"><span class="emoji">🧰</span> <span class="label">Herramientas:</span> {{ f.herramienta }}</p>
                       {% endif %}
+
+                      <hr class="separador">
                       {% if f.observacion_critica %}
                         <div class="nota-tecnica">📝 Nota técnica: {{ f.observacion_critica }}</div>
                       {% endif %}

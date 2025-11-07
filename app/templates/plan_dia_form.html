@@ -132,6 +132,16 @@
       font-size: 1rem;
       padding: .25rem .5rem;
     }
+
+    /* ==== Subáreas asignadas (sombreado visual sin texto extra) ==== */
+    #subarea-select option.ocupada {
+      background-color: #f1f1f1;
+      color: #888;
+    }
+    #subarea-select option.ocupada:disabled {
+      opacity: 0.8;
+    }
+
     .nivel-badge {
       padding: 2px 6px;
       border-radius: 4px;
@@ -140,16 +150,9 @@
       margin-left: 8px;
     }
 
-    /* Niveles de limpieza en gris */
-    .nivel-basica {
-      background: #adb5bd;
-    }
-    .nivel-media {
-      background: #6c757d;
-    }
-    .nivel-profunda {
-      background: #343a40;
-    }
+    .nivel-basica { background: #adb5bd; }
+    .nivel-media { background: #6c757d; }
+    .nivel-profunda { background: #343a40; }
   </style>
 </head>
 <body>
@@ -177,12 +180,17 @@
       <select name="subarea_id" id="subarea-select" required>
         <option value="" disabled selected>Seleccionar subárea</option>
         {% for s in subareas_list %}
-          <option value="{{ s.subarea_id }}">{{ s.subarea_nombre }}</option>
+          {% if s.subarea_id in asignadas_ids %}
+            <option value="{{ s.subarea_id }}" disabled class="ocupada">{{ s.subarea_nombre }}</option>
+          {% else %}
+            <option value="{{ s.subarea_id }}">{{ s.subarea_nombre }}</option>
+          {% endif %}
         {% endfor %}
       </select>
 
       <label>Nivel de limpieza</label>
       <select name="nivel_limpieza_asignado" required>
+        <option value="" disabled selected>Seleccionar nivel</option>
         <option value="basica">Básica</option>
         <option value="media">Media</option>
         <option value="profunda">Profunda</option>
@@ -231,9 +239,10 @@
 </div>
 
 <script>
-  // Filtrado dinámico de subáreas
+  // --- Filtrado dinámico de subáreas según área seleccionada ---
   document.getElementById('area-select').addEventListener('change', function () {
-    fetch('/subareas_por_area/' + this.value)
+    const fechaActual = "{{ fecha.strftime('%Y-%m-%d') }}";
+    fetch('/subareas_por_area/' + this.value + '?fecha=' + fechaActual)
       .then(response => response.json())
       .then(data => {
         const subareaSelect = document.getElementById('subarea-select');
@@ -241,22 +250,28 @@
         data.forEach(sub => {
           const opt = document.createElement('option');
           opt.value = sub.id;
-          opt.textContent = sub.nombre;
+          opt.textContent = sub.nombre; // sin texto (Asignada)
+          if (sub.ocupada) {
+            opt.disabled = true;
+            opt.classList.add('ocupada');
+          }
           subareaSelect.appendChild(opt);
         });
       });
   });
 
-  // Filtro por persona
+  // --- Filtro por persona ---
   document.getElementById('filtro-persona').addEventListener('change', function () {
     const selected = this.value;
     document.querySelectorAll('.persona-card').forEach(card => {
-      if (selected === 'all' || card.dataset.persona === selected) {
-        card.style.display = '';
-      } else {
-        card.style.display = 'none';
-      }
+      card.style.display = (selected === 'all' || card.dataset.persona === selected) ? '' : 'none';
     });
+  });
+
+  // 🔄 Resetear selects después de enviar la tarea
+  const form = document.querySelector('.sidebar form');
+  form.addEventListener('submit', function() {
+    setTimeout(() => form.reset(), 100);
   });
 </script>
 </body>

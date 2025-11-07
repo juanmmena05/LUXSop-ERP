@@ -4,6 +4,7 @@ import os
 from sqlalchemy.orm import joinedload
 from datetime import datetime, date, timedelta
 from typing import Optional
+from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response
 from .models import (
     db,
@@ -287,8 +288,27 @@ def borrar_tarea(fecha, tarea_id):
 # =========================
 @main_bp.route('/subareas_por_area/<area_id>')
 def subareas_por_area(area_id):
+    # Trae la fecha para saber qué subáreas están ocupadas ese día
+    fecha_str = request.args.get('fecha')
+    if fecha_str:
+        fecha_obj = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+    else:
+        fecha_obj = date.today()
+
+    dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
+    ocupadas = set()
+    if dia:
+        ocupadas = {
+            t.subarea_id
+            for t in LanzamientoTarea.query.filter_by(dia_id=dia.dia_id).all()
+        }
+
     subareas = SubArea.query.filter_by(area_id=area_id).all()
-    return jsonify([{"id": s.subarea_id, "nombre": s.subarea_nombre} for s in subareas])
+    return jsonify([
+        {"id": s.subarea_id, "nombre": s.subarea_nombre, "ocupada": s.subarea_id in ocupadas}
+        for s in subareas
+    ])
+
 
 # =========================
 # PLAN DIARIO (asignar)
@@ -300,6 +320,16 @@ def plan_dia_asignar(fecha):
 
     personal_list = Personal.query.all()
     areas_list = Area.query.all()
+
+    # 🔹 Subáreas ya asignadas ese día (para pintar en el select)
+    asignadas_ids = [
+        s[0] for s in db.session.query(LanzamientoTarea.subarea_id)
+        .filter(LanzamientoTarea.dia_id == dia.dia_id)
+        .distinct()
+        .all()
+    ]
+
+    # 🔹 Mostrar TODAS las subáreas (las ya asignadas se desactivan en el template)
     subareas_list = SubArea.query.all()
 
     if request.method == 'POST':
@@ -308,6 +338,18 @@ def plan_dia_asignar(fecha):
         subarea_id = request.form.get('subarea_id')
         nivel_limpieza_asignado = request.form.get('nivel_limpieza_asignado')
 
+        # 🚫 BLOQUEO EN SERVIDOR: misma subárea ya usada ese día
+        existe_misma_subarea = db.session.query(LanzamientoTarea).filter_by(
+            dia_id=dia.dia_id,
+            subarea_id=subarea_id
+        ).first()
+
+        if existe_misma_subarea:
+            # No importa persona ni nivel: ya está ocupada esa subárea en ese día
+            flash('Esa subárea ya tiene una tarea asignada en este día.', 'warning')
+            return redirect(url_for('main.plan_dia_asignar', fecha=fecha))
+
+        # ✅ Si no existe, creamos la tarea
         db.session.add(LanzamientoTarea(
             dia_id=dia.dia_id,
             personal_id=personal_id,
@@ -321,27 +363,24 @@ def plan_dia_asignar(fecha):
     # GET: tareas del día
     tareas_del_dia = (
         db.session.query(LanzamientoTarea)
-        .filter(LanzamientoTarea.dia_id == dia.dia_id)   # <-- corregido (antes: dia_actual)
+        .filter(LanzamientoTarea.dia_id == dia.dia_id)
         .all()
     )
 
-    # Calcular tiempo estimado por tarea (dict: tarea_id -> minutos)
-    tiempos_por_tarea = {}
-    for t in tareas_del_dia:
-        tiempos_por_tarea[t.tarea_id] = calcular_tiempo_tarea(t)
+    # tiempos
+    tiempos_por_tarea = {t.tarea_id: calcular_tiempo_tarea(t) for t in tareas_del_dia}
 
-
-    # Agrupar por persona (key = personal_id)
+    # agrupar por persona
     tareas_por_persona = {}
     for t in tareas_del_dia:
         key = t.personal_id
         if key not in tareas_por_persona:
-            # intentar usar relación; si no existe, buscar persona
-            persona = getattr(t, "personal", None)
-            if persona is None:
-                persona = Personal.query.filter_by(personal_id=key).first()
+            persona = getattr(t, "personal", None) or Personal.query.filter_by(personal_id=key).first()
             tareas_por_persona[key] = {"persona": persona, "subtareas": []}
         tareas_por_persona[key]["subtareas"].append(t)
+    
+    # IDs de subáreas asignadas ese día
+    asignadas_ids = {t.subarea_id for t in tareas_del_dia}
 
     return render_template(
         'plan_dia_form.html',
@@ -351,20 +390,30 @@ def plan_dia_asignar(fecha):
         subareas_list=subareas_list,
         tareas_del_dia=tareas_del_dia,
         tareas_por_persona=tareas_por_persona,
-        tiempos_por_tarea=tiempos_por_tarea
+        tiempos_por_tarea=tiempos_por_tarea,
+        asignadas_ids=asignadas_ids 
     )
 
 
 # =========================
-# REPORTE (fecha + persona) — versión extendida con ElementoSet
+# REPORTE (fecha + persona) — versión extendida con ElementoSet / Kit / Receta
 # =========================
 @main_bp.route('/reporte/<fecha>/<personal_id>')
 def reporte_persona_dia(fecha, personal_id):
+    """
+    Genera el reporte SOP Diario para una persona en una fecha específica.
+    Incluye metodología, kit, receta, elemento_set y todos los detalles.
+    """
+
+    # Convertir fecha a objeto
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
+
+    # Buscar el día de lanzamiento
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
 
+    # Tareas de esa persona en ese día
     tareas = LanzamientoTarea.query.filter_by(dia_id=dia.dia_id, personal_id=personal_id).all()
     if not tareas:
         persona = Personal.query.filter_by(personal_id=personal_id).first()
@@ -375,6 +424,9 @@ def reporte_persona_dia(fecha, personal_id):
     detalles = []
     nivel_map = {"basica": 1, "media": 2, "profunda": 3}
 
+    # =====================================================
+    # Recorremos las tareas asignadas al colaborador
+    # =====================================================
     for t in tareas:
         area = t.area
         subarea = t.subarea
@@ -390,35 +442,77 @@ def reporte_persona_dia(fecha, personal_id):
         if not nivel_id:
             continue
 
-        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
+        # Precarga de relaciones para eficiencia
+        fracciones = (
+            db.session.query(Fraccion)
+            .options(
+                joinedload(Fraccion.detalles)
+                .joinedload(FraccionDetalle.kit)
+                .joinedload(Kit.detalles)
+                .joinedload(KitDetalle.herramienta),
+                joinedload(Fraccion.detalles)
+                .joinedload(FraccionDetalle.receta)
+                .joinedload(Receta.detalles)
+                .joinedload(RecetaDetalle.quimico),
+                joinedload(Fraccion.detalles)
+                .joinedload(FraccionDetalle.elemento_set)
+                .joinedload(ElementoSet.detalles)
+                .joinedload(ElementoDetalle.elemento),
+            )
+            .filter_by(sop_id=sop.sop_id)
+            .order_by(Fraccion.orden)
+            .all()
+        )
+
         fracciones_filtradas = []
 
+        # =====================================================
+        # Procesamos cada fracción (tarea pequeña)
+        # =====================================================
         for f in fracciones:
-            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
+            fd = next((d for d in f.detalles if d.nivel_limpieza_id == nivel_id), None)
             if not fd:
                 continue
 
-            metodologia = Metodologia.query.get(fd.metodologia_id)
-            receta = fd.receta
-            kit = fd.kit
+            metodologia = Metodologia.query.filter_by(metodologia_id=fd.metodologia_id).first()
+
+            # --- Relaciones (ya con IDs correctos según seed_data) ---
+            receta = getattr(fd, "receta", None)
+            kit = getattr(fd, "kit", None)
+            elemento_set = getattr(fd, "elemento_set", None)
+
+            # Si no vinieron cargadas por relación, las buscamos por ID
+            if not receta and fd.receta_id:
+                receta = Receta.query.filter_by(receta_id=fd.receta_id).first()
+            if not kit and fd.kit_id:
+                kit = Kit.query.filter_by(kit_id=fd.kit_id).first()
+            if not elemento_set and fd.elemento_set_id:
+                elemento_set = ElementoSet.query.filter_by(elemento_set_id=fd.elemento_set_id).first()
 
             producto_txt = ""
             herramienta_txt = ""
             elementos_tabla = []
 
-            # 🧩 Si la fracción usa ElementoSet → mostrar detalle por elemento
-            if fd.elemento_set_id:
-                elementos_detalle = (
-                    db.session.query(ElementoDetalle)
-                    .filter_by(elemento_set_id=fd.elemento_set_id)
-                    .all()
-                )
-                for ed in elementos_detalle:
-                    elemento = ed.elemento
-                    receta_ed = ed.receta
-                    kit_ed = ed.kit
+            # =====================================================
+            # Caso A: ElementoSet (inmobiliario/superficies)
+            # =====================================================
+            if elemento_set:
+                elementos_detalle = ElementoDetalle.query.filter_by(elemento_set_id=elemento_set.elemento_set_id).all()
 
-                    # Producto / Químico (desde receta)
+                for ed in elementos_detalle:
+                    elemento = getattr(ed, "elemento", None)
+                    if not elemento and ed.elemento_id:
+                        elemento = Elemento.query.filter_by(elemento_id=ed.elemento_id).first()
+
+                    receta_ed = getattr(ed, "receta", None)
+                    kit_ed = getattr(ed, "kit", None)
+
+                    if not receta_ed and ed.receta_id:
+                        receta_ed = Receta.query.filter_by(receta_id=ed.receta_id).first()
+                    if not kit_ed and ed.kit_id:
+                        kit_ed = Kit.query.filter_by(kit_id=ed.kit_id).first()
+
+                    # Producto / Químico
                     producto_str = ""
                     if receta_ed:
                         if receta_ed.detalles:
@@ -430,7 +524,7 @@ def reporte_persona_dia(fecha, personal_id):
                         else:
                             producto_str = receta_ed.nombre
 
-                    # Herramienta / Material (desde kit)
+                    # Herramientas
                     herramienta_str = ""
                     if kit_ed:
                         herramientas = [kd.herramienta.nombre for kd in kit_ed.detalles]
@@ -444,7 +538,9 @@ def reporte_persona_dia(fecha, personal_id):
                         "herramienta": herramienta_str
                     })
 
-            # 🧴 Si no hay ElementoSet → usar receta y kit directos
+            # =====================================================
+            # Caso B: Sin ElementoSet (kit/receta directa)
+            # =====================================================
             else:
                 if receta:
                     if receta.detalles:
@@ -458,9 +554,19 @@ def reporte_persona_dia(fecha, personal_id):
 
                 if kit:
                     herramientas = [det.herramienta.nombre for det in kit.detalles]
-                    herramienta_txt = " - ".join(herramientas)
+                    herramienta_txt = " | ".join(herramientas) if herramientas else kit.nombre
 
-            # Fracción final
+            # =====================================================
+            # Fallbacks (en caso de que algo esté vacío)
+            # =====================================================
+            if not producto_txt and receta:
+                producto_txt = receta.nombre
+            if not herramienta_txt and kit:
+                herramienta_txt = kit.nombre
+
+            # =====================================================
+            # Armamos la fracción para el reporte
+            # =====================================================
             fracciones_filtradas.append({
                 "orden": f.orden,
                 "fraccion_nombre": f.fraccion_nombre,
@@ -470,35 +576,38 @@ def reporte_persona_dia(fecha, personal_id):
                 "metodologia": metodologia,
                 "producto": producto_txt or None,
                 "herramienta": herramienta_txt or None,
-                "elementos_tabla": elementos_tabla or None
+                "elementos_tabla": elementos_tabla or None,
+                "observacion_critica": getattr(f, "nota_tecnica", None)
             })
 
-        # Detalle por subárea
+
+        # =====================================================
+        # Agregamos al bloque de detalles generales
+        # =====================================================
         detalles.append({
             "tarea_id": t.tarea_id,
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
             "sop_codigo": sop.sop_codigo,
-            "observacion_critica": sop.observacion_critica_sop if sop else None,
+            "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas
         })
-
-    # Renderizar plantilla
     return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
 
 
-
-
-# =========================
-# REPORTE Persona PDF MACRO
-# =========================
 @main_bp.route('/reporte/<fecha>/<personal_id>/pdf')
 def reporte_persona_dia_pdf(fecha, personal_id):
     """
-    PDF MACRO — SOP completo de la persona (todas las subáreas y fracciones filtradas por nivel).
+    PDF MACRO — SOP completo de la persona (todas las subáreas y fracciones filtradas por nivel),
+    incluyendo metodología y pasos (metodología cuelga de FraccionDetalle).
     """
-    fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
+    # 1) Validar fecha y existencia de día/tareas
+    try:
+        fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
+    except ValueError:
+        return f"Fecha inválida: {fecha}. Formato esperado: YYYY-MM-DD", 400
+
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
@@ -510,14 +619,17 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         return f"No hay tareas para {nombre} el {fecha}.", 404
 
     persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
-    detalles = []
 
+    # 2) Mapeo de nivel (ajusta si tus IDs difieren)
     nivel_map = {"basica": 1, "media": 2, "profunda": 3}
 
+    detalles = []
+
+    # 3) Recorrer tareas (área/subárea asignadas a la persona ese día)
     for t in tareas:
-        area = Area.query.get(t.area_id)
-        subarea = SubArea.query.get(t.subarea_id)
-        if not subarea or not area:
+        area = t.area
+        subarea = t.subarea
+        if not area or not subarea:
             continue
 
         sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first()
@@ -529,50 +641,161 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         if not nivel_id:
             continue
 
-        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
+        # 4) Precargar fracciones con TODO lo necesario (kits, recetas, elementos y METODOLOGÍA + PASOS)
+        fracciones = (
+            db.session.query(Fraccion)
+            .options(
+                joinedload(Fraccion.detalles)
+                    .joinedload(FraccionDetalle.kit)
+                    .joinedload(Kit.detalles)
+                    .joinedload(KitDetalle.herramienta),
+                joinedload(Fraccion.detalles)
+                    .joinedload(FraccionDetalle.receta)
+                    .joinedload(Receta.detalles)
+                    .joinedload(RecetaDetalle.quimico),
+                joinedload(Fraccion.detalles)
+                    .joinedload(FraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.elemento),
+                # ✅ Clave: metodología y sus pasos (MetodologiaPasos)
+                joinedload(Fraccion.detalles)
+                    .joinedload(FraccionDetalle.metodologia)
+                    .joinedload(Metodologia.pasos),
+            )
+            .filter_by(sop_id=sop.sop_id)
+            .order_by(Fraccion.orden)
+            .all()
+        )
+
         fracciones_filtradas = []
 
         for f in fracciones:
-            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
+            # Seleccionar el detalle que corresponde al nivel asignado
+            fd = next((d for d in f.detalles if d.nivel_limpieza_id == nivel_id), None)
             if not fd:
                 continue
 
-            metodologia = Metodologia.query.get(fd.metodologia_id)
-            nivel_obj = NivelLimpieza.query.get(fd.nivel_limpieza_id)
+            # --- Metodología directamente desde FraccionDetalle
+            metodologia = getattr(fd, "metodologia", None)
+            metodologia_dict = None
+            if metodologia:
+                pasos_items = sorted(list(metodologia.pasos or []), key=lambda p: (p.orden or 0))
+                pasos = [{"instruccion": p.instruccion} for p in pasos_items]
+                metodologia_dict = {
+                    "descripcion": metodologia.descripcion or "",
+                    "pasos": pasos
+                }
 
+            # --- Receta / Kit / ElementoSet
+            receta = getattr(fd, "receta", None)
+            kit = getattr(fd, "kit", None)
+            elemento_set = getattr(fd, "elemento_set", None)
+
+            producto_txt = ""
+            herramienta_txt = ""
+            elementos_tabla = []
+
+            if elemento_set:
+                elementos_detalle = ElementoDetalle.query.filter_by(elemento_set_id=elemento_set.elemento_set_id).all()
+                for ed in elementos_detalle:
+                    elemento = getattr(ed, "elemento", None)
+                    if not elemento and ed.elemento_id:
+                        elemento = Elemento.query.filter_by(elemento_id=ed.elemento_id).first()
+
+                    receta_ed = getattr(ed, "receta", None)
+                    kit_ed = getattr(ed, "kit", None)
+
+                    if not receta_ed and ed.receta_id:
+                        receta_ed = Receta.query.filter_by(receta_id=ed.receta_id).first()
+                    if not kit_ed and ed.kit_id:
+                        kit_ed = Kit.query.filter_by(kit_id=ed.kit_id).first()
+
+                    producto_str = ""
+                    if receta_ed:
+                        if getattr(receta_ed, "detalles", None):
+                            productos = [
+                                f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
+                                for d in receta_ed.detalles
+                            ]
+                            producto_str = " + ".join(productos)
+                        else:
+                            producto_str = receta_ed.nombre
+
+                    herramienta_str = ""
+                    if kit_ed:
+                        herramientas = [kd.herramienta.nombre for kd in kit_ed.detalles]
+                        herramienta_str = " - ".join(herramientas) if herramientas else kit_ed.nombre
+
+                    elementos_tabla.append({
+                        "nombre": elemento.nombre if elemento else "",
+                        "material": getattr(elemento, "material", "") if elemento else "",
+                        "cantidad": getattr(elemento, "cantidad", "") if elemento else "",
+                        "producto": producto_str,
+                        "herramienta": herramienta_str
+                    })
+            else:
+                if receta:
+                    if getattr(receta, "detalles", None):
+                        productos = [
+                            f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
+                            for d in receta.detalles
+                        ]
+                        producto_txt = " + ".join(productos)
+                    else:
+                        producto_txt = receta.nombre
+                if kit:
+                    herramientas = [det.herramienta.nombre for det in kit.detalles]
+                    herramienta_txt = " - ".join(herramientas) if herramientas else kit.nombre
+
+            # --- Armar fracción para el template
             fracciones_filtradas.append({
                 "orden": f.orden,
                 "fraccion_nombre": f.fraccion_nombre,
                 "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
-                "nivel_limpieza": nivel_obj.nombre if nivel_obj else "",
-                "metodologia_nombre": metodologia.nombre if metodologia else "",
+                "nivel_limpieza": t.nivel_limpieza_asignado,
                 "tiempo_base": f.tiempo_base_min,
-                "tipo_formula": f.tipo_formula,
-                "ajuste_factor": fd.ajuste_factor
+                "producto": producto_txt or None,
+                "herramienta": herramienta_txt or None,
+                "elementos_tabla": elementos_tabla or None,
+                "nota_tecnica": getattr(f, "nota_tecnica", None),
+                "observacion_critica": sop.observacion_critica_sop,
+                "metodologia": metodologia_dict,   # ✅ clave
             })
 
         detalles.append({
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
-            "sop_codigo": sop.sop_codigo if sop else None,
-            "observacion_critica": sop.observacion_critica_sop if sop else None,
+            "sop_codigo": sop.sop_codigo,
+            "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas
         })
 
-    # Ordenar por área, subárea
+    # 5) Orden final por área/subárea
     detalles.sort(key=lambda d: (d["area"], d["subarea"]))
 
-    html = render_template("reporte_personal_dia.html",
-                           persona=persona, fecha=fecha_obj, reporte_data=detalles)
+    # 6) Render del HTML y generación del PDF
+    html = render_template("sop_macro_pdf.html", persona=persona, fecha=fecha_obj, detalles=detalles)
+
+    # Asegúrate de tener PDFKIT_CONFIG y PDF_OPTIONS definidos en tu app
+    # Ejemplo de opciones recomendadas (si aún no las defines):
+    # PDF_OPTIONS = {
+    #     "enable-local-file-access": "",
+    #     "page-size": "Letter",
+    #     "margin-top": "10mm",
+    #     "margin-right": "10mm",
+    #     "margin-bottom": "12mm",
+    #     "margin-left": "10mm",
+    #     "encoding": "UTF-8",
+    #     "quiet": ""
+    # }
 
     pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
+
     return make_response((pdf_bytes, 200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
     }))
-
-
 
 # =========================
 # REPORTE Persona PDF MICRO

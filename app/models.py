@@ -304,6 +304,9 @@ class LanzamientoDia(db.Model):
 
 class LanzamientoTarea(db.Model):
     __tablename__ = 'lanzamiento_tarea'
+    __table_args__ = (
+        db.UniqueConstraint('dia_id', 'subarea_id', name='uq_tarea_dia_subarea'),
+    )
 
     tarea_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
