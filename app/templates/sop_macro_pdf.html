@@ -32,12 +32,17 @@
     .head{
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: end;
-      margin-bottom: 10px;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
     }
-    h1{ font-size: 1.35rem; margin: 0 0 4px 0; }
-    .sub{ color: var(--muted); font-size: .9rem; }
+
+    h1{
+      font-size: 1.1rem;      /* ↓ antes 1.35rem */
+      margin: 0 0 0 12px;
+      font-weight: 600;
+      color: #111;
+    }
 
     .meta{
       display: grid;
@@ -57,8 +62,7 @@
       border-radius: 6px;
       padding: 2px 8px;
       font-size: .8rem;
-      margin-left: auto;
-    }
+      }
 
     /* ===== Panel ===== */
     .panel{
@@ -196,18 +200,16 @@
   <div class="wrap">
     <div class="head">
       <div>
-        <h1>SOP Diario — Reporte por Operario</h1>
-        <div class="sub">Generado para <strong>{{ persona.nombre }}</strong></div>
-      </div>
-      <div class="code-badge">[{{ fecha.strftime('%Y-%m-%d') }}]</div>
-    </div>
-
-    <div class="meta">
-      <div><strong>Operario:</strong> {{ persona.nombre }}</div>
-      <div><strong>Fecha:</strong> {{ fecha.strftime('%Y-%m-%d') }}</div>
-      <div><strong>ID:</strong> {{ persona.personal_id }}</div>
-    </div>
-
+        <div class="head">
+          <div>
+            <h1>SOP — Reporte</h1>
+          </div>
+        </div>
+        <div class="meta">
+          <div><strong>Operario:</strong> {{ persona.nombre }}</div>
+          <div><strong>Fecha:</strong> {{ fecha.strftime('%Y-%m-%d') }}</div>
+          <div><strong>ID:</strong> {{ persona.personal_id }}</div>
+        </div>
     {% if detalles and detalles|length > 0 %}
       {% for d in detalles %}
         <div class="panel">

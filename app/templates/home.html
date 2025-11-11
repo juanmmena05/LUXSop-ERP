@@ -4,104 +4,253 @@
   <meta charset="UTF-8">
   <title>LuxSOP ERP — Semana</title>
   <style>
-    :root{
-      --fg:#222; --muted:#888; --line:#ddd; --bg:#f9f9f9;
-      --blue:#0d6efd; --green:#198754; --red:#dc3545; --red-d:#b02a37;
-      --card:#fff;
-    }
-    *{box-sizing:border-box}
-    body{
-      font-family:system-ui, sans-serif; color:var(--fg);
-      background:var(--bg); margin:0; padding:2rem; max-width:1200px; margin-inline:auto;
-    }
-
-    /* Encabezado compacto */
-    header{display:grid; gap:10px; margin-bottom:18px}
-    .head-row{
-      display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
-      padding-bottom:.6rem; border-bottom:1px solid var(--line);
-    }
-    .title h1{margin:0; font-size:1.25rem; font-weight:600}
-    .title .sub{margin-top:.2rem; color:var(--muted); font-size:.8rem}
-    .act-row{
-      display:flex; flex-wrap:wrap; align-items:center; gap:8px;
-      background:var(--card); border:1px solid var(--line); border-radius:10px;
-      padding:6px 8px;
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --green: #198754;
+      --red: #dc3545;
+      --red-d: #b02a37;
+      --card: #fff;
     }
 
-    /* Controles pequeños */
-    .label{font-size:.8rem; color:#555; margin-right:4px}
-    .select-sm, .input-sm{
-      appearance:none; background:#fff; border:1px solid var(--line); border-radius:8px;
-      padding:.38rem .55rem; font-size:.85rem; line-height:1; height:32px;
-    }
-    .btn-sm{
-      border:none; border-radius:8px; padding:.42rem .7rem; font-size:.85rem; line-height:1; cursor:pointer;
-    }
-    .btn-blue{background:var(--blue); color:#fff}
-    .btn-blue:hover{filter:brightness(.95)}
-    .btn-green{background:var(--green); color:#fff}
-    .btn-green:hover{filter:brightness(.95)}
-    .btn-trash{
-      display:flex; align-items:center; justify-content:center;
-      width:30px; height:30px; border-radius:8px; border:1px solid var(--red-d);
-      background:var(--red); color:#fff; font-size:16px; cursor:pointer;
-    }
-    .btn-trash:hover{background:var(--red-d)}
-    .spacer{flex:1}
+    * { box-sizing: border-box; }
 
-    /* Fila secundaria compacta */
-    .act-row-2{
-      display:flex; flex-wrap:wrap; align-items:center; gap:8px;
-      margin-top:6px;
+    body {
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      max-width: 1200px;
+      margin-inline: auto;
+    }
+
+    /* Encabezado */
+    header {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .head-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      padding-bottom: .6rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .title .sub {
+      margin-top: .2rem;
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    .label {
+      font-size: .8rem;
+      color: #555;
+      margin-right: 4px;
+    }
+
+    .select-sm,
+    .input-sm {
+      appearance: none;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: .38rem .55rem;
+      font-size: .85rem;
+      line-height: 1;
+      height: 32px;
+    }
+
+    .btn-sm {
+      border: none;
+      border-radius: 8px;
+      padding: .42rem .7rem;
+      font-size: .85rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .btn-blue { background: var(--blue); color: #fff; }
+    .btn-blue:hover { filter: brightness(.95); }
+
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-green:hover { filter: brightness(.95); }
+
+    .btn-trash {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid var(--red-d);
+      background: var(--red);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .btn-trash:hover { background: var(--red-d); }
+
+    /* Caja unificada */
+    .plantilla-box {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 340px;
+    }
+
+    .form-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .divider-line {
+      border-top: 1px solid var(--line);
+      margin: 4px 0;
     }
 
     /* Flash */
-    .flash-wrap{margin:.75rem 0 1rem}
-    .flash{background:#eef9f0; border:1px solid #cde8d5; color:#226b3d; padding:.45rem .6rem; border-radius:8px; font-size:.85rem}
-
-    /* Cards semana (igual que antes, mínimas mejoras) */
-    .week-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px}
-    .day-card{background:#fff; border:1px solid #ccc; border-radius:12px; padding:1rem 1.1rem; display:flex; flex-direction:column; gap:.75rem}
-    .day-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
-    .day-head{font-size:.95rem; font-weight:600}
-    .day-date{font-size:.8rem; color:#777}
-    .stats{font-size:.8rem; color:#444}
-    .stats span{font-weight:600; color:#000}
-    .plan-link a{
-      display:inline-block; background:#198754; color:#fff; text-decoration:none; border-radius:8px;
-      padding:.45rem .65rem; font-size:.8rem; margin-right:6px;
+    .flash-wrap { margin: .75rem 0 1rem; }
+    .flash {
+      background: #eef9f0;
+      border: 1px solid #cde8d5;
+      color: #226b3d;
+      padding: .45rem .6rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      transition: opacity 0.5s ease;
     }
-    .plan-link a:hover{filter:brightness(.95)}
 
-    footer{margin-top:26px; font-size:.75rem; color:#777}
-    @media (max-width:640px){ .head-row{flex-direction:column; align-items:flex-start} }
+    /* Cards semana */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .day-card {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      padding: 1.5rem 1.6rem;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: .85rem;
+      font-size: 0.9rem;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+      transition: box-shadow 0.2s ease;
+    }
+
+    .day-card:hover {
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    .day-head {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #222;
+    }
+
+    .day-date {
+      font-size: .85rem;
+      color: #666;
+    }
+
+    .stats {
+      font-size: .85rem;
+      color: #444;
+      margin-top: 4px;
+    }
+
+    .stats span {
+      font-weight: 600;
+      color: #000;
+    }
+
+    .plan-link {
+      margin-top: auto;
+    }
+
+    .plan-link a {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      padding: .5rem .7rem;
+      font-size: .8rem;
+      margin-right: 6px;
+    }
+
+    .plan-link a:hover {
+      filter: brightness(.95);
+    }
+
+    footer {
+      margin-top: 26px;
+      font-size: .75rem;
+      color: #777;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .head-row { flex-direction: column; align-items: flex-start; }
+      .week-grid { grid-template-columns: 1fr; }
+      .day-card {
+        padding: 1.2rem;
+        min-height: 160px;
+      }
+    }
   </style>
 </head>
+
 <body>
-
-<header>
-  <div class="head-row">
-    <div class="title">
-      <h1>LuxSOP · Semana {{ semana_num }}</h1>
-      <div class="sub">Del {{ lunes.strftime('%Y-%m-%d') }} al {{ sabado.strftime('%Y-%m-%d') }} · Planeación por persona, subárea y nivel</div>
-      <div class="sub" style="margin-top:.15rem;">
-        Plantilla activa:
-        <strong>
-          {% if plantilla_activa and plantilla_activa.plantilla %}
-            {{ plantilla_activa.plantilla.nombre }}
-          {% else %}
-            Ninguna
-          {% endif %}
-        </strong>
+  <header>
+    <div class="head-row">
+      <div class="title">
+        <h1>LuxSOP · Semana {{ semana_num }}</h1>
+        <div class="sub">
+          Del {{ lunes.strftime('%Y-%m-%d') }} al {{ sabado.strftime('%Y-%m-%d') }} · Planeación por persona, subárea y nivel
+        </div>
+        <div class="sub" style="margin-top:.15rem;">
+          Plantilla activa:
+          <strong>
+            {% if plantilla_activa and plantilla_activa.plantilla %}
+              {{ plantilla_activa.plantilla.nombre }}
+            {% else %}
+              Ninguna
+            {% endif %}
+          </strong>
+        </div>
       </div>
-    </div>
 
-    <!-- Barra compacta (APLICAR + GUARDAR) -->
-    <div style="min-width:340px">
-      <div class="act-row">
-        <!-- APLICAR -->
-        <form action="{{ url_for('main.aplicar_plantilla_guardada_simple') }}" method="POST" id="form-aplicar-plantilla" style="display:flex; align-items:center; gap:8px;">
+      <!-- 🔹 Caja unificada de Plantilla -->
+      <div class="plantilla-box">
+        <!-- Aplicar -->
+        <form action="{{ url_for('main.aplicar_plantilla_guardada_simple') }}" method="POST"
+              id="form-aplicar-plantilla" class="form-line">
           <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">
           <span class="label">Plantilla</span>
           <select id="plantilla_id" name="plantilla_id" class="select-sm" style="min-width:170px;">
@@ -116,21 +265,22 @@
           <button id="delete-template-btn" type="button" title="Borrar plantilla" class="btn-trash" style="display:none;">✖</button>
           <button type="submit" class="btn-sm btn-blue">Aplicar</button>
         </form>
-        <!-- DELETE form oculto -->
-        <form id="delete-template-form" method="POST" style="display:none;"></form>
-      </div>
 
-      <div class="act-row-2">
-        <!-- GUARDAR / SOBRESCRIBIR -->
-        <form action="{{ url_for('main.guardar_semana_como_plantilla_simple') }}" method="POST" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+        <div class="divider-line"></div>
+
+        <!-- Guardar -->
+        <form action="{{ url_for('main.guardar_semana_como_plantilla_simple') }}" method="POST"
+              class="form-line">
           <input type="hidden" name="lunes_ref" value="{{ lunes.strftime('%Y-%m-%d') }}">
           <span class="label">Guardar como</span>
-          <input type="text" id="nombre" name="nombre" class="input-sm" placeholder="Ej. Carga alta" style="min-width:180px;">
+          <input type="text" id="nombre" name="nombre" class="input-sm"
+                placeholder="Ej. Carga alta" style="min-width:180px;">
           <label class="label" style="display:flex; align-items:center; gap:6px; margin-left:6px;">
             <input type="checkbox" id="overwrite_template" name="overwrite_template">
             Sobrescribir
           </label>
-          <select id="plantilla_id_to_overwrite" name="plantilla_id_to_overwrite" class="select-sm" style="display:none; min-width:180px;">
+          <select id="plantilla_id_to_overwrite" name="plantilla_id_to_overwrite"
+                  class="select-sm" style="display:none; min-width:180px;">
             <option value="">Selecciona plantilla…</option>
             {% for p in plantillas %}
               <option value="{{ p.plantilla_id }}">{{ p.nombre }}</option>
@@ -140,88 +290,113 @@
         </form>
       </div>
     </div>
-  </div>
-</header>
+  </header>
 
-<!-- Flash (si usas flash()) -->
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    <div class="flash-wrap">
-      {% for category, msg in messages %}
-        <div class="flash">{{ msg }}</div>
-      {% endfor %}
-    </div>
-  {% endif %}
-{% endwith %}
+  <!-- Formulario oculto para borrar -->
+  <form id="delete-template-form" method="POST" style="display:none;"></form>
 
-<section class="week-grid">
-  {% for d in dias_semana %}
-    <div class="day-card">
-      <div>
-        <div class="day-head">Día {{ loop.index }}</div>
-        <div class="day-date">
-          {{ d.fecha.strftime('%A') | capitalize }}<br>
-          {{ d.fecha.strftime('%Y-%m-%d') }}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="week-grid">
+    {% for d in dias_semana %}
+      <div class="day-card">
+        <div>
+          <div class="day-head">Día {{ loop.index }}</div>
+          <div class="day-date">
+            {{ d.fecha.strftime('%A') | capitalize }}<br>
+            {{ d.fecha.strftime('%Y-%m-%d') }}
+          </div>
+          <div class="stats">
+            <div><span>{{ d.total_personas }}</span> persona(s)</div>
+            <div><span>{{ d.total_tareas }}</span> tarea(s)</div>
+          </div>
         </div>
-        <div class="stats">
-          <div><span>{{ d.total_personas }}</span> persona(s)</div>
-          <div><span>{{ d.total_tareas }}</span> tarea(s)</div>
+        <div class="plan-link">
+          <a href="{{ d.link_plan }}">Editar día</a>
+          <a href="{{ d.link_ruta }}">Ruta</a>
         </div>
       </div>
-      <div class="plan-link">
-        <a href="{{ d.link_plan }}">Editar día</a>
-        <a href="{{ d.link_ruta }}">Ruta</a>
-      </div>
-    </div>
-  {% endfor %}
-</section>
+    {% endfor %}
+  </section>
 
-<footer>
-  LuxSOP ERP · Planeación semanal de limpieza.
-</footer>
+  <footer>
+    LuxSOP ERP · Planeación semanal de limpieza.
+  </footer>
 
-<script>
-  // Toggle crear vs sobrescribir (compacto)
+  <!-- ✅ Scripts -->
+  <script>
+  // Borrar plantilla
+  (function () {
+    const select = document.getElementById('plantilla_id');
+    const deleteBtn = document.getElementById('delete-template-btn');
+    const deleteForm = document.getElementById('delete-template-form');
+
+    function update() {
+      if (!select) return;
+      deleteBtn.style.display = (select.value && select.value !== 'none') ? 'flex' : 'none';
+    }
+
+    deleteBtn && deleteBtn.addEventListener('click', () => {
+      const id = select.value;
+      if (!id || id === 'none' || isNaN(parseInt(id))) {
+        alert('Selecciona una plantilla válida para borrar.');
+        return;
+      }
+      if (confirm('¿Borrar esta plantilla definitivamente?')) {
+        deleteForm.method = 'POST';
+        deleteForm.action = `/plantillas/borrar/${parseInt(id)}`;
+        deleteForm.submit();
+      }
+    });
+
+    select && select.addEventListener('change', update);
+    update();
+  })();
+
+  // Fade-out mensajes flash
+  (function() {
+    const flashes = document.querySelectorAll('.flash');
+    if (!flashes.length) return;
+    setTimeout(() => {
+      flashes.forEach(flash => {
+        flash.style.transition = 'opacity 0.8s ease';
+        flash.style.opacity = '0';
+        setTimeout(() => flash.remove(), 1000);
+      });
+    }, 3500);
+  })();
+
+  // Toggle "Sobrescribir"
   (function () {
     const chk = document.getElementById('overwrite_template');
     const nameInput = document.getElementById('nombre');
     const sel = document.getElementById('plantilla_id_to_overwrite');
-    function syncUI(){
-      if(!chk || !nameInput || !sel) return;
-      if(chk.checked){
-        nameInput.style.display='none';
-        sel.style.display='';
-      }else{
-        nameInput.style.display='';
-        sel.style.display='none';
-        sel.value='';
+
+    function syncUI() {
+      if (!chk || !nameInput || !sel) return;
+      if (chk.checked) {
+        nameInput.style.display = 'none';
+        sel.style.display = '';
+        sel.focus();
+      } else {
+        nameInput.style.display = '';
+        sel.style.display = 'none';
+        sel.value = '';
+        nameInput.focus();
       }
     }
+
     chk && chk.addEventListener('change', syncUI);
     syncUI();
   })();
-
-  // Mostrar/ocultar tacha al cambiar selección
-  (function(){
-    const select = document.getElementById('plantilla_id');
-    const deleteBtn = document.getElementById('delete-template-btn');
-    const deleteForm = document.getElementById('delete-template-form');
-    function update(){
-      if(!select) return;
-      deleteBtn.style.display = (select.value && select.value !== 'none') ? 'flex' : 'none';
-    }
-    deleteBtn && deleteBtn.addEventListener('click', ()=>{
-      const id = select.value;
-      if(!id || id==='none') return;
-      if(confirm('¿Borrar esta plantilla?')){
-        deleteForm.action = `/plantillas/borrar/${id}`;
-        deleteForm.submit();
-      }
-    });
-    select && select.addEventListener('change', update);
-    update();
-  })();
-</script>
-
+  </script>
 </body>
 </html>
