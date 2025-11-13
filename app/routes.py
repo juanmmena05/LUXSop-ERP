@@ -1,11 +1,13 @@
 import io
-import pdfkit
 import os
-from sqlalchemy.orm import joinedload
-from datetime import datetime, date, timedelta
+import unicodedata
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
+
+import pdfkit
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response
+from sqlalchemy.orm import joinedload
+
 from .models import (
     db,
     Area,
@@ -34,15 +36,11 @@ from .models import (
     Quimico
 )
 
-
-
-
 # =========================
 # Helpers de PDF
 # =========================
 WKHTMLTOPDF_CMD = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
 PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_CMD)
-
 
 PDF_OPTIONS = {
     "page-size": "A5",        # más angosto, cómodo para pantalla de teléfono
@@ -55,7 +53,6 @@ PDF_OPTIONS = {
     # "no-outline": None,     # opcional
     # "quiet": ""             # opcional
 }
-
 
 # =========================
 # Helpers de semana/día
@@ -85,7 +82,6 @@ def get_or_create_dia(fecha_obj: date):
         db.session.commit()
     return dia
 
-
 # --- Helper: set etiqueta de plantilla activa para una semana ---
 def set_plantilla_activa(lunes_semana: date, plantilla_id: Optional[int]):
     fila = PlantillaSemanaAplicada.query.get(lunes_semana)
@@ -108,6 +104,27 @@ def obtener_tarea(fecha_obj: date, personal_id, subarea_id):
         subarea_id=subarea_id
     ).first()
 
+# =========================
+# Helpers Nivel Limpieza (canon = "basica" | "media" | "profundo")
+# =========================
+def _norm(s: str) -> str:
+    s = (s or "").strip().lower()
+    s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    return s
+
+def canon_nivel(s: Optional[str]) -> Optional[str]:
+    x = _norm(s or "")
+    if x in {"1", "basica", "básica"}:
+        return "basica"
+    if x in {"2", "media"}:
+        return "media"
+    if x in {"3", "profundo", "profunda"}:
+        return "profundo"
+    return None
+
+def nivel_to_id(s: Optional[str]) -> Optional[int]:
+    x = canon_nivel(s or "")
+    return {"basica": 1, "media": 2, "profundo": 3}.get(x)
 
 main_bp = Blueprint('main', __name__)
 
@@ -144,7 +161,7 @@ def home():
 
     sabado = lunes + timedelta(days=5)
 
-    # 👇 Nuevo: plantillas disponibles y etiqueta activa
+    # Plantillas disponibles y etiqueta activa
     plantillas = PlantillaSemanal.query.order_by(PlantillaSemanal.nombre.asc()).all()
     plantilla_activa = PlantillaSemanaAplicada.query.get(lunes)  # puede ser None
 
@@ -157,7 +174,6 @@ def home():
         plantillas=plantillas,
         plantilla_activa=plantilla_activa
     )
-
 
 # =========================
 # INIT DB
@@ -177,21 +193,18 @@ def listar_areas():
 
 @main_bp.route('/areas/nueva', methods=['GET', 'POST'])
 def nueva_area():
+    # OJO: El modelo Area NO tiene superficie_area ni tiempo_total_area.
     if request.method == 'POST':
         area_id = request.form.get('area_id')
         area_nombre = request.form.get('area_nombre')
-        superficie_area = float(request.form.get('superficie_area') or 0)
         tipo_area = request.form.get('tipo_area')
         cantidad_subareas = int(request.form.get('cantidad_subareas') or 0)
-        tiempo_total_area = float(request.form.get('tiempo_total_area') or 0)
 
         db.session.add(Area(
             area_id=area_id,
             area_nombre=area_nombre,
-            superficie_area=superficie_area,
             tipo_area=tipo_area,
             cantidad_subareas=cantidad_subareas,
-            tiempo_total_area=tiempo_total_area,
         ))
         db.session.commit()
         return redirect(url_for('main.listar_areas'))
@@ -215,7 +228,6 @@ def nueva_subarea():
         superficie_subarea = float(request.form.get('superficie_subarea') or 0)
         nivel_limpieza = request.form.get('nivel_limpieza')
         frecuencia = float(request.form.get('frecuencia') or 0)
-        tiempo_total_subarea = float(request.form.get('tiempo_total_subarea') or 0)
 
         db.session.add(SubArea(
             subarea_id=subarea_id,
@@ -224,7 +236,6 @@ def nueva_subarea():
             superficie_subarea=superficie_subarea,
             nivel_limpieza=nivel_limpieza,
             frecuencia=frecuencia,
-            tiempo_total_subarea=tiempo_total_subarea,
         ))
         db.session.commit()
         return redirect(url_for('main.listar_subareas'))
@@ -256,7 +267,10 @@ def asignar_ruta(personal_id):
     if request.method == 'POST':
         area_id = request.form.get('area_id')
         subarea_id = request.form.get('subarea_id')
-        nivel_limpieza_asignado = request.form.get('nivel_limpieza_asignado')
+        nivel_limpieza_asignado = canon_nivel(request.form.get('nivel_limpieza_asignado'))
+        if not nivel_limpieza_asignado:
+            flash('Nivel de limpieza inválido.', 'warning')
+            return redirect(url_for('main.asignar_ruta', personal_id=personal_id))
 
         db.session.add(AsignacionPersonal(
             personal_id=personal_id,
@@ -309,7 +323,6 @@ def subareas_por_area(area_id):
         for s in subareas
     ])
 
-
 # =========================
 # PLAN DIARIO (asignar)
 # =========================
@@ -321,7 +334,7 @@ def plan_dia_asignar(fecha):
     personal_list = Personal.query.all()
     areas_list = Area.query.all()
 
-    # 🔹 Subáreas ya asignadas ese día (para pintar en el select)
+    # Subáreas ya asignadas ese día (para pintar en el select)
     asignadas_ids = [
         s[0] for s in db.session.query(LanzamientoTarea.subarea_id)
         .filter(LanzamientoTarea.dia_id == dia.dia_id)
@@ -329,27 +342,29 @@ def plan_dia_asignar(fecha):
         .all()
     ]
 
-    # 🔹 Mostrar TODAS las subáreas (las ya asignadas se desactivan en el template)
+    # Mostrar TODAS las subáreas (las ya asignadas se desactivan en el template)
     subareas_list = SubArea.query.all()
 
     if request.method == 'POST':
         personal_id = request.form.get('personal_id')
         area_id = request.form.get('area_id')
         subarea_id = request.form.get('subarea_id')
-        nivel_limpieza_asignado = request.form.get('nivel_limpieza_asignado')
+        nivel_limpieza_asignado = canon_nivel(request.form.get('nivel_limpieza_asignado'))
+        if not nivel_limpieza_asignado:
+            flash('Nivel de limpieza inválido.', 'warning')
+            return redirect(url_for('main.plan_dia_asignar', fecha=fecha))
 
-        # 🚫 BLOQUEO EN SERVIDOR: misma subárea ya usada ese día
+        # BLOQUEO EN SERVIDOR: misma subárea ya usada ese día
         existe_misma_subarea = db.session.query(LanzamientoTarea).filter_by(
             dia_id=dia.dia_id,
             subarea_id=subarea_id
         ).first()
 
         if existe_misma_subarea:
-            # No importa persona ni nivel: ya está ocupada esa subárea en ese día
             flash('Esa subárea ya tiene una tarea asignada en este día.', 'warning')
             return redirect(url_for('main.plan_dia_asignar', fecha=fecha))
 
-        # ✅ Si no existe, creamos la tarea
+        # Crear la tarea
         db.session.add(LanzamientoTarea(
             dia_id=dia.dia_id,
             personal_id=personal_id,
@@ -378,8 +393,8 @@ def plan_dia_asignar(fecha):
             persona = getattr(t, "personal", None) or Personal.query.filter_by(personal_id=key).first()
             tareas_por_persona[key] = {"persona": persona, "subtareas": []}
         tareas_por_persona[key]["subtareas"].append(t)
-    
-    # IDs de subáreas asignadas ese día
+
+    # IDs de subáreas asignadas ese día (set para el template)
     asignadas_ids = {t.subarea_id for t in tareas_del_dia}
 
     return render_template(
@@ -391,12 +406,11 @@ def plan_dia_asignar(fecha):
         tareas_del_dia=tareas_del_dia,
         tareas_por_persona=tareas_por_persona,
         tiempos_por_tarea=tiempos_por_tarea,
-        asignadas_ids=asignadas_ids 
+        asignadas_ids=asignadas_ids
     )
 
-
 # =========================
-# REPORTE (fecha + persona) — versión extendida con ElementoSet / Kit / Receta
+# REPORTE (fecha + persona)
 # =========================
 @main_bp.route('/reporte/<fecha>/<personal_id>')
 def reporte_persona_dia(fecha, personal_id):
@@ -404,7 +418,6 @@ def reporte_persona_dia(fecha, personal_id):
     Genera el reporte SOP Diario para una persona en una fecha específica.
     Incluye metodología, kit, receta, elemento_set y todos los detalles.
     """
-
     # Convertir fecha a objeto
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
 
@@ -422,11 +435,8 @@ def reporte_persona_dia(fecha, personal_id):
 
     persona = tareas[0].personal if tareas else None
     detalles = []
-    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
 
-    # =====================================================
     # Recorremos las tareas asignadas al colaborador
-    # =====================================================
     for t in tareas:
         area = t.area
         subarea = t.subarea
@@ -437,10 +447,20 @@ def reporte_persona_dia(fecha, personal_id):
         if not sop:
             continue
 
-        nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-        nivel_id = nivel_map.get(nivel_asignado)
+        # Canon + id
+        nivel_asignado = canon_nivel(t.nivel_limpieza_asignado)
+        nivel_id = nivel_to_id(nivel_asignado)
         if not nivel_id:
             continue
+
+        # Factor del nivel
+        nivel_obj = NivelLimpieza.query.get(nivel_id)
+        factor_nivel = float(getattr(nivel_obj, "factor_nivel", 1.0) or 1.0)
+
+        # Superficie (solo se usará en por_m2)
+        superficie_m2 = float(getattr(subarea, "superficie_subarea", 0) or 0)
+        if superficie_m2 <= 0:
+            superficie_m2 = 1.0
 
         # Precarga de relaciones para eficiencia
         fracciones = (
@@ -466,9 +486,7 @@ def reporte_persona_dia(fecha, personal_id):
 
         fracciones_filtradas = []
 
-        # =====================================================
         # Procesamos cada fracción (tarea pequeña)
-        # =====================================================
         for f in fracciones:
             fd = next((d for d in f.detalles if d.nivel_limpieza_id == nivel_id), None)
             if not fd:
@@ -476,12 +494,11 @@ def reporte_persona_dia(fecha, personal_id):
 
             metodologia = Metodologia.query.filter_by(metodologia_id=fd.metodologia_id).first()
 
-            # --- Relaciones (ya con IDs correctos según seed_data) ---
+            # --- Relaciones ---
             receta = getattr(fd, "receta", None)
             kit = getattr(fd, "kit", None)
             elemento_set = getattr(fd, "elemento_set", None)
 
-            # Si no vinieron cargadas por relación, las buscamos por ID
             if not receta and fd.receta_id:
                 receta = Receta.query.filter_by(receta_id=fd.receta_id).first()
             if not kit and fd.kit_id:
@@ -489,16 +506,41 @@ def reporte_persona_dia(fecha, personal_id):
             if not elemento_set and fd.elemento_set_id:
                 elemento_set = ElementoSet.query.filter_by(elemento_set_id=fd.elemento_set_id).first()
 
+            # ===== Tiempo calculado POR FRACCIÓN =====
+            tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
+            tipo_formula = (getattr(f, "tipo_formula", "") or "").lower()
+            ajuste = float(getattr(fd, "ajuste_factor", 1.0) or 1.0)
+
+            # multiplicador según tipo de fórmula (RESPETA superficie_aplicable)
+            if tipo_formula in ("por_m2", "por_m²"):
+                if fd and fd.superficie_aplicable not in (None, 0, "", " "):
+                    try:
+                        multiplicador = float(fd.superficie_aplicable)
+                        if multiplicador <= 0:
+                            multiplicador = superficie_m2
+                    except (TypeError, ValueError):
+                        multiplicador = superficie_m2
+                else:
+                    multiplicador = superficie_m2
+
+            elif tipo_formula == "por_pieza":
+                elemento_set = getattr(fd, "elemento_set", None)
+                if elemento_set and getattr(elemento_set, "detalles", None):
+                    multiplicador = max(1, len(elemento_set.detalles))
+                else:
+                    multiplicador = 1.0
+            else:  # fijo u otro
+                multiplicador = 1.0
+
+            tiempo_calculado = tiempo_base * multiplicador * ajuste * factor_nivel
+
+            # ===== Texto de productos/herramientas y tabla de elementos =====
             producto_txt = ""
             herramienta_txt = ""
             elementos_tabla = []
 
-            # =====================================================
-            # Caso A: ElementoSet (inmobiliario/superficies)
-            # =====================================================
             if elemento_set:
                 elementos_detalle = ElementoDetalle.query.filter_by(elemento_set_id=elemento_set.elemento_set_id).all()
-
                 for ed in elementos_detalle:
                     elemento = getattr(ed, "elemento", None)
                     if not elemento and ed.elemento_id:
@@ -512,19 +554,14 @@ def reporte_persona_dia(fecha, personal_id):
                     if not kit_ed and ed.kit_id:
                         kit_ed = Kit.query.filter_by(kit_id=ed.kit_id).first()
 
-                    # Producto / Químico
                     producto_str = ""
                     if receta_ed:
-                        if receta_ed.detalles:
-                            productos = [
-                                f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
-                                for d in receta_ed.detalles
-                            ]
+                        if getattr(receta_ed, "detalles", None):
+                            productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta_ed.detalles]
                             producto_str = " + ".join(productos)
                         else:
                             producto_str = receta_ed.nombre
 
-                    # Herramientas
                     herramienta_str = ""
                     if kit_ed:
                         herramientas = [kd.herramienta.nombre for kd in kit_ed.detalles]
@@ -532,47 +569,37 @@ def reporte_persona_dia(fecha, personal_id):
 
                     elementos_tabla.append({
                         "nombre": elemento.nombre if elemento else "",
-                        "material": elemento.material if elemento else "",
-                        "cantidad": elemento.cantidad if elemento else "",
+                        "material": getattr(elemento, "material", "") if elemento else "",
+                        "cantidad": getattr(elemento, "cantidad", "") if elemento else "",
                         "producto": producto_str,
                         "herramienta": herramienta_str
                     })
-
-            # =====================================================
-            # Caso B: Sin ElementoSet (kit/receta directa)
-            # =====================================================
             else:
                 if receta:
-                    if receta.detalles:
-                        productos = [
-                            f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
-                            for d in receta.detalles
-                        ]
+                    if getattr(receta, "detalles", None):
+                        productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta.detalles]
                         producto_txt = " + ".join(productos)
                     else:
                         producto_txt = receta.nombre
-
                 if kit:
                     herramientas = [det.herramienta.nombre for det in kit.detalles]
                     herramienta_txt = " | ".join(herramientas) if herramientas else kit.nombre
 
-            # =====================================================
-            # Fallbacks (en caso de que algo esté vacío)
-            # =====================================================
             if not producto_txt and receta:
                 producto_txt = receta.nombre
             if not herramienta_txt and kit:
                 herramienta_txt = kit.nombre
 
-            # =====================================================
-            # Armamos la fracción para el reporte
-            # =====================================================
+            # Armamos la fracción
             fracciones_filtradas.append({
                 "orden": f.orden,
                 "fraccion_nombre": f.fraccion_nombre,
                 "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
-                "nivel_limpieza": t.nivel_limpieza_asignado,
-                "tiempo_base": f.tiempo_base_min,
+                "nivel_limpieza": nivel_asignado,
+                "tiempo_min": round(tiempo_calculado, 2),
+                "base": tiempo_base,
+                "ajuste": ajuste,
+                "factor_nivel": factor_nivel,
                 "metodologia": metodologia,
                 "producto": producto_txt or None,
                 "herramienta": herramienta_txt or None,
@@ -580,10 +607,7 @@ def reporte_persona_dia(fecha, personal_id):
                 "observacion_critica": getattr(f, "nota_tecnica", None)
             })
 
-
-        # =====================================================
-        # Agregamos al bloque de detalles generales
-        # =====================================================
+        # Bloque de detalles generales
         detalles.append({
             "tarea_id": t.tarea_id,
             "area": area.area_nombre,
@@ -593,9 +617,24 @@ def reporte_persona_dia(fecha, personal_id):
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas
         })
+
+    # Ordenar por el orden_subarea definido en la BD
+    detalles.sort(
+        key=lambda d: (
+            getattr(
+                SubArea.query.filter_by(subarea_nombre=d["subarea"]).first(),
+                "orden_subarea",
+                9999
+            )
+        )
+    )
+
+    # Render final
     return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
 
-
+# =========================
+# REPORTE Persona PDF
+# =========================
 @main_bp.route('/reporte/<fecha>/<personal_id>/pdf')
 def reporte_persona_dia_pdf(fecha, personal_id):
     """
@@ -619,13 +658,9 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         return f"No hay tareas para {nombre} el {fecha}.", 404
 
     persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
-
-    # 2) Mapeo de nivel (ajusta si tus IDs difieren)
-    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
-
     detalles = []
 
-    # 3) Recorrer tareas (área/subárea asignadas a la persona ese día)
+    # 3) Recorrer tareas
     for t in tareas:
         area = t.area
         subarea = t.subarea
@@ -636,10 +671,18 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         if not sop:
             continue
 
-        nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-        nivel_id = nivel_map.get(nivel_asignado)
+        nivel_asignado = canon_nivel(t.nivel_limpieza_asignado)
+        nivel_id = nivel_to_id(nivel_asignado)
         if not nivel_id:
             continue
+
+        # factor nivel + superficie m2
+        nivel_obj = NivelLimpieza.query.get(nivel_id)
+        factor_nivel = float(getattr(nivel_obj, "factor_nivel", 1.0) or 1.0)
+
+        superficie_m2 = float(getattr(subarea, "superficie_subarea", 0) or 0)
+        if superficie_m2 <= 0:
+            superficie_m2 = 1.0
 
         # 4) Precargar fracciones con TODO lo necesario (kits, recetas, elementos y METODOLOGÍA + PASOS)
         fracciones = (
@@ -657,7 +700,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     .joinedload(FraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.elemento),
-                # ✅ Clave: metodología y sus pasos (MetodologiaPasos)
                 joinedload(Fraccion.detalles)
                     .joinedload(FraccionDetalle.metodologia)
                     .joinedload(Metodologia.pasos),
@@ -675,7 +717,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             if not fd:
                 continue
 
-            # --- Metodología directamente desde FraccionDetalle
+            # --- Metodología desde FraccionDetalle
             metodologia = getattr(fd, "metodologia", None)
             metodologia_dict = None
             if metodologia:
@@ -686,7 +728,34 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     "pasos": pasos
                 }
 
-            # --- Receta / Kit / ElementoSet
+            # ===== Tiempo calculado POR FRACCIÓN =====
+            tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
+            tipo_formula = (getattr(f, "tipo_formula", "") or "").lower()
+            ajuste = float(getattr(fd, "ajuste_factor", 1.0) or 1.0)
+
+            if tipo_formula in ("por_m2", "por_m²"):
+                if fd and fd.superficie_aplicable not in (None, 0, "", " "):
+                    try:
+                        multiplicador = float(fd.superficie_aplicable)
+                        if multiplicador <= 0:
+                            multiplicador = superficie_m2
+                    except (TypeError, ValueError):
+                        multiplicador = superficie_m2
+                else:
+                    multiplicador = superficie_m2
+
+            elif tipo_formula == "por_pieza":
+                elemento_set = getattr(fd, "elemento_set", None)
+                if elemento_set and getattr(elemento_set, "detalles", None):
+                    multiplicador = max(1, len(elemento_set.detalles))
+                else:
+                    multiplicador = 1.0
+            else:  # fijo u otro
+                multiplicador = 1.0
+
+            tiempo_calculado = tiempo_base * multiplicador * ajuste * factor_nivel
+
+            # --- Receta / Kit / ElementoSet (para tabla)
             receta = getattr(fd, "receta", None)
             kit = getattr(fd, "kit", None)
             elemento_set = getattr(fd, "elemento_set", None)
@@ -713,10 +782,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     producto_str = ""
                     if receta_ed:
                         if getattr(receta_ed, "detalles", None):
-                            productos = [
-                                f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
-                                for d in receta_ed.detalles
-                            ]
+                            productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta_ed.detalles]
                             producto_str = " + ".join(productos)
                         else:
                             producto_str = receta_ed.nombre
@@ -736,10 +802,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             else:
                 if receta:
                     if getattr(receta, "detalles", None):
-                        productos = [
-                            f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})"
-                            for d in receta.detalles
-                        ]
+                        productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta.detalles]
                         producto_txt = " + ".join(productos)
                     else:
                         producto_txt = receta.nombre
@@ -747,49 +810,43 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     herramientas = [det.herramienta.nombre for det in kit.detalles]
                     herramienta_txt = " - ".join(herramientas) if herramientas else kit.nombre
 
-            # --- Armar fracción para el template
+            # --- Armar fracción para el template PDF
             fracciones_filtradas.append({
                 "orden": f.orden,
                 "fraccion_nombre": f.fraccion_nombre,
                 "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
-                "nivel_limpieza": t.nivel_limpieza_asignado,
-                "tiempo_base": f.tiempo_base_min,
+                "nivel_limpieza": nivel_asignado,   # canon
+                "tiempo_base": round(tiempo_calculado, 2),
                 "producto": producto_txt or None,
                 "herramienta": herramienta_txt or None,
                 "elementos_tabla": elementos_tabla or None,
                 "nota_tecnica": getattr(f, "nota_tecnica", None),
                 "observacion_critica": sop.observacion_critica_sop,
-                "metodologia": metodologia_dict,   # ✅ clave
+                "metodologia": metodologia_dict,
             })
 
         detalles.append({
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
-            "nivel": nivel_asignado,
+            "nivel": nivel_asignado,  # canon
             "sop_codigo": sop.sop_codigo,
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas
         })
 
     # 5) Orden final por área/subárea
-    detalles.sort(key=lambda d: (d["area"], d["subarea"]))
+    detalles.sort(
+        key=lambda d: (
+            getattr(
+                SubArea.query.filter_by(subarea_nombre=d["subarea"]).first(),
+                "orden_subarea",
+                9999
+            )
+        )
+    )
 
     # 6) Render del HTML y generación del PDF
     html = render_template("sop_macro_pdf.html", persona=persona, fecha=fecha_obj, detalles=detalles)
-
-    # Asegúrate de tener PDFKIT_CONFIG y PDF_OPTIONS definidos en tu app
-    # Ejemplo de opciones recomendadas (si aún no las defines):
-    # PDF_OPTIONS = {
-    #     "enable-local-file-access": "",
-    #     "page-size": "Letter",
-    #     "margin-top": "10mm",
-    #     "margin-right": "10mm",
-    #     "margin-bottom": "12mm",
-    #     "margin-left": "10mm",
-    #     "encoding": "UTF-8",
-    #     "quiet": ""
-    # }
-
     pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
 
     return make_response((pdf_bytes, 200, {
@@ -798,121 +855,47 @@ def reporte_persona_dia_pdf(fecha, personal_id):
     }))
 
 # =========================
-# REPORTE Persona PDF MICRO
-# =========================
-@main_bp.route('/tarea/<int:tarea_id>/pdf')
-def reporte_tarea_pdf(tarea_id):
-    """
-    PDF MICRO — genera un reporte de una sola subárea/tarea con fracciones y metodología.
-    """
-    t = LanzamientoTarea.query.get_or_404(tarea_id)
-    persona = getattr(t, "personal", None) or Personal.query.filter_by(personal_id=t.personal_id).first()
-    area = Area.query.get(t.area_id)
-    subarea = SubArea.query.get(t.subarea_id)
-    sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first() if subarea else None
-
-    nivel_map = {"basica": 1, "media": 2, "profunda": 3}
-    nivel_asignado = (t.nivel_limpieza_asignado or "").strip().lower()
-    nivel_id = nivel_map.get(nivel_asignado)
-    fracciones_filtradas = []
-
-    if sop and nivel_id:
-        fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
-
-        for f in fracciones:
-            fd = FraccionDetalle.query.filter_by(fraccion_id=f.fraccion_id, nivel_limpieza_id=nivel_id).first()
-            if not fd:
-                continue
-
-            metodologia = Metodologia.query.get(fd.metodologia_id)
-            nivel_obj = NivelLimpieza.query.get(fd.nivel_limpieza_id)
-
-            fracciones_filtradas.append({
-                "orden": f.orden,
-                "fraccion_nombre": f.fraccion_nombre,
-                "descripcion": f.descripcion or (metodologia.descripcion if metodologia else ""),
-                "nivel_limpieza": nivel_obj.nombre if nivel_obj else "",
-                "metodologia_nombre": metodologia.nombre if metodologia else "",
-                "tiempo_base": f.tiempo_base_min,
-                "tipo_formula": f.tipo_formula,
-                "ajuste_factor": fd.ajuste_factor
-            })
-
-    html = render_template("reporte_personal_dia.html",  # usa el mismo template
-                           persona=persona,
-                           fecha=date.today(),
-                           reporte_data=[{
-                               "area": area.area_nombre,
-                               "subarea": subarea.subarea_nombre,
-                               "nivel": nivel_asignado,
-                               "sop_codigo": sop.sop_codigo if sop else None,
-                               "observacion_critica": sop.observacion_critica_sop if sop else None,
-                               "fracciones": fracciones_filtradas
-                           }])
-
-    pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
-    return make_response((pdf_bytes, 200, {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": f"attachment; filename=SOP_{t.personal_id}_{subarea.subarea_nombre}.pdf"
-    }))
-
-
-# =========================
 # Calcular Tiempo Tarea
 # =========================
-# import necesario arriba del archivo routes.py
-def calcular_tiempo_tarea(tarea):
+def calcular_tiempo_tarea(tarea, modo="total"):
     """
-    Nuevo cálculo de tiempo por tarea:
-      - busca las fracciones del SOP de la subárea
-      - intenta localizar FraccionDetalle para cada fracción + nivel
-      - usa la formula:
-         tiempo_total = tiempo_base_min * superficie * ajuste_factor * factor_nivel
-      - si tipo_formula == 'fijo' -> no multiplicar por superficie
-    Retorna minutos totales (float) sumando todas las fracciones aplicables.
-    """
+    Calcula el tiempo total o por fracción para una tarea específica.
 
-    # obtener subarea y superficie (fallback a 1.0 si no existe)
+    Parámetros:
+        - tarea: instancia de LanzamientoTarea
+        - modo: "total" → float (tiempo total), "detalles" → list[dict]
+
+    Retorna:
+        - float si modo="total"
+        - list[dict] si modo="detalles"
+    """
+    # --- Subárea y superficie base ---
     subarea = getattr(tarea, "subarea", None) or SubArea.query.get(tarea.subarea_id)
     superficie = float(getattr(subarea, "superficie_subarea", 0) or 0)
     if superficie <= 0:
-        # si no hay superficie en DB, asumimos 1 para fórmulas fijas/por pieza
         superficie = 1.0
 
-    # obtener nivel asignado y su factor (fallback 1.0)
-    nivel_text = (tarea.nivel_limpieza_asignado or "").strip().lower()
-    nivel_obj = None
-    factor_nivel = 1.0
-    # intento buscar por nombre o por id (según cómo lo guardes)
-    # preferible que la tabla NivelLimpieza tenga 'nombre' con "basica","media","profunda"
-    if nivel_text:
-        nivel_obj = NivelLimpieza.query.filter(
-            NivelLimpieza.nombre.ilike(nivel_text)
-        ).first()
-    if not nivel_obj and getattr(tarea, "nivel_limpieza_asignado", None):
-        # fallback: buscar por id si guardas nivel_limpieza_id en tarea (no aplicable hoy pero por si acaso)
-        try:
-            nivel_obj = NivelLimpieza.query.get(int(tarea.nivel_limpieza_asignado))
-        except Exception:
-            nivel_obj = None
-    if nivel_obj:
-        factor_nivel = float(nivel_obj.factor_nivel or 1.0)
+    # --- Nivel de limpieza y su factor ---
+    nivel_text = canon_nivel(tarea.nivel_limpieza_asignado)
+    nivel_id = nivel_to_id(nivel_text) or 1
+    nivel_obj = NivelLimpieza.query.get(nivel_id)
+    factor_nivel = float(getattr(nivel_obj, "factor_nivel", 1.0) or 1.0)
 
-    # localizar SOP de la subarea
+    # --- SOP y fracciones ---
     sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first() if subarea else None
     if not sop:
-        return 0.0
+        return 0.0 if modo == "total" else []
 
-    # traer fracciones (ordenadas)
     fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
 
     total_min = 0.0
+    detalles = []
 
     for f in fracciones:
         tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
-        tipo_formula = (getattr(f, "tipo_formula", "") or "").lower()
+        tipo_formula = (f.tipo_formula or "").strip().lower()
 
-        # intentar obtener FraccionDetalle que coincida con este fraccion + nivel asignado
+        # FraccionDetalle según nivel de limpieza
         fd = None
         if nivel_obj:
             fd = FraccionDetalle.query.filter_by(
@@ -920,32 +903,52 @@ def calcular_tiempo_tarea(tarea):
                 nivel_limpieza_id=nivel_obj.nivel_limpieza_id
             ).first()
 
-        ajuste = 1.0
-        if fd:
-            ajuste = float(getattr(fd, "ajuste_factor", 1.0) or 1.0)
+        ajuste = float(getattr(fd, "ajuste_factor", 1.0)) if fd else 1.0
 
-        # calcular superficie aplicable según tipo_formula
-        if tipo_formula in ("por_m2", "por_m²", "por_m2"):
-            superficie_app = superficie
+        # --- Determinar multiplicador ---
+        superficie_app = 1.0
+
+        if tipo_formula in ("por_m2", "por_m²"):
+            if fd and fd.superficie_aplicable not in (None, 0, "", " "):
+                try:
+                    superficie_app = float(fd.superficie_aplicable)
+                    if superficie_app <= 0:
+                        superficie_app = superficie
+                except (TypeError, ValueError):
+                    superficie_app = superficie
+            else:
+                superficie_app = superficie
+
         elif tipo_formula == "por_pieza":
-            # en este caso, esperamos que 'superficie' represente cantidad de piezas,
-            # si no, se usará 1
-            superficie_app = max(1.0, superficie)
-        else:  # 'fijo' u otro -> no multiplicar
+            if fd and getattr(fd, "elemento_set", None) and getattr(fd.elemento_set, "detalles", None):
+                superficie_app = max(1, len(fd.elemento_set.detalles))
+            else:
+                superficie_app = 1.0
+
+        else:
             superficie_app = 1.0
 
-        # fórmula principal
+        # --- Cálculo por fracción ---
         tiempo_fraccion_total = tiempo_base * superficie_app * ajuste * factor_nivel
+        total_min += tiempo_fraccion_total
 
-        total_min += float(tiempo_fraccion_total or 0)
+        # Si modo = "detalles", guardar info
+        if modo == "detalles":
+            detalles.append({
+                "fraccion_id": f.fraccion_id,
+                "nombre": f.fraccion_nombre or "",
+                "tipo_formula": tipo_formula,
+                "base": tiempo_base,
+                "multiplicador": superficie_app,
+                "ajuste": ajuste,
+                "factor_nivel": factor_nivel,
+                "tiempo_fraccion": round(tiempo_fraccion_total, 2)
+            })
 
-    return round(total_min, 2)
-
- 
-
+    return round(total_min, 2) if modo == "total" else detalles
 
 # =========================
-# Calcular Tiempo Tarea
+# Ruta Dia
 # =========================
 @main_bp.route('/plan/<fecha>/ruta')
 def ruta_dia(fecha):
@@ -967,7 +970,6 @@ def ruta_dia(fecha):
                 vistos.add(p.personal_id)
 
     return render_template('ruta_dia.html', fecha=fecha_obj, personas=personas)
-
 
 # ====== HELPERS DE PLANTILLA ======
 def lunes_de(fecha: date) -> date:
@@ -1005,7 +1007,7 @@ def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel):
         personal_id=personal_id,
         area_id=area_id,
         subarea_id=subarea_id,
-        nivel_limpieza_asignado=nivel
+        nivel_limpieza_asignado=canon_nivel(nivel) or "basica"
     )
     db.session.add(t)
 
@@ -1035,7 +1037,7 @@ def aplicar_desde_semana(origen_lunes: date, destino_lunes: date, overwrite: boo
         tareas = LanzamientoTarea.query.filter_by(dia_id=dia_origen.dia_id).all()
         for t in tareas:
             if not existe_tarea(fecha_dest, t.personal_id, t.subarea_id):
-                crear_tarea(fecha_dest, t.personal_id, t.area_id, t.subarea_id, t.nivel_limpieza_asignado)
+                crear_tarea(fecha_dest, t.personal_id, t.area_id, t.subarea_id, canon_nivel(t.nivel_limpieza_asignado) or "basica")
     db.session.commit()
 
 def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite: bool):
@@ -1046,19 +1048,15 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
     for it in plantilla.items:
         fecha_dest = destino_lunes + timedelta(days=it.dia_index)
         if not existe_tarea(fecha_dest, it.personal_id, it.subarea_id):
-            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, it.nivel_limpieza_asignado)
+            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica")
     db.session.commit()
-
 
 # ====== UI: GET formulario de aplicación de plantilla ======
 @main_bp.route('/plantillas/aplicar')
 def plantillas_aplicar_form():
-    # Por ahora usamos la semana visible en Home: la actual
     hoy = date.today()
     lunes_destino = get_monday(hoy)
-    # plantillas disponibles
     plantillas = PlantillaSemanal.query.order_by(PlantillaSemanal.nombre.asc()).all()
-    # semana anterior como sugerencia
     lunes_anterior = lunes_destino - timedelta(days=7)
     return render_template('plantillas_aplicar.html',
                            lunes_destino=lunes_destino,
@@ -1085,7 +1083,6 @@ def plantillas_aplicar_post():
         plantilla_id = int(request.form.get('plantilla_id'))
         aplicar_plantilla_guardada(plantilla_id, lunes_destino, overwrite)
 
-    # Vuelve al home para ver el resultado
     return redirect(url_for('main.home'))
 
 # ====== CRUD mínimo: crear plantilla desde semana actual ======
@@ -1118,7 +1115,7 @@ def guardar_semana_como_plantilla():
                 personal_id=t.personal_id,
                 area_id=t.area_id,
                 subarea_id=t.subarea_id,
-                nivel_limpieza_asignado=t.nivel_limpieza_asignado
+                nivel_limpieza_asignado=canon_nivel(t.nivel_limpieza_asignado) or "basica"
             ))
     db.session.commit()
     return redirect(url_for('main.plantillas_aplicar_form'))
@@ -1161,7 +1158,7 @@ def guardar_semana_como_plantilla_simple():
                     personal_id=t.personal_id,
                     area_id=t.area_id,
                     subarea_id=t.subarea_id,
-                    nivel_limpieza_asignado=t.nivel_limpieza_asignado
+                    nivel_limpieza_asignado=canon_nivel(t.nivel_limpieza_asignado) or "basica"
                 ))
 
         db.session.commit()
@@ -1194,14 +1191,12 @@ def guardar_semana_como_plantilla_simple():
                 personal_id=t.personal_id,
                 area_id=t.area_id,
                 subarea_id=t.subarea_id,
-                nivel_limpieza_asignado=t.nivel_limpieza_asignado
+                nivel_limpieza_asignado=canon_nivel(t.nivel_limpieza_asignado) or "basica"
             ))
 
     db.session.commit()
     flash(f'Plantilla "{plantilla.nombre}" creada correctamente.', 'success')
     return redirect(url_for('main.home'))
-
-
 
 # APLICAR plantilla guardada (o seleccionar "Ninguna" para sólo quitar etiqueta)
 @main_bp.route('/plantillas/aplicar_simple', methods=['POST'])
@@ -1216,7 +1211,7 @@ def aplicar_plantilla_guardada_simple():
 
     # 1) Si eligen "Ninguna": vaciar semana completa y quitar etiqueta
     if plantilla_id_str == 'none':
-        borrar_asignaciones_semana(lunes_destino)     # 🔴 borra Lun–Sáb
+        borrar_asignaciones_semana(lunes_destino)     # borra Lun–Sáb
         set_plantilla_activa(lunes_destino, None)     # etiqueta = Ninguna
         flash('Semana vaciada. Plantilla activa: Ninguna.', 'success')
         return redirect(url_for('main.home'))
@@ -1224,10 +1219,10 @@ def aplicar_plantilla_guardada_simple():
     # 2) Si eligen una plantilla: reemplazo total
     plantilla_id = int(plantilla_id_str)
 
-    # 🔴 borra Lun–Sáb de destino ANTES de aplicar
+    # borrar Lun–Sáb de destino ANTES de aplicar
     borrar_asignaciones_semana(lunes_destino)
 
-    # ✅ aplica plantilla (como ya la tienes) — no hace falta overwrite porque ya está limpia
+    # aplica plantilla — no hace falta overwrite porque ya está limpia
     aplicar_plantilla_guardada(plantilla_id, lunes_destino, overwrite=False)
 
     # etiqueta de la semana
@@ -1246,4 +1241,3 @@ def borrar_plantilla(plantilla_id):
     from flask import flash
     flash(f'Plantilla "{plantilla.nombre}" eliminada correctamente.', 'success')
     return redirect(url_for('main.home'))
-

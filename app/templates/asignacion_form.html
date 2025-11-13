@@ -1,153 +1,115 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Asignar Ruta de Limpieza</title>
-    <style>
-        body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 1000px; }
-        h1 { font-size: 1.2rem; margin-top: 0; }
-        h2 { font-size: 1rem; margin-bottom: .5rem; margin-top:2rem; color:#333; }
-
-        .layout {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 2rem;
-        }
-
-        .card {
-            border: 1px solid #ccc;
-            border-radius: 12px;
-            padding: 1rem 1.5rem;
-        }
-
-        form { display: grid; gap: 1rem; }
-        label { font-size: .8rem; font-weight: 500; color: #333; display: block; margin-bottom: .25rem; }
-        select, input {
-            width: 100%;
-            padding: .6rem .7rem;
-            border-radius: 6px;
-            border: 1px solid #999;
-            font-size: 1rem;
-        }
-
-        button {
-            background:#0d6efd;
-            color:#fff;
-            border:none;
-            border-radius:6px;
-            padding:.6rem .9rem;
-            font-size:1rem;
-            cursor:pointer;
-        }
-        button:hover { filter:brightness(.9); }
-
-        table { border-collapse: collapse; width: 100%; font-size: .9rem; }
-        th, td { border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; vertical-align: top; }
-        th { background: #efefef; }
-
-        .small-note { font-size:.75rem; color:#555; line-height:1.2; }
-
-        a { color:#0d6efd; text-decoration:none; font-size:.9rem; }
-        a:hover { text-decoration:underline; }
-
-        .headerline { font-size:.9rem; color:#555; margin-top:.4rem; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Asignar Ruta de Limpieza — {{ persona.nombre }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 1.2rem; margin-top: 0; }
+    h2 { font-size: 1rem; margin-bottom: .5rem; margin-top:2rem; color:#333; }
+    .layout { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem 1.5rem; background: #fff; }
+    form { display: grid; gap: 1rem; }
+    label { font-size: .85rem; font-weight: 600; color: #333; display: block; margin-bottom: .25rem; }
+    select, input { width: 100%; padding: .6rem .7rem; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 1rem; }
+    button { background:#0d6efd; color:#fff; border:none; border-radius:8px; padding:.6rem .9rem; font-size:1rem; cursor:pointer; }
+    button:hover { filter:brightness(.9); }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem; background: #fff; }
+    th, td { border: 1px solid #e5e7eb; padding: .55rem .75rem; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-weight: 700; }
+    .small-note { font-size:.8rem; color:#555; line-height:1.35; }
+    a { color:#0d6efd; text-decoration:none; font-size:.9rem; }
+    a:hover { text-decoration:underline; }
+    .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background:#eef2ff; color:#3730a3; }
+  </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Rutas de limpieza asignadas a {{ persona.nombre }}</h1>
-        <div class="headerline">
-            ID personal: <strong>{{ persona.personal_id }}</strong>
+  <div class="header">
+    <h1>Rutas de limpieza asignadas a {{ persona.nombre }}</h1>
+    <div class="small-note">ID personal: <strong>{{ persona.personal_id }}</strong></div>
+    <p style="margin-top:8px;"><a href="{{ url_for('main.home') }}">← Volver al inicio</a></p>
+  </div>
+
+  <div class="layout">
+    <!-- Columna izquierda: Formulario nueva asignación -->
+    <div class="card">
+      <h2>Agregar nueva subárea</h2>
+      <form method="POST" action="{{ url_for('main.asignar_ruta', personal_id=persona.personal_id) }}">
+        <div>
+          <label for="area_id">Área</label>
+          <select required id="area_id" name="area_id">
+            <option value="">— seleccionar área —</option>
+            {% for a in areas %}
+              <option value="{{ a.area_id }}">{{ a.area_id }} — {{ a.area_nombre }}</option>
+            {% endfor %}
+          </select>
         </div>
+
+        <div>
+          <label for="subarea_id">Subárea</label>
+          <select required id="subarea_id" name="subarea_id">
+            <option value="">— seleccionar subárea —</option>
+            {% for s in subareas %}
+              <option value="{{ s.subarea_id }}">{{ s.subarea_id }} — {{ s.subarea_nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label for="nivel_limpieza_asignado">Nivel de limpieza a ejecutar</label>
+          <select required id="nivel_limpieza_asignado" name="nivel_limpieza_asignado">
+            <option value="">— seleccionar nivel —</option>
+            <option value="basica">Básica</option>
+            <option value="media">Media</option>
+            <option value="profundo">Profundo</option> <!-- <- canónico -->
+          </select>
+          <div class="small-note">
+            Este nivel se usará para filtrar las fracciones del SOP cuando generes el reporte de esta persona.
+          </div>
+        </div>
+
+        <div>
+          <button type="submit">Agregar a la ruta</button>
+        </div>
+      </form>
     </div>
 
-    <div class="layout">
-
-        <!-- Columna izquierda: Formulario nueva asignación -->
-        <div class="card">
-            <h2>Agregar nueva subárea</h2>
-            <form method="POST">
-                <div>
-                    <label for="area_id">Área</label>
-                    <select required id="area_id" name="area_id">
-                        <option value="">-- seleccionar área --</option>
-                        {% for a in areas %}
-                            <option value="{{ a.area_id }}">{{ a.area_id }} - {{ a.area_nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label for="subarea_id">Subárea</label>
-                    <select required id="subarea_id" name="subarea_id">
-                        <option value="">-- seleccionar subárea --</option>
-                        {% for s in subareas %}
-                            <option value="{{ s.subarea_id }}">{{ s.subarea_id }} - {{ s.subarea_nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label for="nivel_limpieza_asignado">Nivel de limpieza a ejecutar</label>
-                    <select required id="nivel_limpieza_asignado" name="nivel_limpieza_asignado">
-                        <option value="">-- seleccionar nivel --</option>
-                        <option value="basica">Básica</option>
-                        <option value="media">Media</option>
-                        <option value="profunda">Profunda</option>
-                    </select>
-                    <div class="small-note">
-                        Este nivel se usará para filtrar las fracciones del SOP cuando generemos el reporte
-                        de esta persona.
-                    </div>
-                </div>
-
-                <div>
-                    <button type="submit">Agregar a la ruta</button>
-                </div>
-
-            </form>
-        </div>
-
-        <!-- Columna derecha: Tabla de asignaciones existentes -->
-        <div class="card">
-            <h2>Subáreas ya asignadas</h2>
-
-            {% if asignaciones and asignaciones|length > 0 %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Área</th>
-                            <th>Subárea</th>
-                            <th>Nivel asignado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for asg in asignaciones %}
-                        <tr>
-                            <td>
-                                {{ asg.area.area_id }}<br>
-                                <span class="small-note">{{ asg.area.area_nombre }}</span>
-                            </td>
-                            <td>
-                                {{ asg.subarea.subarea_id }}<br>
-                                <span class="small-note">{{ asg.subarea.subarea_nombre }}</span>
-                            </td>
-                            <td>{{ asg.nivel_limpieza_asignado }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <p>No hay subáreas asignadas todavía para esta persona.</p>
-            {% endif %}
-        </div>
-
+    <!-- Columna derecha: Tabla de asignaciones existentes -->
+    <div class="card">
+      <h2>Subáreas ya asignadas</h2>
+      {% set etiquetas = {'basica':'Básica','media':'Media','profundo':'Profundo'} %}
+      {% if asignaciones and asignaciones|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Área</th>
+              <th>Subárea</th>
+              <th>Nivel asignado</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for asg in asignaciones %}
+            <tr>
+              <td>
+                {{ asg.area.area_id if asg.area else asg.area_id }}<br>
+                <span class="small-note">{{ asg.area.area_nombre if asg.area else '' }}</span>
+              </td>
+              <td>
+                {{ asg.subarea.subarea_id if asg.subarea else asg.subarea_id }}<br>
+                <span class="small-note">{{ asg.subarea.subarea_nombre if asg.subarea else '' }}</span>
+              </td>
+              <td><span class="badge">{{ etiquetas.get(asg.nivel_limpieza_asignado, asg.nivel_limpieza_asignado|capitalize) }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No hay subáreas asignadas todavía para esta persona.</p>
+      {% endif %}
     </div>
-
-    <p style="margin-top:2rem;">
-        <a href="/">⬅ Inicio</a>
-    </p>
+  </div>
 
 </body>
 </html>

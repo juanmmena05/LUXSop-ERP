@@ -17,7 +17,7 @@
     html, body {
       background: var(--bg);
       color: var(--fg);
-      font-family: system-ui,Segoe UI,Roboto,Arial,sans-serif;
+      font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
     }
     .wrap {
       max-width: 1000px;
@@ -42,9 +42,7 @@
       flex-wrap: wrap;
       align-items: center;
     }
-    .spacer {
-      flex: 1;
-    }
+    .spacer { flex: 1; }
     .btn {
       display: inline-block;
       background: var(--accent);
@@ -65,10 +63,7 @@
       border-radius: 12px;
       padding: 16px;
     }
-    .accordion {
-      display: grid;
-      gap: 10px;
-    }
+    .accordion { display: grid; gap: 10px; }
     .acc-item {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -84,38 +79,20 @@
       user-select: none;
       background: #f8f9fa;
     }
-    .acc-head h3 {
-      margin: 0;
-      font-size: 1rem;
-    }
-    .acc-meta {
-      font-size: .85rem;
-      color: var(--muted);
-    }
-    .acc-body {
-      display: none;
-      padding: 14px;
-    }
-    .acc-item.open .acc-body {
-      display: block;
-    }
-    .muted {
-      color: var(--muted);
-      font-size: .85rem;
-    }
-    ol.list {
-      margin: .5rem 0 0 1.2rem;
-      padding-left: 0;
-    }
-    li {
-      margin-bottom: .6rem;
-    }
+    .acc-head h3 { margin: 0; font-size: 1rem; }
+    .acc-meta { font-size: .85rem; color: var(--muted); }
+    .acc-body { display: none; padding: 14px; }
+    .acc-item.open .acc-body { display: block; }
+    .muted { color: var(--muted); font-size: .85rem; }
+    ol.list { margin: .5rem 0 0 1.2rem; padding-left: 0; }
+    li { margin-bottom: .6rem; }
     .footer {
       margin: 22px 0 6px;
       color: var(--muted);
       font-size: .85rem;
       text-align: center;
     }
+
     .tiempo-box {
       background: #f8f9fa;
       font-size: 0.75rem;
@@ -126,16 +103,15 @@
       border-radius: 6px;
       display: inline-block;
     }
-    .section-line {
-      border-top: 1px solid #eee;
-      margin: 10px 0;
-    }
+    .section-line { border-top: 1px solid #eee; margin: 10px 0; }
+
     .metodologia ol {
       margin-left: 1.2rem;
       padding-left: 0;
       font-size: 0.85rem;
       margin-top: 4px;
     }
+
     .nota-tecnica {
       margin-top: 6px;
       font-size: 0.85rem;
@@ -143,7 +119,7 @@
       font-style: italic;
     }
 
-    /* 🔹 Título principal de cada fracción */
+    /* Título principal de cada fracción */
     .list li > div strong {
       font-size: 1.1rem;
       color: var(--fg);
@@ -152,8 +128,7 @@
       display: inline-block;
       margin-bottom: 4px;
     }
-
-    /* 🔸 Subtítulo 'Metodología' más ligero */
+    /* Subtítulo 'Metodología' más ligero */
     .metodologia strong {
       font-size: 1rem !important;
       font-weight: 400 !important;
@@ -166,77 +141,15 @@
       padding-bottom: 10px;
       margin-bottom: 12px;
     }
+    .list li:last-child { box-shadow: none; }
 
-    .list li:last-child {
-      box-shadow: none;
-    }
-
-    /* 🔹 Tabla de elementos / superficies */
+    /* Tabla de elementos / superficies */
     table.elementos-tabla {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       font-size: 0.85rem;
     }
-
-    /* ==== OBSERVACIÓN CRÍTICA DEL SOP ==== */
-    .observacion-critica {
-      background-color: #fff3cd;      /* amarillo pálido tipo warning */
-      border-left: 4px solid #f0ad4e; /* línea amarilla */
-      padding: 8px 12px;
-      margin: 8px 0 12px 40px;        /* 🔹 este "40px" es el desplazamiento lateral */
-      border-radius: 6px;
-      font-size: 0.9rem;
-      color: #5c4400;
-      font-style: italic;
-      max-width: 85%;
-    }
-
-    
-    .nota-tecnica {
-    background-color: #fff8e1;
-    border-left: 4px solid #f4c542;
-    padding: 8px 12px;
-    margin-top: 10px;
-    font-size: 0.9rem;
-    font-style: italic;
-    }
-
-    hr.separador {
-    border: none;
-    border-top: 1px solid #ddd;
-    margin: 10px 0;
-    }
-
-    /* ==== ESTILO PRODUCTO Y HERRAMIENTA ==== */
-    .detalle-item {
-      font-size: 0.9rem;           /* un poco más grande que pasos */
-      color: #444;                 /* gris medio, menos contraste que strong */
-      margin: 4px 0;
-      line-height: 1.4;
-    }
-
-    .detalle-item .emoji {
-      font-size: 0.9rem;           /* más pequeño que el emoji original */
-      opacity: 0.8;                /* lo suaviza un poco */
-      margin-right: 4px;
-    }
-
-    .detalle-item .label {
-      font-weight: 500;            /* intermedio: ni bold ni normal */
-      color: #333;
-      margin-right: 3px;
-    }
-
-    /* Variante opcional para distinguirlos visualmente */
-    .detalle-item.producto .label {
-      color: #2a7f62;  /* verde tenue, opcional */
-    }
-
-    .detalle-item.herramienta .label {
-      color: #2b5876;  /* azul suave, opcional */
-    }
-
     table.elementos-tabla th, table.elementos-tabla td {
       border: 1px solid #ddd;
       padding: 6px 8px;
@@ -246,9 +159,29 @@
       font-weight: 600;
       text-align: left;
     }
-    table.elementos-tabla td {
-      vertical-align: top;
+    table.elementos-tabla td { vertical-align: top; }
+
+    /* OBSERVACIÓN CRÍTICA DEL SOP */
+    .observacion-critica {
+      background-color: #fff3cd;
+      border-left: 4px solid #f0ad4e;
+      padding: 8px 12px;
+      margin: 8px 0 12px 40px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      color: #5c4400;
+      font-style: italic;
+      max-width: 85%;
     }
+
+    /* Estilo de Producto y Herramienta */
+    .detalle-item { font-size: 0.9rem; color: #444; margin: 4px 0; line-height: 1.4; }
+    .detalle-item .emoji { font-size: 0.9rem; opacity: 0.8; margin-right: 4px; }
+    .detalle-item .label { font-weight: 500; color: #333; margin-right: 3px; }
+    .detalle-item.producto .label { color: #2a7f62; }
+    .detalle-item.herramienta .label { color: #2b5876; }
+
+    hr.separador { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
   </style>
 </head>
 <body>
@@ -291,11 +224,18 @@
                   {% for f in d.fracciones %}
                     <li>
                       <div><strong>{{ f.fraccion_nombre }}</strong></div>
-                      {% if f.tiempo_base %}
-                        <div class="tiempo-box">⏱ Tiempo estimado: {{ f.tiempo_base }} min</div>
+
+                      {% if f.tiempo_min is not none %}
+                        <div class="tiempo-box">⏱ Tiempo estimado: {{ f.tiempo_min }} min</div>
                       {% endif %}
 
-                      {% if f.metodologia and f.metodologia.pasos|length > 0 %}
+                      {# DEBUG opcional: descomenta para ver breakdown
+                      <div class="muted">
+                        base={{ f.base }} · mult={{ f.multiplicador }} · aj={{ f.ajuste }} · nivel={{ f.factor_nivel }}
+                      </div>
+                      #}
+
+                      {% if f.metodologia and f.metodologia.pasos and f.metodologia.pasos|length > 0 %}
                         <div class="section-line"></div>
                         <div class="metodologia">
                           <strong>🧼 Metodología:</strong>
