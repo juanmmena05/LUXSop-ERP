@@ -123,9 +123,10 @@ class FraccionDetalle(db.Model):
     kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'))
     nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False)
     metodologia_id = db.Column(db.String, db.ForeignKey('metodologia.metodologia_id'), nullable=False)
-    
+
     ajuste_factor = db.Column(db.Float, default=1.0)
     superficie_aplicable = db.Column(db.Float, nullable=True)
+    tiempo_unitario_min = db.Column(db.Float, nullable=True)
 
     fraccion = db.relationship("Fraccion", back_populates="detalles")
     elemento_set = db.relationship("ElementoSet")

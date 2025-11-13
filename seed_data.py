@@ -240,9 +240,9 @@ with app.app_context():
     FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_B", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_M", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
     FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_P", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_B", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_M", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_P", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_B", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=2.0),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_M", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=2.5),
+    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_P", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=6.0),
     ]
     db.session.add_all(detalles_of1)
 

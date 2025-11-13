@@ -532,7 +532,12 @@ def reporte_persona_dia(fecha, personal_id):
             else:  # fijo u otro
                 multiplicador = 1.0
 
-            tiempo_calculado = tiempo_base * multiplicador * ajuste * factor_nivel
+            tiempo_calculado = calcular_tiempo_fraccion(
+                f=f,
+                fd=fd,
+                superficie_m2=superficie_m2,
+                factor_nivel=factor_nivel,
+            )
 
             # ===== Texto de productos/herramientas y tabla de elementos =====
             producto_txt = ""
@@ -753,7 +758,12 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             else:  # fijo u otro
                 multiplicador = 1.0
 
-            tiempo_calculado = tiempo_base * multiplicador * ajuste * factor_nivel
+            tiempo_calculado = calcular_tiempo_fraccion(
+                f=f,
+                fd=fd,
+                superficie_m2=superficie_m2,
+                factor_nivel=factor_nivel,
+            )
 
             # --- Receta / Kit / ElementoSet (para tabla)
             receta = getattr(fd, "receta", None)
@@ -886,15 +896,17 @@ def calcular_tiempo_tarea(tarea, modo="total"):
     if not sop:
         return 0.0 if modo == "total" else []
 
-    fracciones = Fraccion.query.filter_by(sop_id=sop.sop_id).order_by(Fraccion.orden).all()
+    fracciones = (
+        Fraccion.query
+        .filter_by(sop_id=sop.sop_id)
+        .order_by(Fraccion.orden)
+        .all()
+    )
 
     total_min = 0.0
     detalles = []
 
     for f in fracciones:
-        tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
-        tipo_formula = (f.tipo_formula or "").strip().lower()
-
         # FraccionDetalle según nivel de limpieza
         fd = None
         if nivel_obj:
@@ -903,49 +915,102 @@ def calcular_tiempo_tarea(tarea, modo="total"):
                 nivel_limpieza_id=nivel_obj.nivel_limpieza_id
             ).first()
 
-        ajuste = float(getattr(fd, "ajuste_factor", 1.0)) if fd else 1.0
-
-        # --- Determinar multiplicador ---
-        superficie_app = 1.0
-
-        if tipo_formula in ("por_m2", "por_m²"):
-            if fd and fd.superficie_aplicable not in (None, 0, "", " "):
-                try:
-                    superficie_app = float(fd.superficie_aplicable)
-                    if superficie_app <= 0:
-                        superficie_app = superficie
-                except (TypeError, ValueError):
-                    superficie_app = superficie
-            else:
-                superficie_app = superficie
-
-        elif tipo_formula == "por_pieza":
-            if fd and getattr(fd, "elemento_set", None) and getattr(fd.elemento_set, "detalles", None):
-                superficie_app = max(1, len(fd.elemento_set.detalles))
-            else:
-                superficie_app = 1.0
-
-        else:
-            superficie_app = 1.0
-
-        # --- Cálculo por fracción ---
-        tiempo_fraccion_total = tiempo_base * superficie_app * ajuste * factor_nivel
+        tiempo_fraccion_total = calcular_tiempo_fraccion(
+            f=f,
+            fd=fd,
+            superficie_m2=superficie,
+            factor_nivel=factor_nivel,
+        )
         total_min += tiempo_fraccion_total
 
-        # Si modo = "detalles", guardar info
         if modo == "detalles":
+            tipo_formula = (f.tipo_formula or "").strip().lower()
+            ajuste = float(getattr(fd, "ajuste_factor", 1.0) if fd else 1.0)
+            es_manual = bool(fd and fd.tiempo_unitario_min is not None)
+
             detalles.append({
                 "fraccion_id": f.fraccion_id,
                 "nombre": f.fraccion_nombre or "",
                 "tipo_formula": tipo_formula,
-                "base": tiempo_base,
-                "multiplicador": superficie_app,
-                "ajuste": ajuste,
-                "factor_nivel": factor_nivel,
-                "tiempo_fraccion": round(tiempo_fraccion_total, 2)
+                "es_tiempo_manual": es_manual,
+
+                # Qué base se usó realmente:
+                # - si es manual: el tiempo total medido
+                # - si no es manual: el tiempo_base_min de la fracción
+                "base_usada": (
+                    float(fd.tiempo_unitario_min)
+                    if es_manual
+                    else float(getattr(f, "tiempo_base_min", 0) or 0)
+                ),
+
+                # Por si quieres mostrarlo en la UI
+                "tiempo_manual": float(fd.tiempo_unitario_min) if es_manual else None,
+
+                # Solo tienen sentido cuando NO es manual
+                "ajuste": ajuste if not es_manual else 1.0,
+                "factor_nivel": factor_nivel if not es_manual else 1.0,
+
+                # Resultado final que sale del helper (ya redondeado)
+                "tiempo_fraccion": round(tiempo_fraccion_total, 2),
             })
 
     return round(total_min, 2) if modo == "total" else detalles
+
+
+
+
+# =========================
+# Calcular Tiempo Fraccion 
+# =========================
+def calcular_tiempo_fraccion(f: Fraccion,
+                             fd: Optional[FraccionDetalle],
+                             superficie_m2: float,
+                             factor_nivel: float) -> float:
+    """
+    Calcula los minutos para UNA fracción.
+
+    Reglas:
+      1) Si fd.tiempo_unitario_min NO es None → se devuelve TAL CUAL (override total).
+      2) Si es None → se usa la fórmula:
+            tiempo = tiempo_base_min * superficie_app * ajuste * factor_nivel
+    """
+    # 1) Override total: tiempo medido en campo
+    if fd and fd.tiempo_unitario_min is not None:
+        try:
+            return float(fd.tiempo_unitario_min)
+        except (TypeError, ValueError):
+            # Si viene algo raro, caemos a la fórmula normal
+            pass
+
+    # 2) Fórmula normal
+    tipo_formula = (getattr(f, "tipo_formula", "") or "").strip().lower()
+
+    # --- multiplicador (superficie_app) ---
+    if tipo_formula in ("por_m2", "por_m²"):
+        if fd and fd.superficie_aplicable not in (None, 0, "", " "):
+            try:
+                superficie_app = float(fd.superficie_aplicable)
+                if superficie_app <= 0:
+                    superficie_app = superficie_m2
+            except (TypeError, ValueError):
+                superficie_app = superficie_m2
+        else:
+            superficie_app = superficie_m2
+
+    elif tipo_formula == "por_pieza":
+        if fd and getattr(fd, "elemento_set", None) and getattr(fd.elemento_set, "detalles", None):
+            superficie_app = max(1, len(fd.elemento_set.detalles))
+        else:
+            superficie_app = 1.0
+    else:
+        superficie_app = 1.0
+
+    ajuste = float(getattr(fd, "ajuste_factor", 1.0) or 1.0)
+    tiempo_base = float(getattr(f, "tiempo_base_min", 0) or 0)
+
+    total = tiempo_base * superficie_app * ajuste * factor_nivel
+    return total
+
 
 # =========================
 # Ruta Dia
