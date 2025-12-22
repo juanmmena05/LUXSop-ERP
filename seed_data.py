@@ -25,6 +25,7 @@ from app.models import (
     Quimico,
     Receta,
     RecetaDetalle,
+    Consumo,
 
     # Elementos
     Elemento,
@@ -58,6 +59,7 @@ with app.app_context():
 
     db.session.query(SopFraccionDetalle).delete()
     db.session.query(SopFraccion).delete()
+    db.session.query(Consumo).delete()  
 
     db.session.query(MetodologiaPasos).delete()
     db.session.query(Metodologia).delete()
@@ -258,6 +260,18 @@ with app.app_context():
     ]
     db.session.add_all(receta_detalles)
 
+    # ======================================================
+    # 7.5) CONSUMO (solo aplica a Basura Profundo)
+    # ======================================================
+    cm_ds_003 = Consumo(
+        consumo_id="CM-DS-003",
+        valor=3,
+        unidad="disparos",
+        regla="= 3 mL"
+    )
+    db.session.add(cm_ds_003)
+
+
 
     # ======================================================
     # 8) ELEMENTOS (por subárea)
@@ -389,6 +403,7 @@ with app.app_context():
             kit_id="KT-BS-001-P",
             receta_id="RE-SA-001",
             elemento_set_id=None,
+            consumo_id="CM-DS-003",
             tiempo_unitario_min=5
         ),
 

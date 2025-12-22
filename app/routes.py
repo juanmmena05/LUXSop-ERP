@@ -24,7 +24,7 @@ from .models import (
     # Recursos / elementos
     Elemento, ElementoSet, ElementoDetalle,
     Kit, KitDetalle, Herramienta,
-    Receta, RecetaDetalle, Quimico,
+    Receta, RecetaDetalle, Quimico, Consumo,
 )
 
 # =========================
@@ -104,6 +104,100 @@ def nivel_to_id(s: Optional[str]) -> Optional[int]:
     return {"basica": 1, "media": 2, "profundo": 3}.get(x)
 
 main_bp = Blueprint("main", __name__)
+
+
+# =========================
+# Helpers Tablas HTML
+# =========================
+def na(x) -> str:
+    return x if x and str(x).strip() else "No aplica"
+
+
+def fmt_consumo(c) -> str:
+    """
+    Queremos: "3 disparos = 3 mL"
+    (sin ID, sin pipes, sin paréntesis)
+    """
+    if not c:
+        return "No aplica"
+
+    v = getattr(c, "valor", None)          # ej: 3
+    u = getattr(c, "unidad", None)         # ej: "disparos"
+    regla = getattr(c, "regla", None)      # ej: "= 3 mL"  ó  "3 mL"
+
+    left = None
+    if v is not None and u:
+        left = f"{v:g} {u}".strip()
+
+    if regla:
+        r = str(regla).strip()
+        # normaliza para que quede "... = 3 mL"
+        if not r.startswith("="):
+            r = f"= {r}"
+        return f"{left} {r}".strip() if left else r
+
+    return left or "No aplica"
+
+
+def fmt_herramientas(kit) -> str:
+    if not kit:
+        return "No aplica"
+    dets = getattr(kit, "detalles", None) or []
+    nombres = [kd.herramienta.nombre for kd in dets if getattr(kd, "herramienta", None)]
+    return " - ".join(nombres) if nombres else na(getattr(kit, "nombre", None))
+
+
+def fmt_receta(receta) -> str:
+    """
+    Regresa solo: "8 mL + 1000 mL" (sin nombre, sin paréntesis).
+    Si no hay detalles, regresa el nombre de la receta.
+    """
+    if not receta:
+        return "No aplica"
+
+    dets = getattr(receta, "detalles", None) or []
+    if not dets:
+        return na(getattr(receta, "nombre", None))
+
+    partes = []
+    for d in dets:
+        # dosis
+        if getattr(d, "dosis", None) is not None and getattr(d, "unidad_dosis", None):
+            partes.append(f"{d.dosis:g} {d.unidad_dosis}".strip())
+
+        # base
+        if getattr(d, "volumen_base", None) is not None and getattr(d, "unidad_volumen", None):
+            partes.append(f"{d.volumen_base:g} {d.unidad_volumen}".strip())
+
+    # Caso común: ["8 mL", "1000 mL"] -> "8 mL + 1000 mL"
+    s = " + ".join([p for p in partes if p])
+    return s.strip() if s.strip() else na(getattr(receta, "nombre", None))
+
+
+def fmt_quimico_y_receta(receta) -> tuple[str, str]:
+    """
+    Químico: "Alpha HP + ..."
+    Receta:  SOLO "8 mL + 1000 mL" (sin nombre, sin paréntesis)
+    """
+    if not receta:
+        return "No aplica", "No aplica"
+
+    dets = getattr(receta, "detalles", None) or []
+    if not dets:
+        return "No aplica", na(getattr(receta, "nombre", None))
+
+    quimicos = []
+    for d in dets:
+        q = getattr(d, "quimico", None)
+        if q and getattr(q, "nombre", None):
+            quimicos.append(q.nombre)
+
+    quimico_str = " + ".join(dict.fromkeys(quimicos)) if quimicos else "No aplica"
+    receta_str = fmt_receta(receta)  # ✅ aquí ya va SIN nombre
+
+    return quimico_str, receta_str
+
+
 
 # =========================
 # HOME (panel semanal)
@@ -476,7 +570,6 @@ def reporte_persona_dia(fecha, personal_id):
         return f"No hay tareas para {nombre} el {fecha}.", 404
 
     persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
-
     detalles = []
 
     for t in tareas:
@@ -494,26 +587,64 @@ def reporte_persona_dia(fecha, personal_id):
         if not nivel_id:
             continue
 
-        # Cargar SOP con toda la cadena necesaria
+        # Cargar SOP con toda la cadena necesaria (incluye consumo y detalles por elemento)
         sop_full = (
             SOP.query.options(
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.fraccion),
+
+                # Detalle sin elementos: kit/herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.kit)
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
+
+                # Detalle sin elementos: receta/químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.receta)
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
+
+                # Detalle sin elementos: consumo
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.consumo),
+
+                # Detalle con elementos: elemento_set -> elemento
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.elemento),
+
+                # Detalle con elementos: ElementoDetalle.receta -> químicos
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.receta)
+                    .joinedload(Receta.detalles)
+                    .joinedload(RecetaDetalle.quimico),
+
+                # Detalle con elementos: ElementoDetalle.kit -> herramientas
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.kit)
+                    .joinedload(Kit.detalles)
+                    .joinedload(KitDetalle.herramienta),
+
+                # Detalle con elementos: ElementoDetalle.consumo
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.consumo),
+
+                # Metodología/pasos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.metodologia)
@@ -533,59 +664,48 @@ def reporte_persona_dia(fecha, personal_id):
                 continue
 
             fr = sf.fraccion
-            metodologia = sd.metodologia  # ORM (con pasos precargados)
+            metodologia = sd.metodologia
 
             receta = sd.receta
             kit = sd.kit
             elemento_set = sd.elemento_set
+            consumo_sd = getattr(sd, "consumo", None)
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
-            producto_txt = ""
-            herramienta_txt = ""
-            elementos_tabla = []
+            # ====== ARMADO DE TABLA UNICA POR FRACCIÓN ======
+            tabla = None
 
             if elemento_set:
-                # tabla por elemento (cada ElementoDetalle puede traer receta/kit)
-                for ed in elemento_set.detalles or []:
+                headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
+                rows = []
+
+                for ed in (elemento_set.detalles or []):
                     elemento = getattr(ed, "elemento", None)
 
-                    receta_ed = getattr(ed, "receta", None)
-                    kit_ed = getattr(ed, "kit", None)
+                    q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
+                    c_str = fmt_consumo(getattr(ed, "consumo", None))
+                    h_str = fmt_herramientas(getattr(ed, "kit", None))
 
-                    producto_str = ""
-                    if receta_ed:
-                        if getattr(receta_ed, "detalles", None):
-                            productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta_ed.detalles]
-                            producto_str = " + ".join(productos)
-                        else:
-                            producto_str = receta_ed.nombre
+                    rows.append([
+                        na(getattr(elemento, "nombre", None)),
+                        na(str(getattr(elemento, "cantidad", None) or "")),
+                        q_str,
+                        r_str,
+                        c_str,
+                        h_str,
+                    ])
 
-                    herramienta_str = ""
-                    if kit_ed:
-                        herramientas = [kd.herramienta.nombre for kd in (kit_ed.detalles or [])]
-                        herramienta_str = " - ".join(herramientas) if herramientas else kit_ed.nombre
+                tabla = {"headers": headers, "rows": rows}
 
-                    elementos_tabla.append({
-                        "nombre": elemento.nombre if elemento else "",
-                        "material": getattr(elemento, "material", "") if elemento else "",
-                        "cantidad": getattr(elemento, "cantidad", "") if elemento else "",
-                        "producto": producto_str,
-                        "herramienta": herramienta_str
-                    })
             else:
-                if receta:
-                    if getattr(receta, "detalles", None):
-                        productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta.detalles]
-                        producto_txt = " + ".join(productos)
-                    else:
-                        producto_txt = receta.nombre
+                headers = ["Químico", "Receta", "Consumo", "Herramienta"]
+                q_str, r_str = fmt_quimico_y_receta(receta)
+                c_str = fmt_consumo(consumo_sd)
+                h_str = fmt_herramientas(kit)
 
-                if kit:
-                    herramientas = [det.herramienta.nombre for det in (kit.detalles or [])]
-                    herramienta_txt = " | ".join(herramientas) if herramientas else kit.nombre
+                tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
-            # Armar fracción para el template micro
             fracciones_filtradas.append({
                 "orden": sf.orden,
                 "fraccion_nombre": fr.fraccion_nombre if fr else "",
@@ -593,9 +713,10 @@ def reporte_persona_dia(fecha, personal_id):
                 "nivel_limpieza": nivel_asignado,
                 "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
                 "metodologia": metodologia,
-                "producto": producto_txt or None,
-                "herramienta": herramienta_txt or None,
-                "elementos_tabla": elementos_tabla or None,
+
+                # ✅ lo nuevo
+                "tabla": tabla,
+
                 "observacion_critica": (fr.nota_tecnica if fr else None),
             })
 
@@ -604,12 +725,11 @@ def reporte_persona_dia(fecha, personal_id):
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
-            "sop_codigo": sop.sop_id,  # compat con template
+            "sop_codigo": sop.sop_id,
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas
         })
 
-    # Orden por orden_subarea (real)
     detalles.sort(
         key=lambda d: (
             getattr(SubArea.query.filter_by(subarea_nombre=d["subarea"]).first(), "orden_subarea", 9999)
@@ -617,6 +737,7 @@ def reporte_persona_dia(fecha, personal_id):
     )
 
     return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
+
 
 # =========================
 # REPORTE Persona PDF (macro) — sop_macro_pdf.html
@@ -660,21 +781,59 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             SOP.query.options(
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.fraccion),
+
+                # Detalle sin elementos: kit/herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.kit)
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
+
+                # Detalle sin elementos: receta/químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.receta)
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
+
+                # Detalle sin elementos: consumo
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.consumo),
+
+                # Detalle con elementos: elemento_set -> elemento
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.elemento),
+
+                # Detalle con elementos: ElementoDetalle.receta -> químicos
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.receta)
+                    .joinedload(Receta.detalles)
+                    .joinedload(RecetaDetalle.quimico),
+
+                # Detalle con elementos: ElementoDetalle.kit -> herramientas
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.kit)
+                    .joinedload(Kit.detalles)
+                    .joinedload(KitDetalle.herramienta),
+
+                # Detalle con elementos: ElementoDetalle.consumo
+                joinedload(SOP.sop_fracciones)
+                    .joinedload(SopFraccion.detalles)
+                    .joinedload(SopFraccionDetalle.elemento_set)
+                    .joinedload(ElementoSet.detalles)
+                    .joinedload(ElementoDetalle.consumo),
+
+                # Metodología/pasos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.metodologia)
@@ -696,6 +855,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             fr = sf.fraccion
             metodologia = sd.metodologia
 
+            # Metodología a dict (para PDF)
             metodologia_dict = None
             if metodologia:
                 pasos_items = sorted(list(metodologia.pasos or []), key=lambda p: (p.orden or 0))
@@ -707,61 +867,52 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             receta = sd.receta
             kit = sd.kit
             elemento_set = sd.elemento_set
+            consumo_sd = getattr(sd, "consumo", None)
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
-            producto_txt = ""
-            herramienta_txt = ""
-            elementos_tabla = []
+            # ====== TABLA UNICA POR FRACCIÓN ======
+            tabla = None
 
             if elemento_set:
-                for ed in elemento_set.detalles or []:
+                headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
+                rows = []
+
+                for ed in (elemento_set.detalles or []):
                     elemento = getattr(ed, "elemento", None)
 
-                    receta_ed = getattr(ed, "receta", None)
-                    kit_ed = getattr(ed, "kit", None)
+                    q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
+                    c_str = fmt_consumo(getattr(ed, "consumo", None))
+                    h_str = fmt_herramientas(getattr(ed, "kit", None))
 
-                    producto_str = ""
-                    if receta_ed:
-                        if getattr(receta_ed, "detalles", None):
-                            productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta_ed.detalles]
-                            producto_str = " + ".join(productos)
-                        else:
-                            producto_str = receta_ed.nombre
+                    rows.append([
+                        na(getattr(elemento, "nombre", None)),
+                        na(str(getattr(elemento, "cantidad", None) or "")),
+                        q_str,
+                        r_str,
+                        c_str,
+                        h_str,
+                    ])
 
-                    herramienta_str = ""
-                    if kit_ed:
-                        herramientas = [kd.herramienta.nombre for kd in (kit_ed.detalles or [])]
-                        herramienta_str = " - ".join(herramientas) if herramientas else kit_ed.nombre
+                tabla = {"headers": headers, "rows": rows}
 
-                    elementos_tabla.append({
-                        "nombre": elemento.nombre if elemento else "",
-                        "material": getattr(elemento, "material", "") if elemento else "",
-                        "cantidad": getattr(elemento, "cantidad", "") if elemento else "",
-                        "producto": producto_str,
-                        "herramienta": herramienta_str
-                    })
             else:
-                if receta:
-                    if getattr(receta, "detalles", None):
-                        productos = [f"{d.quimico.nombre} ({d.dosis}{d.unidad_dosis})" for d in receta.detalles]
-                        producto_txt = " + ".join(productos)
-                    else:
-                        producto_txt = receta.nombre
-
-                if kit:
-                    herramientas = [det.herramienta.nombre for det in (kit.detalles or [])]
-                    herramienta_txt = " - ".join(herramientas) if herramientas else kit.nombre
+                headers = ["Químico", "Receta", "Consumo", "Herramienta"]
+                q_str, r_str = fmt_quimico_y_receta(receta)
+                c_str = fmt_consumo(consumo_sd)
+                h_str = fmt_herramientas(kit)
+                tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
             fracciones_filtradas.append({
                 "orden": sf.orden,
                 "fraccion_nombre": fr.fraccion_nombre if fr else "",
                 "descripcion": (metodologia.descripcion if metodologia else ""),
                 "nivel_limpieza": nivel_asignado,
-                "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,  # el template macro usa tiempo_base
-                "producto": producto_txt or None,
-                "herramienta": herramienta_txt or None,
-                "elementos_tabla": elementos_tabla or None,
+                "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,  # macro usa tiempo_base
+
+                # ✅ lo nuevo
+                "tabla": tabla,
+
                 "nota_tecnica": (fr.nota_tecnica if fr else None),
                 "observacion_critica": sop.observacion_critica_sop,
                 "metodologia": metodologia_dict,
@@ -789,6 +940,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         "Content-Type": "application/pdf",
         "Content-Disposition": f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
     }))
+
 
 # =========================
 # ====== HELPERS DE PLANTILLA ======

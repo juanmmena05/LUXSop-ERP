@@ -143,7 +143,7 @@
     }
     .list li:last-child { box-shadow: none; }
 
-    /* Tabla de elementos / superficies */
+    /* Tabla de fracción (con o sin elementos) */
     table.elementos-tabla {
       width: 100%;
       border-collapse: collapse;
@@ -153,13 +153,13 @@
     table.elementos-tabla th, table.elementos-tabla td {
       border: 1px solid #ddd;
       padding: 6px 8px;
+      text-align: center;         /* ✅ CENTRAR */
+      vertical-align: middle;     /* ✅ CENTRAR */
     }
     table.elementos-tabla th {
       background-color: #f3f3f3;
       font-weight: 600;
-      text-align: left;
     }
-    table.elementos-tabla td { vertical-align: top; }
 
     /* OBSERVACIÓN CRÍTICA DEL SOP */
     .observacion-critica {
@@ -174,12 +174,11 @@
       max-width: 85%;
     }
 
-    /* Estilo de Producto y Herramienta */
-    .detalle-item { font-size: 0.9rem; color: #444; margin: 4px 0; line-height: 1.4; }
-    .detalle-item .emoji { font-size: 0.9rem; opacity: 0.8; margin-right: 4px; }
-    .detalle-item .label { font-weight: 500; color: #333; margin-right: 3px; }
-    .detalle-item.producto .label { color: #2a7f62; }
-    .detalle-item.herramienta .label { color: #2b5876; }
+    /* ✅ "No aplica" centrado (si lo usas como texto) */
+    .no-aplica {
+      text-align: center;
+      padding: 10px 0;
+    }
 
     hr.separador { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
   </style>
@@ -229,12 +228,6 @@
                         <div class="tiempo-box">⏱ Tiempo estimado: {{ f.tiempo_min }} min</div>
                       {% endif %}
 
-                      {# DEBUG opcional: descomenta para ver breakdown
-                      <div class="muted">
-                        base={{ f.base }} · mult={{ f.multiplicador }} · aj={{ f.ajuste }} · nivel={{ f.factor_nivel }}
-                      </div>
-                      #}
-
                       {% if f.metodologia and f.metodologia.pasos and f.metodologia.pasos|length > 0 %}
                         <div class="section-line"></div>
                         <div class="metodologia">
@@ -247,44 +240,29 @@
                         </div>
                       {% endif %}
 
-                      {% if f.elementos_tabla %}
+                      {# ✅ Tabla única (con o sin elementos) usando f.tabla #}
+                      {% if f.tabla and f.tabla.rows and f.tabla.rows|length > 0 %}
                         <div class="section-line"></div>
-                        <div class="elementos">
-                          <strong>🧩 Elementos:</strong>
-                          <table class="elementos-tabla">
-                            <thead>
-                              <tr>
-                                <th>Elementos</th>
-                                <th>Material</th>
-                                <th>Cantidad</th>
-                                <th>Químico</th>
-                                <th>Herramienta</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {% for e in f.elementos_tabla %}
-                                <tr>
-                                  <td>{{ e.nombre }}</td>
-                                  <td>{{ e.material }}</td>
-                                  <td style="text-align:center;">{{ e.cantidad }}</td>
-                                  <td>{{ e.producto }}</td>
-                                  <td>{{ e.herramienta }}</td>
-                                </tr>
+                        <table class="elementos-tabla">
+                          <thead>
+                            <tr>
+                              {% for h in f.tabla.headers %}
+                                <th>{{ h }}</th>
                               {% endfor %}
-                            </tbody>
-                          </table>
-                        </div>
-                      {% endif %}
-
-                      {% if f.producto or f.herramienta %}
-                        <div class="section-line"></div>
-                      {% endif %}
-
-                      {% if f.producto %}
-                        <p class="detalle-item producto"><span class="emoji">🧴</span> <span class="label">Producto:</span> {{ f.producto }}</p>
-                      {% endif %}
-                      {% if f.herramienta %}
-                        <p class="detalle-item herramienta"><span class="emoji">🧰</span> <span class="label">Herramientas:</span> {{ f.herramienta }}</p>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for r in f.tabla.rows %}
+                              <tr>
+                                {% for c in r %}
+                                  <td>{{ c }}</td>
+                                {% endfor %}
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      {% else %}
+                        <div class="muted no-aplica"><em>No aplica.</em></div>
                       {% endif %}
 
                       <hr class="separador">

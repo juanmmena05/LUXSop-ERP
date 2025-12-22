@@ -209,16 +209,22 @@ class SopFraccionDetalle(db.Model):
     # Opción B (con elementos): elemento_set_id va aquí y kit/receta deben ser NULL
     elemento_set_id = db.Column(db.String, db.ForeignKey('elemento_set.elemento_set_id'), nullable=True)
 
+    # Consumo directo a la Fraccion realizada
+    consumo_id = db.Column(db.String, db.ForeignKey("consumo.consumo_id"), nullable=True)
+
     # tiempo ES de la fracción (como tú dijiste), lo guardamos aquí por nivel
     tiempo_unitario_min = db.Column(db.Float, nullable=True)
 
     sop_fraccion = db.relationship("SopFraccion", back_populates="detalles")
     nivel_limpieza = db.relationship("NivelLimpieza", back_populates="sop_fraccion_detalles")
+    consumo = db.relationship("Consumo", back_populates="sop_fraccion_detalles")
     metodologia = db.relationship("Metodologia")
 
     kit = db.relationship("Kit")
     receta = db.relationship("Receta")
     elemento_set = db.relationship("ElementoSet")
+    
+
 
 
 # ======================================================
@@ -299,6 +305,21 @@ class RecetaDetalle(db.Model):
     quimico = db.relationship("Quimico", back_populates="detalles")
 
 
+class Consumo(db.Model):
+    __tablename__ = "consumo"
+
+    consumo_id = db.Column(db.String, primary_key=True)  
+    # EJ: CM-DS-003
+
+    valor = db.Column(db.Float, nullable=True)     
+    unidad = db.Column(db.String, nullable=True)   
+    regla = db.Column(db.String, nullable=True)    
+    # ej: "= 3 mL", "por m2", etc.
+
+    sop_fraccion_detalles = db.relationship( "SopFraccionDetalle", back_populates="consumo")
+    elemento_detalles = db.relationship("ElementoDetalle", back_populates="consumo")
+
+
 # ======================================================
 # 9. ELEMENTOS / SETS
 # ======================================================
@@ -350,8 +371,11 @@ class ElementoDetalle(db.Model):
 
     receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'), nullable=True)
     kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), nullable=True)
+    consumo_id = db.Column(db.String, db.ForeignKey("consumo.consumo_id"), nullable=True)
+
 
     elemento_set = db.relationship("ElementoSet", back_populates="detalles")
+    consumo = db.relationship("Consumo", back_populates="elemento_detalles")
     elemento = db.relationship("Elemento")
     receta = db.relationship("Receta")
     kit = db.relationship("Kit")

@@ -28,7 +28,6 @@
     body{ margin: 28px; font-size: 11pt; }
     .wrap{ max-width: 980px; margin: 0 auto; }
 
-    /* ===== Encabezado ===== */
     .head{
       display: grid;
       grid-template-columns: 1fr auto;
@@ -38,7 +37,7 @@
     }
 
     h1{
-      font-size: 1.1rem;      /* ↓ antes 1.35rem */
+      font-size: 1.1rem;
       margin: 0 0 0 12px;
       font-weight: 600;
       color: #111;
@@ -62,9 +61,8 @@
       border-radius: 6px;
       padding: 2px 8px;
       font-size: .8rem;
-      }
+    }
 
-    /* ===== Panel ===== */
     .panel{
       background: var(--card);
       border: 1px solid var(--line);
@@ -79,7 +77,6 @@
     .panel-title h2{ font-size: 1.1rem; margin: 0; }
     .panel-meta{ color: var(--muted); font-size: .9rem; }
 
-    /* ===== Avisos ===== */
     .observacion-critica{
       background: #fff3cd;
       border-left: 4px solid var(--warn);
@@ -104,7 +101,6 @@
       page-break-inside: avoid;
     }
 
-    /* ===== Listado ===== */
     ol.list{ margin: .25rem 0 0 1.2rem; padding-left: 0; }
     .list li{
       margin: 0 0 10px 0;
@@ -135,7 +131,6 @@
 
     .section-line{ border-top: 1px solid #eee; margin: 8px 0; }
 
-    /* ===== Metodología ===== */
     .metodologia{ margin-top: 6px; font-size: .9rem; }
     .metodologia strong{ font-weight: 600; }
     .metodologia ol{
@@ -144,42 +139,37 @@
       font-size: .86rem;
     }
 
-    /* ===== Producto / Herramientas ===== */
-    .detalle-item{
-      font-size: .8rem;        /* más sutil */
-      color: #555;             /* un poco más tenue */
-      margin: 3px 0 2px;
-      line-height: 1.3;
-    }
-
-    /* ===== Tabla compacta ===== */
     table.elementos-tabla{
       width: 100%;
       border-collapse: collapse;
       margin-top: 6px;
-      font-size: 0.8rem; /* más compacto */
+      font-size: 0.8rem;
     }
     table.elementos-tabla th,
     table.elementos-tabla td{
       border: 1px solid #ddd;
+      text-align: center;       /* ✅ CENTRAR encabezados y celdas */
+      vertical-align: middle;
     }
     table.elementos-tabla th{
       background: #f3f3f3;
       font-weight: 600;
-      text-align: left;
       padding: 6px 8px;
+      white-space: nowrap;
     }
     table.elementos-tabla td{
       padding: 4px 6px;
       line-height: 1.25;
-      vertical-align: middle;
     }
-    table.elementos-tabla td.center{ text-align: center; }
 
     thead{ display: table-header-group; }
     tr{ page-break-inside: avoid; }
 
-    /* ===== Footer ===== */
+    .muted{
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
     .footer{
       margin-top: 20px;
       text-align: center;
@@ -187,7 +177,6 @@
       color: var(--muted);
     }
 
-    /* ===== Print ===== */
     @media print{
       body{ margin: 18mm 14mm; }
       .panel{ box-shadow: none; border-color: #ccc; }
@@ -205,108 +194,99 @@
             <h1>SOP — Reporte</h1>
           </div>
         </div>
+
         <div class="meta">
           <div><strong>Operario:</strong> {{ persona.nombre }}</div>
           <div><strong>Fecha:</strong> {{ fecha.strftime('%Y-%m-%d') }}</div>
           <div><strong>ID:</strong> {{ persona.personal_id }}</div>
         </div>
-    {% if detalles and detalles|length > 0 %}
-      {% for d in detalles %}
-        <div class="panel">
-          <div class="panel-title">
-            <h2>{{ d.subarea }}</h2>
-            <div class="panel-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></div>
-            <div class="code-badge">{{ d.sop_codigo if d.sop_codigo else 'SOP: N/D' }}</div>
-          </div>
 
-          {% if d.observacion_critica %}
-            <div class="observacion-critica"><strong>Observaciones críticas:</strong> {{ d.observacion_critica }}</div>
-          {% endif %}
+        {% if detalles and detalles|length > 0 %}
+          {% for d in detalles %}
+            <div class="panel">
+              <div class="panel-title">
+                <h2>{{ d.subarea }}</h2>
+                <div class="panel-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></div>
+                <div class="code-badge">{{ d.sop_codigo if d.sop_codigo else 'SOP: N/D' }}</div>
+              </div>
 
-          {% if d.fracciones and d.fracciones|length > 0 %}
-            <ol class="list">
-              {% for f in d.fracciones %}
-                <li>
-                  <div class="fr-title">{{ f.fraccion_nombre }}</div>
+              {% if d.observacion_critica %}
+                <div class="observacion-critica">
+                  <strong>Observaciones críticas:</strong> {{ d.observacion_critica }}
+                </div>
+              {% endif %}
 
-                  {% if f.tiempo_base %}
-                    <div class="tiempo-box">Tiempo estimado: {{ f.tiempo_base }} min</div>
-                  {% endif %}
+              {% if d.fracciones and d.fracciones|length > 0 %}
+                <ol class="list">
+                  {% for f in d.fracciones %}
+                    <li>
+                      <div class="fr-title">{{ f.fraccion_nombre }}</div>
 
-                  {# Solo Metodología (sin descripción) #}
-                  {% set M = f.metodologia %}
-                  {% if M and M['pasos'] and M['pasos']|length > 0 %}
-                    <div class="section-line"></div>
-                    <div class="metodologia">
-                      <strong>Metodología:</strong>
-                      <ol>
-                        {% for paso in M['pasos'] %}
-                          <li>{{ paso['instruccion'] }}</li>
-                        {% endfor %}
-                      </ol>
-                    </div>
-                  {% endif %}
+                      {% if f.tiempo_base %}
+                        <div class="tiempo-box">Tiempo estimado: {{ f.tiempo_base }} min</div>
+                      {% endif %}
 
-                  {% if f.elementos_tabla %}
-                    <div class="section-line"></div>
-                    <div>
-                      <strong>Elementos:</strong>
-                      <table class="elementos-tabla">
-                        <thead>
-                          <tr>
-                            <th>Elemento</th>
-                            <th>Material</th>
-                            <th style="width:70px;">Cantidad</th>
-                            <th>Químico</th>
-                            <th>Herramienta</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for e in f.elementos_tabla %}
+                      {% set M = f.metodologia %}
+                      {% if M and M['pasos'] and M['pasos']|length > 0 %}
+                        <div class="section-line"></div>
+                        <div class="metodologia">
+                          <strong>Metodología:</strong>
+                          <ol>
+                            {% for paso in M['pasos'] %}
+                              <li>{{ paso['instruccion'] }}</li>
+                            {% endfor %}
+                          </ol>
+                        </div>
+                      {% endif %}
+
+                      <div class="section-line"></div>
+                      {% if f.tabla and f.tabla.headers and f.tabla.rows and f.tabla.rows|length > 0 %}
+                        <table class="elementos-tabla">
+                          <thead>
                             <tr>
-                              <td>{{ e.nombre }}</td>
-                              <td>{{ e.material }}</td>
-                              <td class="center">{{ e.cantidad }}</td>
-                              <td>{{ e.producto }}</td>
-                              <td>{{ e.herramienta }}</td>
+                              {% for h in f.tabla.headers %}
+                                <th>{{ h }}</th>
+                              {% endfor %}
                             </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                  {% endif %}
+                          </thead>
+                          <tbody>
+                            {% for row in f.tabla.rows %}
+                              <tr>
+                                {% for cell in row %}
+                                  <td>{{ cell }}</td>
+                                {% endfor %}
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      {% else %}
+                        <div class="muted"><em>No aplica.</em></div>
+                      {% endif %}
 
-                  {% if f.producto %}
-                    <p class="detalle-item"><strong>Producto:</strong> {{ f.producto }}</p>
-                  {% endif %}
-                  {% if f.herramienta %}
-                    <p class="detalle-item"><strong>Herramientas:</strong> {{ f.herramienta }}</p>
-                  {% endif %}
+                      {% if f.nota_tecnica %}
+                        <div class="nota-tecnica">{{ f.nota_tecnica }}</div>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ol>
+              {% else %}
+                <p class="muted"><em>Sin fracciones para el nivel asignado.</em></p>
+              {% endif %}
+            </div>
 
-                  {% if f.nota_tecnica or f.observacion_critica %}
-                    <div class="nota-tecnica">
-                      {{ f.nota_tecnica if f.nota_tecnica else f.observacion_critica }}
-                    </div>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ol>
-          {% else %}
-            <p class="sub"><em>Sin fracciones para el nivel asignado.</em></p>
-          {% endif %}
-        </div>
-
-        {% if not loop.last %}
-          <div class="page-break"></div>
+            {% if not loop.last %}
+              <div class="page-break"></div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <div class="panel">
+            <p class="muted">No hay SOP asignado para este día.</p>
+          </div>
         {% endif %}
-      {% endfor %}
-    {% else %}
-      <div class="panel">
-        <p class="sub">No hay SOP asignado para este día.</p>
-      </div>
-    {% endif %}
 
-    <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
+        <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
+      </div>
+    </div>
   </div>
 </body>
 </html>
