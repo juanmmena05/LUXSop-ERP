@@ -1,7 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from .extensions import db
 
-db = SQLAlchemy()
 
 # ======================================================
 # 1. ÁREAS Y SUBÁREAS
@@ -16,7 +15,11 @@ class Area(db.Model):
     cantidad_subareas = db.Column(db.Integer)
     orden_area = db.Column(db.Integer, default=1000)
 
-    subareas = db.relationship("SubArea", back_populates="area")
+    subareas = db.relationship(
+        "SubArea",
+        back_populates="area",
+        cascade="all, delete-orphan"
+    )
 
 
 class SubArea(db.Model):
@@ -27,13 +30,30 @@ class SubArea(db.Model):
 
     subarea_nombre = db.Column(db.String, nullable=False)
     superficie_subarea = db.Column(db.Float)
-    nivel_limpieza = db.Column(db.String)
     frecuencia = db.Column(db.Float)
     orden_subarea = db.Column(db.Integer, default=1000)
 
     area = db.relationship("Area", back_populates="subareas")
-    sops = db.relationship("SOP", back_populates="subarea")
-    elementos = db.relationship("Elemento", back_populates="subarea")
+
+    # Idealmente: 1 SOP por SubArea (tu formato SP-<SUBAREA>)
+    sop = db.relationship(
+        "SOP",
+        back_populates="subarea",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    elementos = db.relationship(
+        "Elemento",
+        back_populates="subarea",
+        cascade="all, delete-orphan"
+    )
+
+    elemento_sets = db.relationship(
+        "ElementoSet",
+        back_populates="subarea",
+        cascade="all, delete-orphan"
+    )
 
 
 # ======================================================
@@ -42,43 +62,88 @@ class SubArea(db.Model):
 
 class SOP(db.Model):
     __tablename__ = 'sop'
+    __table_args__ = (
+        # 1 SOP por subárea
+        db.UniqueConstraint('subarea_id', name='uq_sop_subarea'),
+    )
 
     sop_id = db.Column(db.String, primary_key=True)
     subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
-    sop_codigo = db.Column(db.String)
     observacion_critica_sop = db.Column(db.Text)
 
-    subarea = db.relationship("SubArea", back_populates="sops")
-    fracciones = db.relationship("Fraccion", back_populates="sop")
+    subarea = db.relationship("SubArea", back_populates="sop")
+
+    sop_fracciones = db.relationship(
+        "SopFraccion",
+        back_populates="sop",
+        cascade="all, delete-orphan",
+        order_by="SopFraccion.orden"
+    )
 
 
 # ======================================================
-# 3. NIVELES DE LIMPIEZA
+# 3. NIVELES DE LIMPIEZA (SIN factor)
 # ======================================================
 
 class NivelLimpieza(db.Model):
     __tablename__ = 'nivel_limpieza'
 
-    nivel_limpieza_id = db.Column(db.Integer, primary_key=True)
-    nombre = db.Column(db.String, nullable=False)
-    factor_nivel = db.Column(db.Float, nullable=False)
+    nivel_limpieza_id = db.Column(db.Integer, primary_key=True)  # 1/2/3
+    nombre = db.Column(db.String, nullable=False, unique=True)   # basica/media/profunda
+
+    metodologias = db.relationship("Metodologia", back_populates="nivel_limpieza")
+    sop_fraccion_detalles = db.relationship("SopFraccionDetalle", back_populates="nivel_limpieza")
+    elemento_sets = db.relationship("ElementoSet", back_populates="nivel_limpieza")
 
 
 # ======================================================
-# 4. METODOLOGÍAS
+# 4. FRACCIONES (CATÁLOGO UNIVERSAL)
+# ======================================================
+
+class Fraccion(db.Model):
+    __tablename__ = 'fraccion'
+
+    fraccion_id = db.Column(db.String, primary_key=True)  # FR-XX-###
+    fraccion_nombre = db.Column(db.String, nullable=False)
+    nota_tecnica = db.Column(db.Text)
+
+    metodologias = db.relationship(
+        "Metodologia",
+        back_populates="fraccion",
+        cascade="all, delete-orphan"
+    )
+
+    sop_fracciones = db.relationship("SopFraccion", back_populates="fraccion")
+
+    elemento_sets = db.relationship("ElementoSet", back_populates="fraccion")
+
+
+# ======================================================
+# 5. METODOLOGÍAS (por Fracción + Nivel)
 # ======================================================
 
 class Metodologia(db.Model):
     __tablename__ = 'metodologia'
+    __table_args__ = (
+        # Para que NO existan 2 metodologías del mismo nivel para la misma fracción
+        db.UniqueConstraint('fraccion_id', 'nivel_limpieza_id', name='uq_metodologia_fraccion_nivel'),
+    )
 
-    metodologia_id = db.Column(db.String, primary_key=True)
-    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False)
+    metodologia_id = db.Column(db.String, primary_key=True)  # MT-XX-###-B/M/P
+    fraccion_id = db.Column(db.String, db.ForeignKey('fraccion.fraccion_id'), nullable=False, index=True)
+    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False, index=True)
 
-    nombre = db.Column(db.String, nullable=False)
     descripcion = db.Column(db.Text)
 
-    nivel_limpieza = db.relationship("NivelLimpieza")
-    pasos = db.relationship("MetodologiaPasos", back_populates="metodologia")
+    fraccion = db.relationship("Fraccion", back_populates="metodologias")
+    nivel_limpieza = db.relationship("NivelLimpieza", back_populates="metodologias")
+
+    pasos = db.relationship(
+        "MetodologiaPasos",
+        back_populates="metodologia",
+        cascade="all, delete-orphan",
+        order_by="MetodologiaPasos.orden"
+    )
 
 
 class MetodologiaPasos(db.Model):
@@ -92,52 +157,72 @@ class MetodologiaPasos(db.Model):
 
 
 # ======================================================
-# 5. FRACCIONES Y DETALLES
+# 6. SOP ARMADO (SOP -> FRACCIONES -> DETALLES POR NIVEL)
 # ======================================================
 
-class Fraccion(db.Model):
-    __tablename__ = 'fraccion'
+class SopFraccion(db.Model):
+    __tablename__ = 'sop_fraccion'
+    __table_args__ = (
+        db.UniqueConstraint('sop_id', 'fraccion_id', name='uq_sop_fraccion_unica'),
+    )
 
-    fraccion_id = db.Column(db.String, primary_key=True)
+    sop_fraccion_id = db.Column(db.String, primary_key=True)  # SF-...
     sop_id = db.Column(db.String, db.ForeignKey('sop.sop_id'), nullable=False, index=True)
+    fraccion_id = db.Column(db.String, db.ForeignKey('fraccion.fraccion_id'), nullable=False, index=True)
 
-    fraccion_nombre = db.Column(db.String, nullable=False)
-    descripcion = db.Column(db.Text)
-    nota_tecnica = db.Column(db.Text)
-    unidad_medida = db.Column(db.String)
-    tiempo_base_min = db.Column(db.Float, default=0)
-    tipo_formula = db.Column(db.String)
     orden = db.Column(db.Integer, default=1)
 
-    sop = db.relationship("SOP", back_populates="fracciones")
-    detalles = db.relationship("FraccionDetalle", back_populates="fraccion")
+    sop = db.relationship("SOP", back_populates="sop_fracciones")
+    fraccion = db.relationship("Fraccion", back_populates="sop_fracciones")
+
+    detalles = db.relationship(
+        "SopFraccionDetalle",
+        back_populates="sop_fraccion",
+        cascade="all, delete-orphan"
+    )
 
 
-class FraccionDetalle(db.Model):
-    __tablename__ = 'fraccion_detalle'
+class SopFraccionDetalle(db.Model):
+    __tablename__ = 'sop_fraccion_detalle'
+    __table_args__ = (
+        # 1 detalle por nivel por cada SopFraccion
+        db.UniqueConstraint('sop_fraccion_id', 'nivel_limpieza_id', name='uq_sop_fraccion_detalle_nivel'),
 
-    fraccion_detalle_id = db.Column(db.String, primary_key=True)
-    fraccion_id = db.Column(db.String, db.ForeignKey('fraccion.fraccion_id'), nullable=False, index=True)
-    elemento_set_id = db.Column(db.String, db.ForeignKey('elemento_set.elemento_set_id'))
-    receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'))
-    kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'))
-    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False)
-    metodologia_id = db.Column(db.String, db.ForeignKey('metodologia.metodologia_id'), nullable=False)
+        # Regla: si hay elemento_set → NO debe haber kit/receta en este detalle
+        db.CheckConstraint(
+            "(elemento_set_id IS NULL) OR (kit_id IS NULL AND receta_id IS NULL)",
+            name="ck_sd_elementoset_vs_kit_receta"
+        ),
+    )
 
-    ajuste_factor = db.Column(db.Float, default=1.0)
-    superficie_aplicable = db.Column(db.Float, nullable=True)
+    sop_fraccion_detalle_id = db.Column(db.String, primary_key=True)  # SD-...
+
+    sop_fraccion_id = db.Column(db.String, db.ForeignKey('sop_fraccion.sop_fraccion_id'), nullable=False, index=True)
+    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False, index=True)
+
+    metodologia_id = db.Column(db.String, db.ForeignKey('metodologia.metodologia_id'), nullable=False, index=True)
+
+    # Opción A (sin elementos): kit/receta pueden ir aquí (uno o ambos)
+    kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), nullable=True)
+    receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'), nullable=True)
+
+    # Opción B (con elementos): elemento_set_id va aquí y kit/receta deben ser NULL
+    elemento_set_id = db.Column(db.String, db.ForeignKey('elemento_set.elemento_set_id'), nullable=True)
+
+    # tiempo ES de la fracción (como tú dijiste), lo guardamos aquí por nivel
     tiempo_unitario_min = db.Column(db.Float, nullable=True)
 
-    fraccion = db.relationship("Fraccion", back_populates="detalles")
-    elemento_set = db.relationship("ElementoSet")
-    receta = db.relationship("Receta")
-    kit = db.relationship("Kit")
+    sop_fraccion = db.relationship("SopFraccion", back_populates="detalles")
+    nivel_limpieza = db.relationship("NivelLimpieza", back_populates="sop_fraccion_detalles")
     metodologia = db.relationship("Metodologia")
-    nivel_limpieza = db.relationship("NivelLimpieza")
+
+    kit = db.relationship("Kit")
+    receta = db.relationship("Receta")
+    elemento_set = db.relationship("ElementoSet")
 
 
 # ======================================================
-# 6. HERRAMIENTAS Y KITS
+# 7. HERRAMIENTAS Y KITS
 # ======================================================
 
 class Herramienta(db.Model):
@@ -148,7 +233,7 @@ class Herramienta(db.Model):
     descripcion = db.Column(db.Text)
     estatus = db.Column(db.String)
 
-    kit_detalles = db.relationship("KitDetalle", back_populates="herramienta")
+    kit_detalles = db.relationship("KitDetalle", back_populates="herramienta", cascade="all, delete-orphan")
 
 
 class Kit(db.Model):
@@ -157,7 +242,7 @@ class Kit(db.Model):
     kit_id = db.Column(db.String, primary_key=True)
     nombre = db.Column(db.String, nullable=False)
 
-    detalles = db.relationship("KitDetalle", back_populates="kit")
+    detalles = db.relationship("KitDetalle", back_populates="kit", cascade="all, delete-orphan")
 
 
 class KitDetalle(db.Model):
@@ -165,8 +250,6 @@ class KitDetalle(db.Model):
 
     kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), primary_key=True)
     herramienta_id = db.Column(db.String, db.ForeignKey('herramienta.herramienta_id'), primary_key=True)
-
-    color = db.Column(db.String)
     nota = db.Column(db.String)
 
     kit = db.relationship("Kit", back_populates="detalles")
@@ -174,7 +257,7 @@ class KitDetalle(db.Model):
 
 
 # ======================================================
-# 7. RECETAS Y QUÍMICOS
+# 8. RECETAS Y QUÍMICOS
 # ======================================================
 
 class Quimico(db.Model):
@@ -186,7 +269,7 @@ class Quimico(db.Model):
     presentacion = db.Column(db.String)
     unidad_base = db.Column(db.String)
 
-    detalles = db.relationship("RecetaDetalle", back_populates="quimico")
+    detalles = db.relationship("RecetaDetalle", back_populates="quimico", cascade="all, delete-orphan")
 
 
 class Receta(db.Model):
@@ -195,7 +278,7 @@ class Receta(db.Model):
     receta_id = db.Column(db.String, primary_key=True)
     nombre = db.Column(db.String, nullable=False)
 
-    detalles = db.relationship("RecetaDetalle", back_populates="receta")
+    detalles = db.relationship("RecetaDetalle", back_populates="receta", cascade="all, delete-orphan")
 
 
 class RecetaDetalle(db.Model):
@@ -206,6 +289,10 @@ class RecetaDetalle(db.Model):
 
     dosis = db.Column(db.Float)
     unidad_dosis = db.Column(db.String)
+
+    volumen_base = db.Column(db.Float)
+    unidad_volumen = db.Column(db.String)
+
     nota = db.Column(db.String)
 
     receta = db.relationship("Receta", back_populates="detalles")
@@ -213,47 +300,66 @@ class RecetaDetalle(db.Model):
 
 
 # ======================================================
-# 8. ELEMENTOS Y SETS
+# 9. ELEMENTOS / SETS
 # ======================================================
-
-class ElementoSet(db.Model):
-    __tablename__ = 'elemento_set'
-
-    elemento_set_id = db.Column(db.String, primary_key=True)
-    nombre = db.Column(db.String, nullable=False)
-
-    detalles = db.relationship("ElementoDetalle", back_populates="elemento_set")
-
 
 class Elemento(db.Model):
     __tablename__ = 'elemento'
 
     elemento_id = db.Column(db.String, primary_key=True)
-    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False)
+    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
 
     nombre = db.Column(db.String, nullable=False)
-    material = db.Column(db.String)
     cantidad = db.Column(db.Float)
     estatus = db.Column(db.String)
 
     subarea = db.relationship("SubArea", back_populates="elementos")
 
 
+class ElementoSet(db.Model):
+    __tablename__ = 'elemento_set'
+
+    elemento_set_id = db.Column(db.String, primary_key=True)  # ES-...
+
+    # Tus columnas de control (clave para tu método de trabajo)
+    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
+    fraccion_id = db.Column(db.String, db.ForeignKey('fraccion.fraccion_id'), nullable=False, index=True)
+    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False, index=True)
+
+    nombre = db.Column(db.String, nullable=False)
+
+    subarea = db.relationship("SubArea", back_populates="elemento_sets")
+    fraccion = db.relationship("Fraccion", back_populates="elemento_sets")
+    nivel_limpieza = db.relationship("NivelLimpieza", back_populates="elemento_sets")
+
+    detalles = db.relationship(
+        "ElementoDetalle",
+        back_populates="elemento_set",
+        cascade="all, delete-orphan"
+    )
+
+
 class ElementoDetalle(db.Model):
     __tablename__ = 'elemento_detalle'
+    __table_args__ = (
+        db.UniqueConstraint('elemento_set_id', 'elemento_id', name='uq_elemento_set_elemento'),
+    )
 
     elemento_set_id = db.Column(db.String, db.ForeignKey('elemento_set.elemento_set_id'), primary_key=True)
     elemento_id = db.Column(db.String, db.ForeignKey('elemento.elemento_id'), primary_key=True)
-    receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'))
-    kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'))
+
+    receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'), nullable=True)
+    kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), nullable=True)
 
     elemento_set = db.relationship("ElementoSet", back_populates="detalles")
     elemento = db.relationship("Elemento")
     receta = db.relationship("Receta")
     kit = db.relationship("Kit")
 
+
 # ======================================================
-# 9. PERSONAL Y ASIGNACIÓN BASE
+# 10. PERSONAL Y ASIGNACIÓN BASE
+# (lo dejo igual a tu versión para no romper tu app)
 # ======================================================
 
 class Personal(db.Model):
@@ -262,7 +368,7 @@ class Personal(db.Model):
     personal_id = db.Column(db.String, primary_key=True)
     nombre = db.Column(db.String, nullable=False)
 
-    asignaciones = db.relationship("AsignacionPersonal", back_populates="personal", cascade="all, delete")
+    asignaciones = db.relationship("AsignacionPersonal", back_populates="personal", cascade="all, delete-orphan")
 
 
 class AsignacionPersonal(db.Model):
@@ -273,6 +379,8 @@ class AsignacionPersonal(db.Model):
     personal_id = db.Column(db.String, db.ForeignKey('personal.personal_id'), nullable=False, index=True)
     area_id = db.Column(db.String, db.ForeignKey('area.area_id'), nullable=False, index=True)
     subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
+
+    # Si luego quieres, esto lo migramos a FK a nivel_limpieza
     nivel_limpieza_asignado = db.Column(db.String, nullable=False)  # “basica”, “media”, “profunda”
 
     personal = db.relationship("Personal", back_populates="asignaciones")
@@ -281,7 +389,7 @@ class AsignacionPersonal(db.Model):
 
 
 # ======================================================
-# 10. LANZAMIENTO (SEMANA / DÍA / TAREAS)
+# 11. LANZAMIENTO (SEMANA / DÍA / TAREAS)
 # ======================================================
 
 class LanzamientoSemana(db.Model):
@@ -291,7 +399,7 @@ class LanzamientoSemana(db.Model):
     nombre = db.Column(db.String)
     fecha_inicio = db.Column(db.Date, nullable=False)  # lunes de la semana
 
-    dias = db.relationship("LanzamientoDia", back_populates="semana", cascade="all, delete")
+    dias = db.relationship("LanzamientoDia", back_populates="semana", cascade="all, delete-orphan")
 
 
 class LanzamientoDia(db.Model):
@@ -302,7 +410,7 @@ class LanzamientoDia(db.Model):
     fecha = db.Column(db.Date, nullable=False, index=True)
 
     semana = db.relationship("LanzamientoSemana", back_populates="dias")
-    tareas = db.relationship("LanzamientoTarea", back_populates="dia", cascade="all, delete")
+    tareas = db.relationship("LanzamientoTarea", back_populates="dia", cascade="all, delete-orphan")
 
 
 class LanzamientoTarea(db.Model):
@@ -317,6 +425,7 @@ class LanzamientoTarea(db.Model):
     personal_id = db.Column(db.String, db.ForeignKey('personal.personal_id'), nullable=False, index=True)
     area_id = db.Column(db.String, db.ForeignKey('area.area_id'), nullable=False, index=True)
     subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
+
     nivel_limpieza_asignado = db.Column(db.String, nullable=False)
 
     dia = db.relationship("LanzamientoDia", back_populates="tareas")
@@ -326,7 +435,7 @@ class LanzamientoTarea(db.Model):
 
 
 # ======================================================
-# 11. PLANTILLAS SEMANALES
+# 12. PLANTILLAS SEMANALES
 # ======================================================
 
 class PlantillaSemanal(db.Model):
@@ -336,7 +445,7 @@ class PlantillaSemanal(db.Model):
     nombre = db.Column(db.String, unique=True, nullable=False)
     creada_en = db.Column(db.DateTime, default=datetime.utcnow)
 
-    items = db.relationship("PlantillaItem", back_populates="plantilla", cascade="all, delete")
+    items = db.relationship("PlantillaItem", back_populates="plantilla", cascade="all, delete-orphan")
     semanas_aplicadas = db.relationship("PlantillaSemanaAplicada", back_populates="plantilla")
 
 
@@ -366,4 +475,3 @@ class PlantillaSemanaAplicada(db.Model):
     aplicada_en = db.Column(db.DateTime, default=datetime.utcnow)
 
     plantilla = db.relationship("PlantillaSemanal", back_populates="semanas_aplicadas")
-

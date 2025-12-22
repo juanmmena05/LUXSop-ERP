@@ -1,556 +1,412 @@
-# seed_data.py
+# seed_data_v2.py
 from app import create_app
 from app.models import (
     db,
+    # Core
     NivelLimpieza,
-    Metodologia,
-    MetodologiaPasos,
     Area,
     SubArea,
     SOP,
+    Personal,
+
+    # Universal catalogo
     Fraccion,
-    FraccionDetalle,
+    Metodologia,
+    MetodologiaPasos,
+
+    # SOP armado
+    SopFraccion,
+    SopFraccionDetalle,
+
+    # Recursos
+    Herramienta,
     Kit,
     KitDetalle,
-    Herramienta,
-    Quimico, 
-    RecetaDetalle, 
-    Receta, 
-    Elemento,
-    ElementoDetalle,
-    ElementoSet,
-    Personal
+    Quimico,
+    Receta,
+    RecetaDetalle,
 
+    # Elementos
+    Elemento,
+    ElementoSet,
+    ElementoDetalle,
 )
 
-# ======================================
-# INICIALIZAR APP Y CONTEXTO
-# ======================================
-print("🧪 Iniciando script seed_data...")
+print("🧪 Iniciando script seed_data_v2...")
 
 app = create_app()
 
 with app.app_context():
-    print("✅ Contexto de aplicación iniciado correctamente")
+    print("✅ Contexto iniciado")
     print("DB URI:", app.config.get("SQLALCHEMY_DATABASE_URI"))
-    print("✅ Iniciando carga de datos de ejemplo...")
 
-    # ======================================
-    # LIMPIAR TABLAS BASE (opcional)
-    # ======================================
-    db.session.query(FraccionDetalle).delete()
+    # ======================================================
+    # 0) LIMPIEZA (orden importante por FK)
+    # ======================================================
+    # OJO: borra de hijas → padres
+    db.session.query(ElementoDetalle).delete()
+    db.session.query(ElementoSet).delete()
+    db.session.query(Elemento).delete()
+
+    db.session.query(RecetaDetalle).delete()
+    db.session.query(Receta).delete()
+    db.session.query(Quimico).delete()
+
+    db.session.query(KitDetalle).delete()
+    db.session.query(Kit).delete()
+    db.session.query(Herramienta).delete()
+
+    db.session.query(SopFraccionDetalle).delete()
+    db.session.query(SopFraccion).delete()
+
+    db.session.query(MetodologiaPasos).delete()
+    db.session.query(Metodologia).delete()
+
     db.session.query(Fraccion).delete()
+
     db.session.query(SOP).delete()
     db.session.query(SubArea).delete()
     db.session.query(Area).delete()
-    db.session.query(MetodologiaPasos).delete()
-    db.session.query(Metodologia).delete()
+
+    # Personal lo puedes dejar si quieres, pero aquí lo reinserto igual
+    db.session.query(Personal).delete()
+
     db.session.query(NivelLimpieza).delete()
     db.session.commit()
 
-    # ======================================
-    # NIVELES DE LIMPIEZA
-    # ======================================
+    # ======================================================
+    # 1) NIVELES DE LIMPIEZA
+    # ======================================================
     niveles = [
-        NivelLimpieza(nivel_limpieza_id=1, nombre="basica", factor_nivel=0.8),
-        NivelLimpieza(nivel_limpieza_id=2, nombre="media", factor_nivel=1.0),
-        NivelLimpieza(nivel_limpieza_id=3, nombre="profunda", factor_nivel=1.3),
+        NivelLimpieza(nivel_limpieza_id=1, nombre="basica"),
+        NivelLimpieza(nivel_limpieza_id=2, nombre="media"),
+        NivelLimpieza(nivel_limpieza_id=3, nombre="profundo"),
     ]
     db.session.add_all(niveles)
 
-
     # ======================================================
-    # PERSONAL BASE — DIRECCIÓN
+    # 2) PERSONAL (se queda igual)
     # ======================================================
     personal_list = [
-    Personal(personal_id="L0036", nombre="Barco Maria del Socorro"),
-    Personal(personal_id="L0082", nombre="Estrada Jasso Clemencia"),
-    Personal(personal_id="L0212", nombre="Muñoz Ledo Ruvalcaba Dulce Maria"),
+        Personal(personal_id="L0036", nombre="Barco Maria del Socorro"),
+        Personal(personal_id="L0082", nombre="Estrada Jasso Clemencia"),
+        Personal(personal_id="L0212", nombre="Muñoz Ledo Ruvalcaba Dulce Maria"),
     ]
     db.session.add_all(personal_list)
 
+    # ======================================================
+    # 3) AREA + SUBAREAS (igual)
+    # ======================================================
+    area1 = Area(
+        area_id="AD-DI",
+        area_nombre="Direccion",
+        tipo_area="Administracion",
+        cantidad_subareas=4,
+        orden_area=1
+    )
 
-    # ======================================
-    # METODOLOGÍAS Y PASOS AREA: DIRECCION SUBAREA: OFICINA 01 
-    # ======================================
-    
+    sub1 = SubArea(subarea_id="AD-DI-BA-001", area_id="AD-DI", subarea_nombre="Bano 001", superficie_subarea=10, frecuencia=1, orden_subarea=1)
+    sub2 = SubArea(subarea_id="AD-DI-OF-001", area_id="AD-DI", subarea_nombre="Oficina 001", superficie_subarea=30, frecuencia=1, orden_subarea=2)
+    sub3 = SubArea(subarea_id="AD-DI-SA-001", area_id="AD-DI", subarea_nombre="Sala Juntas 001", superficie_subarea=40, frecuencia=1, orden_subarea=3)
+    sub4 = SubArea(subarea_id="AD-DI-OF-002", area_id="AD-DI", subarea_nombre="Oficina 002", superficie_subarea=30, frecuencia=1, orden_subarea=4)
+    db.session.add_all([area1, sub1, sub2, sub3, sub4])
+
+    # ======================================================
+    # 4) SOP (nuevo formato: SP-<SUBAREA_ID>)
+    # ======================================================
+    sop1 = SOP(sop_id="SP-AD-DI-BA-001", subarea_id="AD-DI-BA-001", observacion_critica_sop="Cuidar decoración")
+    sop2 = SOP(sop_id="SP-AD-DI-OF-001", subarea_id="AD-DI-OF-001", observacion_critica_sop="Cuidar decoración")
+    sop3 = SOP(sop_id="SP-AD-DI-SA-001", subarea_id="AD-DI-SA-001", observacion_critica_sop="Cuidar decoración")
+    sop4 = SOP(sop_id="SP-AD-DI-OF-002", subarea_id="AD-DI-OF-002", observacion_critica_sop="Cuidar decoración")
+    db.session.add_all([sop1, sop2, sop3, sop4])
+
+    # ======================================================
+    # 5) FRACCIONES UNIVERSALES (catálogo)
+    # ======================================================
+    # Aquí NO van amarradas a SOP.
+
+    fr_co_001 = Fraccion(fraccion_id= "FR-CO-001", fraccion_nombre="Colocar Senaletica", nota_tecnica= "")
+    fr_bs_001 = Fraccion(fraccion_id="FR-BS-001", fraccion_nombre="Sacar Basura", nota_tecnica="Si hay liquido en el bote, proceder a lavado extraordinario")
+    fr_sp_001 = Fraccion(fraccion_id="FR-SP-001", fraccion_nombre="Sacudir Superficies", nota_tecnica="No sacudir superficies despues de la limpieza de pisos")
+    db.session.add_all([fr_co_001, fr_bs_001, fr_sp_001])
+
+    # ======================================================
+    # 6) METODOLOGÍAS (por fracción + nivel)
+    # Formato: MT-<FRACCION>-<###>-<B|M|P>
+    # ======================================================
     metodologias = [
-    # 🗑 SACAR BASURA
-    Metodologia(metodologia_id="M_BASURA_B", nivel_limpieza_id=1, nombre="Sacar basura (básico)", descripcion="Retirar las bolsas de basura de cada bote y reemplazar con nuevas. Asegurar cierre adecuado de bolsas."),
-    Metodologia(metodologia_id="M_BASURA_M", nivel_limpieza_id=2, nombre="Sacar basura (intermedio)", descripcion="Retirar basura, limpiar el interior de los botes con paño húmedo y desinfectante neutro antes de colocar nuevas bolsas."),
-    Metodologia(metodologia_id="M_BASURA_P", nivel_limpieza_id=3, nombre="Sacar basura (profundo)", descripcion="Retirar basura, lavar completamente los botes con agua y detergente, desinfectar y secar antes de colocar nuevas bolsas."),
+        #Colocar Senaletica
+        Metodologia(metodologia_id="MT-CO-001-B", fraccion_id="FR-CO-001", nivel_limpieza_id=1,
+                    descripcion="Colocar senaletica en la entrada de la subarea"),
+        Metodologia(metodologia_id="MT-CO-001-M", fraccion_id="FR-CO-001", nivel_limpieza_id=2,
+                    descripcion="Colocar senaletica en la entrada de la subarea"),
+        Metodologia(metodologia_id="MT-CO-001-P", fraccion_id="FR-CO-001", nivel_limpieza_id=3,
+                    descripcion="Colocar senaletica en la entrada de la subarea"),
+        
+        
+        # Sacar Basura
+        Metodologia(metodologia_id="MT-BS-001-B", fraccion_id="FR-BS-001", nivel_limpieza_id=1,
+                    descripcion="Retirar bolsas y reemplazar por nuevas."),
+        Metodologia(metodologia_id="MT-BS-001-M", fraccion_id="FR-BS-001", nivel_limpieza_id=2,
+                    descripcion="Retirar bolsas y reemplazar por nuevas."),
+        Metodologia(metodologia_id="MT-BS-001-P", fraccion_id="FR-BS-001", nivel_limpieza_id=3,
+                    descripcion="Retirar basura, sacudir bote, reemplazar bolsas"),
 
-    # 🪑 SACUDIR MUEBLES
-    Metodologia(metodologia_id="M_MUEBLES_B", nivel_limpieza_id=1, nombre="Sacudir muebles (básico)", descripcion="Retirar polvo superficial con paño seco o plumero en escritorios, mesas y repisas."),
-    Metodologia(metodologia_id="M_MUEBLES_M", nivel_limpieza_id=2, nombre="Sacudir muebles (intermedio)", descripcion="Limpiar con paño húmedo y solución neutra todas las superficies de los muebles. Secar con paño limpio."),
-    Metodologia(metodologia_id="M_MUEBLES_P", nivel_limpieza_id=3, nombre="Sacudir muebles (profundo)", descripcion="Desmontar objetos de las superficies, limpiar y desinfectar con producto bactericida; revisar bordes y esquinas."),
-
-    # 🚻 LAVAR BAÑO
-    Metodologia(metodologia_id="M_BANO_B", nivel_limpieza_id=1, nombre="Lavar baño (básico)", descripcion="Limpiar lavamanos y superficies con desinfectante neutro, reponer papel y jabón."),
-    Metodologia(metodologia_id="M_BANO_M", nivel_limpieza_id=2, nombre="Lavar baño (intermedio)", descripcion="Lavar lavamanos, taza y piso con detergente y desinfectante. Revisar espejos y dispensadores."),
-    Metodologia(metodologia_id="M_BANO_P", nivel_limpieza_id=3, nombre="Lavar baño (profundo)", descripcion="Limpieza integral con cepillado de muros, sanitarios, drenajes y accesorios; desinfección completa con cloro diluido."),
-
-    # 🪟 LIMPIEZA DE VIDRIOS
-    Metodologia(metodologia_id="M_VIDRIOS_B", nivel_limpieza_id=1, nombre="Limpieza de vidrios (básico)", descripcion="Limpiar vidrios accesibles con trapo de microfibra y limpiavidrios, retirando huellas y manchas ligeras."),
-    Metodologia(metodologia_id="M_VIDRIOS_M", nivel_limpieza_id=2, nombre="Limpieza de vidrios (intermedio)", descripcion="Limpieza completa con atomizador, esponja y secador; eliminar manchas y polvo del marco."),
-    Metodologia(metodologia_id="M_VIDRIOS_P", nivel_limpieza_id=3, nombre="Limpieza de vidrios (profundo)", descripcion="Limpieza exterior e interior de cristales, marcos y rieles; aplicar desengrasante y paño seco para acabado sin residuos."),
-
-    # 🧽 LIMPIEZA DE PISO
-    Metodologia(metodologia_id="M_PISO_B", nivel_limpieza_id=1, nombre="Limpieza de piso (básico)", descripcion="Barrido general y trapeado húmedo con solución neutra."),
-    Metodologia(metodologia_id="M_PISO_M", nivel_limpieza_id=2, nombre="Limpieza de piso (intermedio)", descripcion="Barrido, trapeado y desinfección de zonas de alto tránsito; enjuagar y secar."),
-    Metodologia(metodologia_id="M_PISO_P", nivel_limpieza_id=3, nombre="Limpieza de piso (profundo)", descripcion="Limpieza intensiva con desengrasante o pulidora; enjuagar, secar y aplicar sellador si aplica."),
-
-    # 🧹 BARRER TAPETES
-    Metodologia(metodologia_id="M_TAPETE_B", nivel_limpieza_id=1, nombre="Barrer tapetes (básico)", descripcion="Sacar tapetes pequeños y sacudirlos al aire libre para retirar polvo superficial."),
-    Metodologia(metodologia_id="M_TAPETE_M", nivel_limpieza_id=2, nombre="Barrer tapetes (intermedio)", descripcion="Aspirar tapetes completamente y limpiar bordes con cepillo suave."),
-    Metodologia(metodologia_id="M_TAPETE_P", nivel_limpieza_id=3, nombre="Barrer tapetes (profundo)", descripcion="Lavar tapetes con agua y detergente, enjuagar y dejar secar completamente antes de recolocar."),
+        # Sacudir Superficies
+        # Solo existe la metodologia profunda para sacudir superficies
+        Metodologia(metodologia_id="MT-SP-001-P", fraccion_id="FR-SP-001", nivel_limpieza_id=3,
+                    descripcion="Despejar, limpiar y bordes y esquinas superiores."),
     ]
-
     db.session.add_all(metodologias)
 
     pasos = [
-    # 🗑 SACAR BASURA
-    MetodologiaPasos(metodologia_id="M_BASURA_B", orden=1, instruccion="Colocar guantes y revisar que los botes no estén rebosados."),
-    MetodologiaPasos(metodologia_id="M_BASURA_B", orden=2, instruccion="Retirar las bolsas de basura y amarrarlas firmemente."),
-    MetodologiaPasos(metodologia_id="M_BASURA_B", orden=3, instruccion="Colocar bolsa nueva y revisar que el bote quede limpio externamente."),
-    
-    MetodologiaPasos(metodologia_id="M_BASURA_M", orden=1, instruccion="Vaciar los botes de basura y desechar el contenido en el área de acopio."),
-    MetodologiaPasos(metodologia_id="M_BASURA_M", orden=2, instruccion="Limpiar el interior y exterior del bote con paño húmedo y desinfectante neutro."),
-    MetodologiaPasos(metodologia_id="M_BASURA_M", orden=3, instruccion="Colocar bolsa nueva asegurando su ajuste y reubicar el bote correctamente."),
-    
-    MetodologiaPasos(metodologia_id="M_BASURA_P", orden=1, instruccion="Retirar la basura, lavar el bote con agua y detergente."),
-    MetodologiaPasos(metodologia_id="M_BASURA_P", orden=2, instruccion="Desinfectar completamente el bote con solución clorada y enjuagar."),
-    MetodologiaPasos(metodologia_id="M_BASURA_P", orden=3, instruccion="Dejar secar al aire, revisar estado general y colocar bolsa nueva."),
+        #Colocar Senaletica
+        #Baja
+        MetodologiaPasos(metodologia_id="MT-CO-001-B", orden=1, instruccion="Verifique si hay personas en el área y solicite autorización para iniciar la limpieza"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-B", orden=2, instruccion="Coloque la señal de “Área en limpieza / Piso mojado” en el acceso principal (visible desde la entrada)"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-B", orden=3, instruccion="Mantenga la puerta abierta durante toda la actividad de limpieza para asegurar ventilación y visibilidad del área"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-B", orden=4, instruccion="Retire la señal solo cuando el piso esté seco y sin riesgo"),
 
-    # 🪑 SACUDIR MUEBLES
-    MetodologiaPasos(metodologia_id="M_MUEBLES_B", orden=1, instruccion="Retirar polvo superficial con plumero o paño seco."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_B", orden=2, instruccion="Recolocar objetos personales sin alterar el orden."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_B", orden=3, instruccion="Verificar que no queden residuos visibles."),
-    
-    MetodologiaPasos(metodologia_id="M_MUEBLES_M", orden=1, instruccion="Humedecer paño con solución neutra y limpiar todas las superficies."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_M", orden=2, instruccion="Secar con paño limpio y revisar esquinas o bordes."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_M", orden=3, instruccion="Organizar elementos nuevamente sin alterar documentos."),
-    
-    MetodologiaPasos(metodologia_id="M_MUEBLES_P", orden=1, instruccion="Despejar por completo la superficie del mueble."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_P", orden=2, instruccion="Aplicar desinfectante bactericida con atomizador."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_P", orden=3, instruccion="Frotar con paño microfibra y secar cuidadosamente."),
-    MetodologiaPasos(metodologia_id="M_MUEBLES_P", orden=4, instruccion="Revisar bordes y esquinas; reinstalar objetos en su posición."),
+        #Media
+        MetodologiaPasos(metodologia_id="MT-CO-001-M", orden=1, instruccion="Verifique si hay personas en el área y solicite autorización para iniciar la limpieza"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-M", orden=2, instruccion="Coloque la señal de “Área en limpieza / Piso mojado” en el acceso principal (visible desde la entrada)"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-M", orden=3, instruccion="Mantenga la puerta abierta durante toda la actividad de limpieza para asegurar ventilación y visibilidad del área"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-M", orden=4, instruccion="Retire la señal solo cuando el piso esté seco y sin riesgo"),
 
-    # 🚻 LAVAR BAÑO
-    MetodologiaPasos(metodologia_id="M_BANO_B", orden=1, instruccion="Aplicar desinfectante neutro en lavamanos y superficies."),
-    MetodologiaPasos(metodologia_id="M_BANO_B", orden=2, instruccion="Limpiar con esponja y enjuagar con agua limpia."),
-    MetodologiaPasos(metodologia_id="M_BANO_B", orden=3, instruccion="Secar y reponer insumos de papel y jabón."),
-    
-    MetodologiaPasos(metodologia_id="M_BANO_M", orden=1, instruccion="Cepillar lavamanos, taza y piso con detergente."),
-    MetodologiaPasos(metodologia_id="M_BANO_M", orden=2, instruccion="Enjuagar, aplicar desinfectante y dejar actuar por 2 minutos."),
-    MetodologiaPasos(metodologia_id="M_BANO_M", orden=3, instruccion="Secar superficies y revisar espejos y dispensadores."),
-    
-    MetodologiaPasos(metodologia_id="M_BANO_P", orden=1, instruccion="Aplicar solución clorada en muros, lavamanos y sanitarios."),
-    MetodologiaPasos(metodologia_id="M_BANO_P", orden=2, instruccion="Cepillar drenajes y accesorios metálicos."),
-    MetodologiaPasos(metodologia_id="M_BANO_P", orden=3, instruccion="Enjuagar con abundante agua, secar y ventilar el área."),
+        #Profunda
+        MetodologiaPasos(metodologia_id="MT-CO-001-P", orden=1, instruccion="Verifique si hay personas en el área y solicite autorización para iniciar la limpieza"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-P", orden=2, instruccion="Coloque la señal de “Área en limpieza / Piso mojado” en el acceso principal (visible desde la entrada)"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-P", orden=3, instruccion="Mantenga la puerta abierta durante toda la actividad de limpieza para asegurar ventilación y visibilidad del área"),
+        MetodologiaPasos(metodologia_id="MT-CO-001-P", orden=4, instruccion="Retire la señal solo cuando el piso esté seco y sin riesgo"),
 
-    # 🪟 LIMPIEZA DE VIDRIOS
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_B", orden=1, instruccion="Pulverizar limpiavidrios en la superficie accesible."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_B", orden=2, instruccion="Limpiar con paño microfibra en movimientos circulares."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_B", orden=3, instruccion="Secar con paño limpio para evitar marcas."),
-    
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_M", orden=1, instruccion="Limpiar vidrios con esponja y solución limpiadora."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_M", orden=2, instruccion="Usar secador de goma de arriba hacia abajo."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_M", orden=3, instruccion="Limpiar marcos y rieles con paño húmedo."),
-    
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_P", orden=1, instruccion="Desmontar vidrios accesibles si es posible."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_P", orden=2, instruccion="Lavar cristales con solución desengrasante."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_P", orden=3, instruccion="Enjuagar con agua limpia y secar sin dejar residuos."),
-    MetodologiaPasos(metodologia_id="M_VIDRIOS_P", orden=4, instruccion="Limpiar marcos y rieles con cepillo pequeño."),
 
-    # 🧽 LIMPIEZA DE PISO
-    MetodologiaPasos(metodologia_id="M_PISO_B", orden=1, instruccion="Barrer el área completamente."),
-    MetodologiaPasos(metodologia_id="M_PISO_B", orden=2, instruccion="Trapear con solución neutra y escurrida."),
-    MetodologiaPasos(metodologia_id="M_PISO_B", orden=3, instruccion="Dejar secar al aire o con paño seco."),
-    
-    MetodologiaPasos(metodologia_id="M_PISO_M", orden=1, instruccion="Barrer, aspirar y retirar residuos grandes."),
-    MetodologiaPasos(metodologia_id="M_PISO_M", orden=2, instruccion="Aplicar desinfectante en áreas de tránsito alto."),
-    MetodologiaPasos(metodologia_id="M_PISO_M", orden=3, instruccion="Trapeado cruzado y secado inmediato."),
-    
-    MetodologiaPasos(metodologia_id="M_PISO_P", orden=1, instruccion="Aplicar desengrasante o limpiador alcalino."),
-    MetodologiaPasos(metodologia_id="M_PISO_P", orden=2, instruccion="Frotar con fibra o pulidora de piso."),
-    MetodologiaPasos(metodologia_id="M_PISO_P", orden=3, instruccion="Enjuagar con agua limpia y retirar exceso."),
-    MetodologiaPasos(metodologia_id="M_PISO_P", orden=4, instruccion="Secar y aplicar sellador protector si aplica."),
+        # Sacar Basura
+        #Baja
+        MetodologiaPasos(metodologia_id="MT-BS-001-B", orden=1, instruccion="Retire la bolsa del bote, ciérrela con un nudo firme y deposítela en el contenedor asignado"),
+        MetodologiaPasos(metodologia_id="MT-BS-001-B", orden=2, instruccion="Verifique que el bote quede libre de residuos visibles por dentro"),
+        MetodologiaPasos(metodologia_id="MT-BS-001-B", orden=3, instruccion="Coloque una bolsa nueva del tamaño correcto y ajústela al borde"),
 
-    # 🧹 BARRER TAPETES
-    MetodologiaPasos(metodologia_id="M_TAPETE_B", orden=1, instruccion="Enrollar o retirar el tapete del área."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_B", orden=2, instruccion="Sacudirlo al aire libre para eliminar el polvo."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_B", orden=3, instruccion="Recolocarlo correctamente."),
-    
-    MetodologiaPasos(metodologia_id="M_TAPETE_M", orden=1, instruccion="Aspirar ambos lados del tapete cuidadosamente."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_M", orden=2, instruccion="Cepillar bordes y esquinas para eliminar residuos."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_M", orden=3, instruccion="Aplicar desodorante textil si es necesario."),
-    
-    MetodologiaPasos(metodologia_id="M_TAPETE_P", orden=1, instruccion="Lavar el tapete con agua y detergente suave."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_P", orden=2, instruccion="Enjuagar con agua limpia hasta eliminar residuos."),
-    MetodologiaPasos(metodologia_id="M_TAPETE_P", orden=3, instruccion="Dejar secar completamente al aire libre."),
+        #Media
+        MetodologiaPasos(metodologia_id="MT-BS-001-M", orden=1, instruccion="Retire la bolsa del bote, ciérrela con un nudo firme y deposítela en el contenedor asignado"),
+        MetodologiaPasos(metodologia_id="MT-BS-001-M", orden=2, instruccion="Verifique que el bote quede libre de residuos visibles por dentro"),
+        MetodologiaPasos(metodologia_id="MT-BS-001-M", orden=3, instruccion="Coloque una bolsa nueva del tamaño correcto y ajústela al borde"),
+
+        #Profunda
+        MetodologiaPasos(metodologia_id="MT-BS-001-P", orden=1, instruccion="Retire la bolsa del bote, ciérrela con un nudo firme y deposítela en el contenedor asignado."),
+        MetodologiaPasos(metodologia_id="MT-BS-001-P", orden=2, instruccion="Aplique químico al paño y use la técnica TM-SA-001 (8 caras)."),
+        MetodologiaPasos(metodologia_id="MT-BS-001-P", orden=3, instruccion="Limpie el interior y exterior del bote, cambiando de cara conforme se ensucie."),
+        MetodologiaPasos(metodologia_id="MT-BS-001-P", orden=4, instruccion="Use una cara seca para retirar humedad y dar acabado."),
+        MetodologiaPasos(metodologia_id="MT-BS-001-P", orden=5, instruccion="Coloque una bolsa nueva del tamaño correcto y ajústela al borde."),
+
+
+        # Sacudir Superficies
+        #Profunda
+        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=1, instruccion="Verificar que la funda de microfibra esté limpia, seca y en buen estado."),
+        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=2, instruccion="Colocar el plumero de forma que tenga contacto total con la superficie."),
+        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=3, instruccion="Sacude la superficie con movimientos suaves y rectos: De arriba hacia abajo lineales y continuos, y de atrás hacia adelante, evitando movimientos rápidos o circulares que provoquen dispersión del polvo."),
+        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=4, instruccion="ambiar la funda de microfibra cuando este visiblemente sucia o llena de polvo."),
+        
+
     ]
-
     db.session.add_all(pasos)
 
-    # ======================================
-    # ÁREA 1: ADMINISTRACION DIRECCION - OFICINA 01 - SALA JUNTAS 01 - OFICINA 02
-    # ======================================
-    area1 = Area(area_id="AD-DI", area_nombre="Direccion", tipo_area="Administracion", cantidad_subareas=3, orden_area=1)
-
-    sub1 = SubArea(subarea_id="AD-DI-OF-01", area_id="AD-DI", subarea_nombre="Oficina 01", superficie_subarea=30, frecuencia=1, orden_subarea=1)
-    sub2 = SubArea(subarea_id="AD-DI-SA-01", area_id="AD-DI", subarea_nombre="Sala Juntas 01", superficie_subarea=40, frecuencia=1, orden_subarea=2)
-    sub3 = SubArea(subarea_id="AD-DI-OF-02", area_id="AD-DI", subarea_nombre="Oficina 02", superficie_subarea=30, frecuencia=1, orden_subarea=3)
-
-    db.session.add_all([area1, sub1, sub2, sub3])
-
-    sop1 = SOP(sop_id="SOP-AD-DI-OF-01", subarea_id="AD-DI-OF-01", sop_codigo="SOP-01", observacion_critica_sop="Cuidar Elementos Decoracion || Cuidar Insumos Completos en Bano")
-    sop2 = SOP(sop_id="SOP-AD-DI-SA-01", subarea_id="AD-DI-SA-01", sop_codigo="SOP-02", observacion_critica_sop="Cuidar Elementos de Tecnologia || Cuidar Elementos Pizarron")
-    sop3 = SOP(sop_id="SOP-AD-DI-OF-02", subarea_id="AD-DI-OF-02", sop_codigo="SOP-03", observacion_critica_sop="Cuidar Elementos Decoracion || Cuidar Elementos Zapatos")
-
-    db.session.add_all([sop1, sop2, sop3])
-
-    # 🧩 SOP Oficina 01
-    fracciones_of1 = [
-    Fraccion(fraccion_id="F_AD_DI_OF01_BASURA", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y desechar bolsas de basura, reponer con nuevas.", unidad_medida="pzas", tiempo_base_min=1.00, tipo_formula="fijo", orden=1, nota_tecnica="Verificar que los botes estén secos antes de colocar la bolsa nueva."),
-    Fraccion(fraccion_id="F_AD_DI_OF01_MUEBLES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Sacudir muebles", descripcion="Retirar polvo de escritorios, archiveros y superficies.", unidad_medida="pzas", tiempo_base_min=1.00, tipo_formula="por_pieza", orden=2, nota_tecnica="Evitar el uso de líquidos directamente sobre superficies de madera."),
-    Fraccion(fraccion_id="F_AD_DI_OF01_BANO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Lavar baño", descripcion="Limpieza general y desinfección de sanitarios y lavamanos.", unidad_medida="pzas", tiempo_base_min=2.00, tipo_formula="por_pieza", orden=3, nota_tecnica="Revisar que no haya fugas en sanitarios o llaves."),
-    Fraccion(fraccion_id="F_AD_DI_OF01_VIDRIOS", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior de ventanas y cristales.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=4, nota_tecnica="Evitar limpiar bajo luz solar directa para evitar manchas."),
-    Fraccion(fraccion_id="F_AD_DI_OF01_PISO", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento de pisos interiores.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=5, nota_tecnica="Verificar que el piso esté completamente seco antes de habilitar el tránsito."),
-    Fraccion(fraccion_id="F_AD_DI_OF01_TAPETES", sop_id="SOP-AD-DI-OF-01", fraccion_nombre="Barrer tapetes", descripcion="Limpieza y aspirado de tapetes decorativos.", unidad_medida="m²", tiempo_base_min=1.00, tipo_formula="por_m2", orden=6, nota_tecnica="No usar productos líquidos en tapetes textiles."),
-    ]
-    db.session.add_all(fracciones_of1)
-    
-    # ==========================================
-    # Detalles OF1 (actualizado con superficie_aplicable)
-    # ==========================================
-    detalles_of1 = [
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_B", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_M", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BASURA_P", fraccion_id="F_AD_DI_OF01_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_B", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_M", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_MUEBLES_P", fraccion_id="F_AD_DI_OF01_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_B", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=1, metodologia_id="M_BANO_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_M", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=2, metodologia_id="M_BANO_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_BANO_P", fraccion_id="F_AD_DI_OF01_BANO", nivel_limpieza_id=3, metodologia_id="M_BANO_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF01_BANO"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_B", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, superficie_aplicable=8.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_M", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.0, superficie_aplicable=8.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_VIDRIOS_P", fraccion_id="F_AD_DI_OF01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.0, superficie_aplicable=8.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_B", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_M", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_PISO_P", fraccion_id="F_AD_DI_OF01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_B", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=2.0),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_M", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=2.5),
-    FraccionDetalle(fraccion_detalle_id="FD_OF01_TAPETES_P", fraccion_id="F_AD_DI_OF01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.0, superficie_aplicable=3.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None, tiempo_unitario_min=6.0),
-    ]
-    db.session.add_all(detalles_of1)
-
- 
-    # ======================================================
-    # FRACCIONES — SOP-AD-DI-SA-01 (Sala Juntas 01)
-    # ======================================================
-    fracciones_sa1 = [
-    Fraccion(fraccion_id="F_AD_DI_SA01_BASURA", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Retirar basura", descripcion="Recolectar y reemplazar bolsas de basura en contenedores.", unidad_medida="pzas", tiempo_base_min=1.0, tipo_formula="fijo", orden=1, nota_tecnica="Asegurar que no queden residuos en el fondo del contenedor antes de colocar la bolsa nueva."),
-    Fraccion(fraccion_id="F_AD_DI_SA01_VIDRIOS", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza interior y exterior de cristales de la sala de juntas.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=2, nota_tecnica="Evitar limpiar bajo luz solar directa para prevenir marcas o manchas."),
-    Fraccion(fraccion_id="F_AD_DI_SA01_PISO", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Limpieza de piso", descripcion="Trapeado y mantenimiento del piso de la sala.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=3, nota_tecnica="Asegurar que el piso quede seco para evitar resbalones antes de reingresar al área."),
-    Fraccion(fraccion_id="F_AD_DI_SA01_TAPETES", sop_id="SOP-AD-DI-SA-01", fraccion_nombre="Barrer tapetes", descripcion="Aspirar o sacudir tapetes de entrada o decorativos.", unidad_medida="pzas", tiempo_base_min=1.0, tipo_formula="por_m2", orden=4, nota_tecnica="No utilizar productos líquidos ni cepillos duros en tapetes de tela o con bordes decorativos."),
-    ]
-    db.session.add_all(fracciones_sa1)
-
-    # ==========================================
-    # Detalles SA1 (actualizado con superficie_aplicable)
-    # ==========================================
-    detalles_sa1 = [
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_B", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_M", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_BASURA_P", fraccion_id="F_AD_DI_SA01_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_B", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, superficie_aplicable=10.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_M", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.0, superficie_aplicable=10.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_VIDRIOS_P", fraccion_id="F_AD_DI_SA01_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.0, superficie_aplicable=10.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_B", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_M", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_PISO_P", fraccion_id="F_AD_DI_SA01_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_B", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, superficie_aplicable=4.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_M", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.0, superficie_aplicable=4.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_SA01_TAPETES_P", fraccion_id="F_AD_DI_SA01_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.0, superficie_aplicable=4.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    ]
-    db.session.add_all(detalles_sa1)
-
 
     # ======================================================
-    # FRACCIONES — SOP-AD-DI-OF-02 (Oficina 02)
+    # 7) HERRAMIENTAS / KITS / QUÍMICOS / RECETAS (mínimo)
     # ======================================================
-    fracciones_of2 = [
-    Fraccion(fraccion_id="F_AD_DI_OF02_BASURA", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Retirar basura", descripcion="Recolectar, reemplazar bolsas y revisar contenedores de oficina.", unidad_medida="pzas", tiempo_base_min=1.0, tipo_formula="fijo", orden=1, nota_tecnica="No sobrecargar las bolsas y revisar que los botes estén limpios antes de colocar una nueva."),
-    Fraccion(fraccion_id="F_AD_DI_OF02_MUEBLES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Sacudir muebles", descripcion="Limpieza general de mobiliario, sillas y escritorios.", unidad_medida="pzas", tiempo_base_min=1.0, tipo_formula="por_pieza", orden=2, nota_tecnica="No aplicar producto directamente sobre madera o pantallas; usar paño humedecido."),
-    Fraccion(fraccion_id="F_AD_DI_OF02_VIDRIOS", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de vidrios", descripcion="Limpieza de ventanas interiores y divisiones de vidrio.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=3, nota_tecnica="Limpia en sentido vertical y luego horizontal para asegurar acabado sin rayas."),
-    Fraccion(fraccion_id="F_AD_DI_OF02_PISO", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Limpieza de piso", descripcion="Trapeado de piso con producto neutro y revisión de esquinas.", unidad_medida="m²", tiempo_base_min=0.50, tipo_formula="por_m2", orden=4, nota_tecnica="Evitar exceso de humedad cerca de escritorios o conexiones eléctricas."),
-    Fraccion(fraccion_id="F_AD_DI_OF02_TAPETES", sop_id="SOP-AD-DI-OF-02", fraccion_nombre="Barrer tapetes", descripcion="Aspirado y sacudido de tapetes individuales.", unidad_medida="pzas", tiempo_base_min=1.0, tipo_formula="por_m2", orden=5, nota_tecnica="Revisar que los tapetes estén completamente secos antes de recolocarlos."),
-    ]
-    db.session.add_all(fracciones_of2)
-
-
-    detalles_of2 = [
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_B", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=1, metodologia_id="M_BASURA_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_M", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=2, metodologia_id="M_BASURA_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_BASURA_P", fraccion_id="F_AD_DI_OF02_BASURA", nivel_limpieza_id=3, metodologia_id="M_BASURA_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_BASURA", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_B", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=1, metodologia_id="M_MUEBLES_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_M", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=2, metodologia_id="M_MUEBLES_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_MUEBLES_P", fraccion_id="F_AD_DI_OF02_MUEBLES", nivel_limpieza_id=3, metodologia_id="M_MUEBLES_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id=None, receta_id=None, elemento_set_id="ES_AD_DI_OF02_MUEBLES"),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_B", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=1, metodologia_id="M_VIDRIOS_B", ajuste_factor=1.0, superficie_aplicable=6.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_M", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=2, metodologia_id="M_VIDRIOS_M", ajuste_factor=1.0, superficie_aplicable=6.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_VIDRIOS_P", fraccion_id="F_AD_DI_OF02_VIDRIOS", nivel_limpieza_id=3, metodologia_id="M_VIDRIOS_P", ajuste_factor=1.0, superficie_aplicable=6.0, kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_B", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=1, metodologia_id="M_PISO_B", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_M", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=2, metodologia_id="M_PISO_M", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_PISO_P", fraccion_id="F_AD_DI_OF02_PISO", nivel_limpieza_id=3, metodologia_id="M_PISO_P", ajuste_factor=1.0, superficie_aplicable=None, kit_id="KIT_PISOS", receta_id="R_PISOS", elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_B", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=1, metodologia_id="M_TAPETE_B", ajuste_factor=1.0, superficie_aplicable=2.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_M", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=2, metodologia_id="M_TAPETE_M", ajuste_factor=1.0, superficie_aplicable=2.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    FraccionDetalle(fraccion_detalle_id="FD_OF02_TAPETES_P", fraccion_id="F_AD_DI_OF02_TAPETES", nivel_limpieza_id=3, metodologia_id="M_TAPETE_P", ajuste_factor=1.0, superficie_aplicable=2.0, kit_id="KIT_TAPETES", receta_id=None, elemento_set_id=None),
-    ]
-    db.session.add_all(detalles_of2)
-    
-    # ======================================================
-    # HERRAMIENTAS BASE
-    # ======================================================
-
     herramientas = [
-    Herramienta(herramienta_id="H_ATOMIZADOR", nombre="Atomizador manual 1L", descripcion="Atomizador de plástico con gatillo ajustable para soluciones desinfectantes.", estatus="activo"),
-    Herramienta(herramienta_id="H_PANO_MICRO", nombre="Paño microfibra gris", descripcion="Paño de microfibra color gris, para limpieza de superficies delicadas.", estatus="activo"),
-    Herramienta(herramienta_id="H_PANO_VERDE", nombre="Paño microfibra verde", descripcion="Paño de microfibra color verde, para áreas comunes o mobiliario.", estatus="activo"),
-    Herramienta(herramienta_id="H_TRAPEADOR", nombre="Trapeador plano microfibra", descripcion="Trapeador plano con sistema de velcro y mango ergonómico.", estatus="activo"),
-    Herramienta(herramienta_id="H_CUBETA", nombre="Cubeta 10L con exprimidor", descripcion="Cubeta de 10 litros con escurridor manual integrado.", estatus="activo"),
-    Herramienta(herramienta_id="H_GUANTES", nombre="Guantes de látex", descripcion="Guantes desechables de látex o nitrilo para tareas de limpieza.", estatus="activo"),
-    Herramienta(herramienta_id="H_ESCOBA", nombre="Escoba de cerdas suaves", descripcion="Escoba ergonómica para barrer tapetes y superficies lisas.", estatus="activo"),
-    Herramienta(herramienta_id="H_RECOGEDOR", nombre="Recogedor con mango largo", descripcion="Recogedor para residuos sólidos, uso con escoba.", estatus="activo"),
-    Herramienta(herramienta_id="H_FRANELA_CRISTALES", nombre="Franela para cristales", descripcion="Franela o toalla especial para secado sin rayas en cristales.", estatus="activo"),
+        Herramienta(herramienta_id="HE-SE-001", nombre="SEÑALETICA", descripcion="Señal de piso 2 caras", estatus="activo"),
+        Herramienta(herramienta_id="HE-PA-001", nombre="PAÑO", descripcion="Paño de microfibra", estatus="activo"),
+        Herramienta(herramienta_id="HE-BA-002", nombre="BASTON", descripcion="Bastón retractil", estatus="activo"),
+        Herramienta(herramienta_id="HE-PL-001", nombre="PLUMERO", descripcion="Plumero de microfibra", estatus="activo"),
     ]
     db.session.add_all(herramientas)
 
-
-    # ======================================================
-    # KITS DE LIMPIEZA
-    # ======================================================
-
     kits = [
-    Kit(kit_id="KIT_SANITARIOS", nombre="Kit de sanitarios"),
-    Kit(kit_id="KIT_MUEBLES", nombre="Kit de muebles y superficies"),
-    Kit(kit_id="KIT_PISOS", nombre="Kit de pisos interiores"),
-    Kit(kit_id="KIT_CRISTALES", nombre="Kit de cristales y vidrios"),
-    Kit(kit_id="KIT_TAPETES", nombre="Kit de tapetes y alfombras"),
+        Kit(kit_id="KT-BS-001-P", nombre="Kit Basura"),
+        Kit(kit_id="KT-CO-001-B", nombre="Kit Senaletica"),
+        Kit(kit_id="KT-SP-001-P", nombre="Kit Superficie"),
     ]
     db.session.add_all(kits)
 
-
-    # ======================================================
-    # DETALLES DE CADA KIT
-    # ======================================================
-
     kit_detalles = [
-    # --- Kit de sanitarios ---
-    KitDetalle(kit_id="KIT_SANITARIOS", herramienta_id="H_GUANTES", color="Azul", nota="Uso exclusivo para baños."),
-    KitDetalle(kit_id="KIT_SANITARIOS", herramienta_id="H_TRAPEADOR", color="Azul", nota="Trapeador exclusivo de baños."),
-    KitDetalle(kit_id="KIT_SANITARIOS", herramienta_id="H_CUBETA", color="Azul", nota="Cubeta con escurridor, área sanitaria."),
+        #Kit Senaletica
+        KitDetalle(kit_id="KT-CO-001-B", herramienta_id="HE-SE-001", nota="Kit Senaletica"),
 
-    # --- Kit de muebles ---
-    KitDetalle(kit_id="KIT_MUEBLES", herramienta_id="H_PANO_VERDE", color="Verde", nota="Paño asignado a limpieza de escritorios y mobiliario."),
-    KitDetalle(kit_id="KIT_MUEBLES", herramienta_id="H_ATOMIZADOR", color="Verde", nota="Uso con desinfectante neutro."),
+        #Kit Basura
+        KitDetalle(kit_id="KT-BS-001-P", herramienta_id="HE-PA-001", nota="Kit Basura"),
 
-    # --- Kit de pisos ---
-    KitDetalle(kit_id="KIT_PISOS", herramienta_id="H_TRAPEADOR", color="Gris", nota="Trapeador multiuso para pisos de oficina."),
-    KitDetalle(kit_id="KIT_PISOS", herramienta_id="H_CUBETA", color="Gris", nota="Cubeta general para trapeado."),
-    KitDetalle(kit_id="KIT_PISOS", herramienta_id="H_GUANTES", color="Gris", nota="Protección básica para tareas de piso."),
-
-    # --- Kit de cristales ---
-    KitDetalle(kit_id="KIT_CRISTALES", herramienta_id="H_FRANELA_CRISTALES", color="Blanco", nota="Secado sin rayas."),
-    KitDetalle(kit_id="KIT_CRISTALES", herramienta_id="H_ATOMIZADOR", color="Blanco", nota="Uso con limpiavidrios."),
-    KitDetalle(kit_id="KIT_CRISTALES", herramienta_id="H_GUANTES", color="Blanco", nota="Protección básica, tareas delicadas."),
-
-    # --- Kit de tapetes ---
-    KitDetalle(kit_id="KIT_TAPETES", herramienta_id="H_ESCOBA", color="Negro", nota="Escoba asignada a tapetes."),
-    KitDetalle(kit_id="KIT_TAPETES", herramienta_id="H_RECOGEDOR", color="Negro", nota="Complemento para barrer."),
-    KitDetalle(kit_id="KIT_TAPETES", herramienta_id="H_GUANTES", color="Negro", nota="Uso exclusivo en exteriores o tapetes."),
+        #Kit Superficie
+        KitDetalle(kit_id="KT-SP-001-P", herramienta_id="HE-BA-002", nota="Kit Superficie"),
+        KitDetalle(kit_id="KT-SP-001-P", herramienta_id="HE-PL-001", nota="Kit Superficie"),
     ]
     db.session.add_all(kit_detalles)
 
-    # ======================================================
-    # QUÍMICOS BASE
-    # ======================================================
-
+    
     quimicos = [
-    Quimico(quimico_id="Q_DETERGENTE_NEUTRO", nombre="Detergente neutro", categoria="Limpieza general", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_DESINFECTANTE_MULTI", nombre="Desinfectante multisuperficies", categoria="Desinfección", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_LIMPIAVIDRIOS", nombre="Limpiavidrios con amonio", categoria="Cristales", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_DESINCRUSTANTE", nombre="Desincrustante ácido", categoria="Baños", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_DETERGENTE_PISOS", nombre="Limpiador de pisos neutro", categoria="Pisos", presentacion="5L", unidad_base="ml"),
-    Quimico(quimico_id="Q_DESENGRASANTE", nombre="Desengrasante alcalino", categoria="Cocinas", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_AMONIO_CUAT", nombre="Amonio cuaternario", categoria="Desinfección avanzada", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_JABON_MANOS", nombre="Jabón líquido manos", categoria="Higiene", presentacion="1L", unidad_base="ml"),
-    Quimico(quimico_id="Q_ALCOHOL_70", nombre="Alcohol al 70%", categoria="Desinfección", presentacion="1L", unidad_base="ml"),
+        Quimico(quimico_id="QU-DS-001", nombre="Alpha HP", categoria="DESINFECTANTE", presentacion="Liquido", unidad_base="mL"),
     ]
     db.session.add_all(quimicos)
 
-
-    # ======================================================
-    # RECETAS (Combinaciones de productos)
-    # ======================================================
-
     recetas = [
-    Receta(receta_id="R_SUPERFICIES", nombre="Solución para superficies generales"),
-    Receta(receta_id="R_PISOS", nombre="Solución neutra para pisos interiores"),
-    Receta(receta_id="R_VIDRIOS", nombre="Solución limpiavidrios lista para uso"),
-    Receta(receta_id="R_SANITARIOS", nombre="Desinfección de baños y lavabos"),
-    Receta(receta_id="R_DESINFECCION", nombre="Desinfección de contacto diario"),
-    Receta(receta_id="R_TAPETES", nombre="Aromatización y limpieza ligera de tapetes"),
+        Receta(receta_id="RE-SA-001", nombre="Sacudir Elementos"),
     ]
     db.session.add_all(recetas)
 
-
-    # ======================================================
-    # DETALLES DE CADA RECETA
-    # ======================================================
-
     receta_detalles = [
-    # --- R_SUPERFICIES ---
-    RecetaDetalle(receta_id="R_SUPERFICIES", quimico_id="Q_DETERGENTE_NEUTRO", dosis=30, unidad_dosis="ml/L", nota="Diluir en 1 litro de agua para limpieza básica."),
-    RecetaDetalle(receta_id="R_SUPERFICIES", quimico_id="Q_DESINFECTANTE_MULTI", dosis=20, unidad_dosis="ml/L", nota="Agregar al mismo atomizador para desinfección ligera."),
-
-    # --- R_PISOS ---
-    RecetaDetalle(receta_id="R_PISOS", quimico_id="Q_DETERGENTE_PISOS", dosis=40, unidad_dosis="ml/L", nota="Diluir en cubeta con 10L de agua."),
-    RecetaDetalle(receta_id="R_PISOS", quimico_id="Q_AMONIO_CUAT", dosis=10, unidad_dosis="ml/L", nota="Complementar para áreas de tránsito medio."),
-
-    # --- R_VIDRIOS ---
-    RecetaDetalle(receta_id="R_VIDRIOS", quimico_id="Q_LIMPIAVIDRIOS", dosis=100, unidad_dosis="ml/L", nota="Uso directo en atomizador, no requiere dilución."),
-    RecetaDetalle(receta_id="R_VIDRIOS", quimico_id="Q_ALCOHOL_70", dosis=50, unidad_dosis="ml/L", nota="Acelera el secado sin residuos."),
-
-    # --- R_SANITARIOS ---
-    RecetaDetalle(receta_id="R_SANITARIOS", quimico_id="Q_DESINCRUSTANTE", dosis=50, unidad_dosis="ml/L", nota="Aplicar directamente en sanitarios y lavabos."),
-    RecetaDetalle(receta_id="R_SANITARIOS", quimico_id="Q_DESINFECTANTE_MULTI", dosis=30, unidad_dosis="ml/L", nota="Refuerzo general para superficies no porosas."),
-
-    # --- R_DESINFECCION ---
-    RecetaDetalle(receta_id="R_DESINFECCION", quimico_id="Q_AMONIO_CUAT", dosis=25, unidad_dosis="ml/L", nota="Diluir en atomizador para rociar sobre superficies."),
-    RecetaDetalle(receta_id="R_DESINFECCION", quimico_id="Q_ALCOHOL_70", dosis=25, unidad_dosis="ml/L", nota="Desinfección rápida entre usos."),
-
-    # --- R_TAPETES ---
-    RecetaDetalle(receta_id="R_TAPETES", quimico_id="Q_DETERGENTE_NEUTRO", dosis=20, unidad_dosis="ml/L", nota="Diluir en atomizador y aplicar sobre tapete."),
-    RecetaDetalle(receta_id="R_TAPETES", quimico_id="Q_DESINFECTANTE_MULTI", dosis=10, unidad_dosis="ml/L", nota="Refuerzo desinfectante aromático."),
+        RecetaDetalle(receta_id="RE-SA-001", quimico_id="QU-DS-001", dosis=8, unidad_dosis="mL", volumen_base=1000, unidad_volumen="mL", nota="Sacudir Elementos"),
     ]
     db.session.add_all(receta_detalles)
 
 
     # ======================================================
-    # OFICINA 01 — ELEMENTOS
+    # 8) ELEMENTOS (por subárea)
     # ======================================================
-    elementos_of1 = [
-    # Muebles
-    Elemento(elemento_id="E_AD_DI_OF01_SILLA_EJECUTIVA", subarea_id="AD-DI-OF-01", nombre="Silla ejecutiva", material="Piel y metal", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_SILLAS_VISITA", subarea_id="AD-DI-OF-01", nombre="Sillas de visita", material="Tela y metal", cantidad=2, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_MESA_REDONDA", subarea_id="AD-DI-OF-01", nombre="Mesa redonda", material="Madera", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_SILLAS_MESA", subarea_id="AD-DI-OF-01", nombre="Sillas mesa redonda", material="Madera", cantidad=4, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_ESCRITORIO", subarea_id="AD-DI-OF-01", nombre="Escritorio", material="Madera", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_ARCHIVERO", subarea_id="AD-DI-OF-01", nombre="Mueble archivero", material="Madera", cantidad=1, estatus="activo"),
-
-    # Baño
-    Elemento(elemento_id="E_AD_DI_OF01_TAZA", subarea_id="AD-DI-OF-01", nombre="Taza de baño", material="Porcelana", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_LAVAMANOS", subarea_id="AD-DI-OF-01", nombre="Lavamanos", material="Porcelana", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF01_ESPEJO", subarea_id="AD-DI-OF-01", nombre="Espejo", material="Cristal", cantidad=1, estatus="activo"),
+    elementos = [
+        # AD-DI-BA-001
+        Elemento(elemento_id="EL-IL-001", subarea_id="AD-DI-BA-001", nombre="ILLUXLÁMPARA", cantidad=1, estatus="activo"),
+        Elemento(elemento_id="EL-BO-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo"),
+        Elemento(elemento_id="EL-LM-001", subarea_id="AD-DI-BA-001", nombre="LAMPARA", cantidad=1, estatus="activo"),
+        Elemento(elemento_id="EL-BP-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo"),
     ]
-    db.session.add_all(elementos_of1)
-
+    db.session.add_all(elementos)
 
     # ======================================================
-    # OFICINA 01 — ELEMENTO SETS
+    # 9) ELEMENTO SET (por subárea + fracción + nivel)
+    # Formato sugerido: ES-<SUBAREA>-<FRACCION>-<B|M|P>
     # ======================================================
-    sets_of1 = [
-    ElementoSet(elemento_set_id="ES_AD_DI_OF01_MUEBLES", nombre="Set Muebles Oficina 01"),
-    ElementoSet(elemento_set_id="ES_AD_DI_OF01_BANO", nombre="Set Baño Oficina 01"),
+    es_sp_001_p_ad_di_ba_001 = ElementoSet(
+        elemento_set_id="ES-SP-001-P", 
+        subarea_id="AD-DI-BA-001",
+        fraccion_id="FR-SP-001",
+        nivel_limpieza_id=3,
+        nombre="Set Sacudir superficies AD-DI-BA-001 (Profunda)"
+    )
+    db.session.add_all([es_sp_001_p_ad_di_ba_001])
+
+    # ======================================================
+    # 10) ELEMENTO DETALLE (cada elemento puede traer su kit/receta)
+    # ======================================================
+    elemento_detalles = [
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-IL-001", kit_id="KT-SP-001-P", receta_id=None),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BO-001", kit_id="KT-SP-001-P", receta_id=None),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-LM-001", kit_id="KT-SP-001-P", receta_id=None),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BP-001", kit_id="KT-SP-001-P", receta_id=None),
     ]
-    db.session.add_all(sets_of1)
-
+    db.session.add_all(elemento_detalles)
 
     # ======================================================
-    # OFICINA 01 — ELEMENTO DETALLES
+    # 11) SOPFRACCION (qué fracciones tiene cada SOP)
+    # Fracciones del SOP
     # ======================================================
-    detalles_of1 = [
-    # --- Set Muebles ---
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_SILLA_EJECUTIVA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_SILLAS_VISITA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_MESA_REDONDA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_SILLAS_MESA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_ESCRITORIO", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_MUEBLES", elemento_id="E_AD_DI_OF01_ARCHIVERO", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
+    # BA-001: Senaletica + Basura + Sacudir Superficies
+    sf1 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-1", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-CO-001", orden=1)
+    sf2 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-2", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-BS-001", orden=2)
+    sf3 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-3", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-SP-001", orden=3)
 
-    # --- Set Baño ---
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_BANO", elemento_id="E_AD_DI_OF01_TAZA", kit_id="KIT_SANITARIOS", receta_id="R_SANITARIOS"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_BANO", elemento_id="E_AD_DI_OF01_LAVAMANOS", kit_id="KIT_SANITARIOS", receta_id="R_SANITARIOS"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF01_BANO", elemento_id="E_AD_DI_OF01_ESPEJO", kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS"),
+
+    db.session.add_all([sf1, sf2, sf3])
+
+    # ======================================================
+    # 12) SOPFRACCIONDETALLE (por nivel)
+    # Formato: SD-<SOPFRACCION>-<NIVEL>
+    # ======================================================
+    detalles = [
+
+        #Colocar Senaletica
+        #   Bajo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-1",
+            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            nivel_limpieza_id=1,
+            metodologia_id="MT-CO-001-B",
+            kit_id="KT-CO-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=0.5
+        ),
+
+        #Colocar Senaletica
+        #   Medio
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-2",
+            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            nivel_limpieza_id=2,
+            metodologia_id="MT-CO-001-M",
+            kit_id="KT-CO-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=0.5
+        ),
+
+        #Colocar Senaletica
+        #   Profundo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-3",
+            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            nivel_limpieza_id=3,
+            metodologia_id="MT-CO-001-P",
+            kit_id="KT-CO-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=0.5
+        ),
+
+        
+        #Sacar Basura
+        #   Bajo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-4",
+            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            nivel_limpieza_id=1,
+            metodologia_id="MT-BS-001-B",
+            kit_id=None,
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=1
+        ),
+
+        #Sacar Basura
+        #   Medio
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-5",
+            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            nivel_limpieza_id=2,
+            metodologia_id="MT-BS-001-M",
+            kit_id=None,
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=1
+        ),
+
+        #Sacar Basura
+        #   Profundo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-6",
+            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            nivel_limpieza_id=3,
+            metodologia_id="MT-BS-001-P",
+            kit_id="KT-BS-001-P",
+            receta_id="RE-SA-001",
+            elemento_set_id=None,
+            tiempo_unitario_min=5
+        ),
+
+        #Sacudir Superficies
+        #   Profundo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-7",
+            sop_fraccion_id="SF-AD-DI-BA-001-3",
+            nivel_limpieza_id=3,
+            metodologia_id="MT-SP-001-P",
+            kit_id=None,
+            receta_id=None,
+            elemento_set_id="ES-SP-001-P",
+            tiempo_unitario_min=10
+        ),
+        
     ]
-    db.session.add_all(detalles_of1)
+    db.session.add_all(detalles)
 
-
-    # ======================================================
-    # SALA DE JUNTAS — ELEMENTOS
-    # ======================================================
-    elementos_sa1 = [
-    Elemento(elemento_id="E_AD_DI_SA01_MESA_REDONDA", subarea_id="AD-DI-SA-01", nombre="Mesa de vidrio", material="Cristal y metal", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_SA01_SILLAS", subarea_id="AD-DI-SA-01", nombre="Sillas tapizadas", material="Tela y metal", cantidad=6, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_SA01_MUEBLE_AUX", subarea_id="AD-DI-SA-01", nombre="Mueble auxiliar", material="Madera", cantidad=1, estatus="activo"),
-    ]
-    db.session.add_all(elementos_sa1)
-
-
-    # ======================================================
-    # SALA DE JUNTAS — ELEMENTO SETS
-    # ======================================================
-    sets_sa1 = [
-    ElementoSet(elemento_set_id="ES_AD_DI_SA01_MUEBLES", nombre="Set Muebles Sala de Juntas 01"),
-    ]
-    db.session.add_all(sets_sa1)
-
-
-    # ======================================================
-    # SALA DE JUNTAS — ELEMENTO DETALLES
-    # ======================================================
-    detalles_sa1 = [
-    ElementoDetalle(elemento_set_id="ES_AD_DI_SA01_MUEBLES", elemento_id="E_AD_DI_SA01_MESA_REDONDA", kit_id="KIT_CRISTALES", receta_id="R_VIDRIOS"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_SA01_MUEBLES", elemento_id="E_AD_DI_SA01_SILLAS", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_SA01_MUEBLES", elemento_id="E_AD_DI_SA01_MUEBLE_AUX", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ]
-    db.session.add_all(detalles_sa1)
-
-    # ======================================================
-    # OFICINA 02 — ELEMENTOS
-    # ======================================================
-    elementos_of2 = [
-    Elemento(elemento_id="E_AD_DI_OF02_SILLA_EJECUTIVA", subarea_id="AD-DI-OF-02", nombre="Silla ejecutiva", material="Piel y metal", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF02_SILLAS_VISITA", subarea_id="AD-DI-OF-02", nombre="Sillas de visita", material="Tela y metal", cantidad=2, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF02_ESCRITORIO", subarea_id="AD-DI-OF-02", nombre="Escritorio", material="Madera", cantidad=1, estatus="activo"),
-    Elemento(elemento_id="E_AD_DI_OF02_ARCHIVERO", subarea_id="AD-DI-OF-02", nombre="Mueble archivero", material="Madera", cantidad=1, estatus="activo"),
-    ]
-    db.session.add_all(elementos_of2)
-
-
-    # ======================================================
-    # OFICINA 02 — ELEMENTO SETS
-    # ======================================================
-    sets_of2 = [
-    ElementoSet(elemento_set_id="ES_AD_DI_OF02_MUEBLES", nombre="Set Muebles Oficina 02"),
-    ]
-    db.session.add_all(sets_of2)
-
-
-    # ======================================================
-    # OFICINA 02 — ELEMENTO DETALLES
-    # ======================================================
-    detalles_of2 = [
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF02_MUEBLES", elemento_id="E_AD_DI_OF02_SILLA_EJECUTIVA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF02_MUEBLES", elemento_id="E_AD_DI_OF02_SILLAS_VISITA", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF02_MUEBLES", elemento_id="E_AD_DI_OF02_ESCRITORIO", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ElementoDetalle(elemento_set_id="ES_AD_DI_OF02_MUEBLES", elemento_id="E_AD_DI_OF02_ARCHIVERO", kit_id="KIT_MUEBLES", receta_id="R_SUPERFICIES"),
-    ]
-    db.session.add_all(detalles_of2)
-
-   
-    
     db.session.commit()
-    print("🎉 Dataset completo insertado correctamente.")
+    print("🎉 seed_data_v2 insertado correctamente.")
