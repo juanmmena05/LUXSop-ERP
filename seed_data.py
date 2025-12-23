@@ -131,7 +131,8 @@ with app.app_context():
     fr_bs_001 = Fraccion(fraccion_id="FR-BS-001", fraccion_nombre="Sacar Basura", nota_tecnica="Si hay liquido en el bote, proceder a lavado extraordinario")
     fr_sp_001 = Fraccion(fraccion_id="FR-SP-001", fraccion_nombre="Sacudir Superficies", nota_tecnica="No sacudir superficies despues de la limpieza de pisos")
     fr_vi_001 = Fraccion(fraccion_id="FR-VI-001", fraccion_nombre="Limpiar Vidrios", nota_tecnica="")
-    db.session.add_all([fr_co_001, fr_bs_001, fr_sp_001, fr_vi_001])
+    fr_ba_001 = Fraccion(fraccion_id="FR-BA-001", fraccion_nombre="Barrer", nota_tecnica="Aplicar presion media en zonas con exceso de polvo.")
+    db.session.add_all([fr_co_001, fr_bs_001, fr_sp_001, fr_vi_001, fr_ba_001])
 
     # ======================================================
     # 6) METODOLOGÍAS (por fracción + nivel)
@@ -139,31 +140,30 @@ with app.app_context():
     # ======================================================
     metodologias = [
         #Colocar Senaletica
-        Metodologia(metodologia_id="MT-CO-001-B", fraccion_id="FR-CO-001", nivel_limpieza_id=1,
-                    descripcion="Colocar senaletica en la entrada de la subarea"),
-        Metodologia(metodologia_id="MT-CO-001-M", fraccion_id="FR-CO-001", nivel_limpieza_id=2,
-                    descripcion="Colocar senaletica en la entrada de la subarea"),
-        Metodologia(metodologia_id="MT-CO-001-P", fraccion_id="FR-CO-001", nivel_limpieza_id=3,
-                    descripcion="Colocar senaletica en la entrada de la subarea"),
+        Metodologia(metodologia_id="MT-CO-001-B", fraccion_id="FR-CO-001", nivel_limpieza_id=1, descripcion="Colocar senaletica en la entrada de la subarea"),
+        Metodologia(metodologia_id="MT-CO-001-M", fraccion_id="FR-CO-001", nivel_limpieza_id=2, descripcion="Colocar senaletica en la entrada de la subarea"),
+        Metodologia(metodologia_id="MT-CO-001-P", fraccion_id="FR-CO-001", nivel_limpieza_id=3, descripcion="Colocar senaletica en la entrada de la subarea"),
         
         
         # Sacar Basura
-        Metodologia(metodologia_id="MT-BS-001-B", fraccion_id="FR-BS-001", nivel_limpieza_id=1,
-                    descripcion="Retirar bolsas y reemplazar por nuevas."),
-        Metodologia(metodologia_id="MT-BS-001-M", fraccion_id="FR-BS-001", nivel_limpieza_id=2,
-                    descripcion="Retirar bolsas y reemplazar por nuevas."),
-        Metodologia(metodologia_id="MT-BS-001-P", fraccion_id="FR-BS-001", nivel_limpieza_id=3,
-                    descripcion="Retirar basura, sacudir bote, reemplazar bolsas"),
+        Metodologia(metodologia_id="MT-BS-001-B", fraccion_id="FR-BS-001", nivel_limpieza_id=1, descripcion="Retirar bolsas y reemplazar por nuevas."),
+        Metodologia(metodologia_id="MT-BS-001-M", fraccion_id="FR-BS-001", nivel_limpieza_id=2, descripcion="Retirar bolsas y reemplazar por nuevas."),
+        Metodologia(metodologia_id="MT-BS-001-P", fraccion_id="FR-BS-001", nivel_limpieza_id=3, descripcion="Retirar basura, sacudir bote, reemplazar bolsas"),
 
         # Sacudir Superficies
         # Solo existe la metodologia profunda para sacudir superficies
-        Metodologia(metodologia_id="MT-SP-001-P", fraccion_id="FR-SP-001", nivel_limpieza_id=3,
-                    descripcion="Despejar, limpiar y bordes y esquinas superiores."),
+        Metodologia(metodologia_id="MT-SP-001-P", fraccion_id="FR-SP-001", nivel_limpieza_id=3, descripcion="Despejar, limpiar y bordes y esquinas superiores."),
 
         #Limpiar Vidrios
         #Solo existe la metodologia profunda para limpiar vidrios
-        Metodologia(metodologia_id="MT-VI-001-P", fraccion_id="FR-VI-001", nivel_limpieza_id=3,
-                    descripcion="Limpiar Vidrios"),
+        Metodologia(metodologia_id="MT-VI-001-P", fraccion_id="FR-VI-001", nivel_limpieza_id=3, descripcion="Limpiar Vidrios"),
+
+        #Barrer
+        Metodologia(metodologia_id="MT-BA-001-B", fraccion_id="FR-BA-001", nivel_limpieza_id=1, descripcion="Barrer"),
+        Metodologia(metodologia_id="MT-BA-001-M", fraccion_id="FR-BA-001", nivel_limpieza_id=2, descripcion="Barrer"),
+        Metodologia(metodologia_id="MT-BA-001-P", fraccion_id="FR-BA-001", nivel_limpieza_id=3, descripcion="Barrer"),
+        
+
     ]
     db.session.add_all(metodologias)
 
@@ -222,6 +222,24 @@ with app.app_context():
         MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=4, instruccion="Vidrios medios e inferiores: Aplique el químico directamente sobre la microfibra y prepare el paño utilizando la técnica de 8 caras (TM-SA-001)."),
         MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=5, instruccion="Limpie el vidrio de arriba hacia abajo y de izquierda a derecha utilizando la técnica (TM-VI-001) una cara húmeda de la microfibra; cambiar cara cuando esté sucia."),
         MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=6, instruccion="Revise el vidrio contra la luz y corrija irregularidades utilizando la técnica de 8 caras (TM-SA-001)."),
+
+        #Barrer
+        #Baja
+        MetodologiaPasos(metodologia_id="MT-BA-001-B", orden=1, instruccion="No mueva muebles ni objetos; solo se barrerán las áreas visibles."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-B", orden=2, instruccion="Aplique Barrido Bajo (TM-BA-001): barridos cortos, lineales y con presión ligera"),
+        MetodologiaPasos(metodologia_id="MT-BA-001-B", orden=3, instruccion="Conduzca la basura hacia un solo montón de recolección por subárea y recójala con el recogedor, depositando en la bolsa o bote asignado."),
+        
+        #Media
+        MetodologiaPasos(metodologia_id="MT-BA-001-M", orden=1, instruccion="Mueva únicamente objetos ligeros (botes, sillas, cestos, orillas de alfombras) para permitir el acceso al piso."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-M", orden=2, instruccion="Aplique Barrido Medio (TM-BA-002): barridos cortos, lineales y con presión ligera."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-M", orden=3, instruccion="Asegure el barrido de las orillas visibles y la zona por debajo de los objetos movidos."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-M", orden=4, instruccion="Conduzca la basura hacia un solo montón de recolección por subárea y recójala con el recogedor, depositando en la bolsa o bote asignado."),
+
+        #Profunda
+        MetodologiaPasos(metodologia_id="MT-BA-001-P", orden=1, instruccion="Mueva todos los objetos posibles del área (solo los que pueda cargar con seguridad) para descubrir zonas ocultas del piso."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-P", orden=2, instruccion="Aplique Barrido Profundo (TM-BA-003): barridos cortos, lineales, con presión ligera–media."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-P", orden=3, instruccion="Asegure el barrido de orillas, bordes y esquinas, así como de todas las zonas ocultas expuestas."),
+        MetodologiaPasos(metodologia_id="MT-BA-001-P", orden=4, instruccion="Conduzca la basura hacia un solo montón de recolección por subárea y recójala con el recogedor, depositando en la bolsa o bote asignado.")
         
     ]
     db.session.add_all(pasos)
@@ -237,6 +255,8 @@ with app.app_context():
         Herramienta(herramienta_id="HE-PL-001", nombre="PLUMERO", descripcion="Plumero Microfibra", estatus="activo"),
         Herramienta(herramienta_id="HE-PA-002", nombre="PAÑO", descripcion="Paño Vidrios", estatus="activo"),
         Herramienta(herramienta_id="HE-MO-003", nombre="MOP", descripcion="MOP Vidrios", estatus="activo"),
+        Herramienta(herramienta_id="HE-ES-001", nombre="ESCOBA", descripcion="Escoba Angular", estatus="activo"),
+        Herramienta(herramienta_id="HE-RE-001", nombre="RECOGEDOR", descripcion="Recogedor", estatus="activo"),
     ]
     db.session.add_all(herramientas)
 
@@ -246,6 +266,7 @@ with app.app_context():
         Kit(kit_id="KT-SP-001-P", nombre="Kit Superficie"),
         Kit(kit_id="KT-VI-001-P", nombre="Kit Vidrios Superior"),
         Kit(kit_id="KT-VI-002-P", nombre="Kit Vidrios Inferior"),
+        Kit(kit_id="KT-BA-001-B", nombre="Kit Barrer"),
     ]
     db.session.add_all(kits)
 
@@ -266,6 +287,10 @@ with app.app_context():
 
         #Kit Vidrios Inferior
         KitDetalle(kit_id="KT-VI-002-P", herramienta_id="HE-PA-002", nota="Kit Vidrios Inferior"),
+
+        #Kit Barrer
+        KitDetalle(kit_id="KT-BA-001-B", herramienta_id="HE-ES-001", nota="Kit Barrer"),
+        KitDetalle(kit_id="KT-BA-001-B", herramienta_id="HE-RE-001", nota="Kit Barrer"),
     
     ]
     db.session.add_all(kit_detalles)
@@ -345,14 +370,14 @@ with app.app_context():
     # 11) SOPFRACCION (qué fracciones tiene cada SOP)
     # Fracciones del SOP
     # ======================================================
-    # BA-001: Senaletica + Basura + Sacudir Superficies
     sf1 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-CO-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-CO-001", orden=1)
     sf2 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-BS-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-BS-001", orden=2)
     sf3 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-SP-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-SP-001", orden=3)
     sf4 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-VI-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-VI-001", orden=4)
+    sf5 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-BA-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-BA-001", orden=5)
 
 
-    db.session.add_all([sf1, sf2, sf3, sf4])
+    db.session.add_all([sf1, sf2, sf3, sf4, sf5])
 
     # ======================================================
     # 12) SOPFRACCIONDETALLE (por nivel)
@@ -464,6 +489,45 @@ with app.app_context():
             receta_id=None,
             elemento_set_id="ES-VI-001-P",
             tiempo_unitario_min=10
+        ),
+
+        #Barrer
+        #   Bajo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SF-AD-DI-BA-001-BA-001-B",
+            sop_fraccion_id="SF-AD-DI-BA-001-BA-001",
+            nivel_limpieza_id=1,
+            metodologia_id="MT-BA-001-B",
+            kit_id="KT-BA-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=3
+        ),
+
+        #Barrer
+        #   Medio
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SF-AD-DI-BA-001-BA-001-M",
+            sop_fraccion_id="SF-AD-DI-BA-001-BA-001",
+            nivel_limpieza_id=2,
+            metodologia_id="MT-BA-001-M",
+            kit_id="KT-BA-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=4
+        ),
+
+        #Barrer
+        #   Medio
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SF-AD-DI-BA-001-BA-001-P",
+            sop_fraccion_id="SF-AD-DI-BA-001-BA-001",
+            nivel_limpieza_id=3,
+            metodologia_id="MT-BA-001-P",
+            kit_id="KT-BA-001-B",
+            receta_id=None,
+            elemento_set_id=None,
+            tiempo_unitario_min=5
         ),
         
     ]
