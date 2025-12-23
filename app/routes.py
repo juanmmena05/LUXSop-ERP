@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, date, timedelta
 
 import pdfkit
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort
 from sqlalchemy.orm import joinedload
 
 from .extensions import db
@@ -139,12 +139,20 @@ def fmt_consumo(c) -> str:
     return left or "No aplica"
 
 
-def fmt_herramientas(kit) -> str:
+def fmt_herramientas(kit) -> list[str]:
+    """
+    Devuelve una lista de descripciones de herramientas.
+    Si no hay herramientas, devuelve lista vacía.
+    """
     if not kit:
-        return "No aplica"
+        return []
     dets = getattr(kit, "detalles", None) or []
-    nombres = [kd.herramienta.nombre for kd in dets if getattr(kd, "herramienta", None)]
-    return " - ".join(nombres) if nombres else na(getattr(kit, "nombre", None))
+    return [
+        kd.herramienta.descripcion
+        for kd in dets
+        if getattr(kd, "herramienta", None) and getattr(kd.herramienta, "descripcion", None)
+    ]
+
 
 
 def fmt_receta(receta) -> str:
@@ -680,7 +688,7 @@ def reporte_persona_dia(fecha, personal_id):
                 headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
                 rows = []
 
-                for ed in (elemento_set.detalles or []):
+                for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
                     elemento = getattr(ed, "elemento", None)
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
@@ -688,7 +696,7 @@ def reporte_persona_dia(fecha, personal_id):
                     h_str = fmt_herramientas(getattr(ed, "kit", None))
 
                     rows.append([
-                        na(getattr(elemento, "nombre", None)),
+                        na(getattr(elemento, "descripcion", None)),
                         na(str(getattr(elemento, "cantidad", None) or "")),
                         q_str,
                         r_str,
@@ -878,7 +886,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
                 rows = []
 
-                for ed in (elemento_set.detalles or []):
+                for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
                     elemento = getattr(ed, "elemento", None)
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
@@ -886,7 +894,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     h_str = fmt_herramientas(getattr(ed, "kit", None))
 
                     rows.append([
-                        na(getattr(elemento, "nombre", None)),
+                        na(getattr(elemento, "descripcion", None)),
                         na(str(getattr(elemento, "cantidad", None) or "")),
                         q_str,
                         r_str,
@@ -1213,3 +1221,33 @@ def borrar_plantilla(plantilla_id):
     db.session.commit()
     flash(f'Plantilla "{plantilla.nombre}" eliminada correctamente.', "success")
     return redirect(url_for("main.home"))
+
+
+
+# =========================
+# Ordenar Elementos Plantilla
+# =========================
+@main_bp.route("/elemento_set/<elemento_set_id>/orden", methods=["GET", "POST"])
+def ordenar_elementoset(elemento_set_id):
+    es = (
+        ElementoSet.query.options(
+            joinedload(ElementoSet.detalles).joinedload(ElementoDetalle.elemento)
+        )
+        .filter_by(elemento_set_id=elemento_set_id)
+        .first()
+    )
+    if not es:
+        abort(404)
+
+    if request.method == "POST":
+        for ed in es.detalles or []:
+            key = f"orden_{ed.elemento_id}"
+            val = (request.form.get(key) or "").strip()
+            if val.isdigit():
+                ed.orden = int(val)
+        db.session.commit()
+        flash("✅ Orden actualizado.", "success")
+        return redirect(url_for("main.ordenar_elementoset", elemento_set_id=elemento_set_id))
+
+    detalles = sorted((es.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id))
+    return render_template("elementoset_orden.html", es=es, detalles=detalles)

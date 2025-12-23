@@ -148,7 +148,7 @@
     table.elementos-tabla th,
     table.elementos-tabla td{
       border: 1px solid #ddd;
-      text-align: center;       /* ✅ CENTRAR encabezados y celdas */
+      text-align: center;
       vertical-align: middle;
     }
     table.elementos-tabla th{
@@ -170,6 +170,26 @@
       font-size: .85rem;
     }
 
+    /* ✅ Igual que reporte_personal: herramientas como "chips" */
+    .herramientas-grid{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: center;
+      align-items: center;
+      width: max-content;
+      margin: 0 auto;
+    }
+    .herramienta-box{
+      background: #eef2ff;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      text-align: center;
+      display: inline-block;
+      white-space: nowrap;
+    }
+
     .footer{
       margin-top: 20px;
       text-align: center;
@@ -189,12 +209,6 @@
   <div class="wrap">
     <div class="head">
       <div>
-        <div class="head">
-          <div>
-            <h1>SOP — Reporte</h1>
-          </div>
-        </div>
-
         <div class="meta">
           <div><strong>Operario:</strong> {{ persona.nombre }}</div>
           <div><strong>Fecha:</strong> {{ fecha.strftime('%Y-%m-%d') }}</div>
@@ -207,7 +221,6 @@
               <div class="panel-title">
                 <h2>{{ d.subarea }}</h2>
                 <div class="panel-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></div>
-                <div class="code-badge">{{ d.sop_codigo if d.sop_codigo else 'SOP: N/D' }}</div>
               </div>
 
               {% if d.observacion_critica %}
@@ -253,7 +266,17 @@
                             {% for row in f.tabla.rows %}
                               <tr>
                                 {% for cell in row %}
-                                  <td>{{ cell }}</td>
+                                  <td>
+                                    {% if loop.last and cell is iterable and cell is not string %}
+                                      <div class="herramientas-grid">
+                                        {% for herramienta in cell %}
+                                          <div class="herramienta-box">{{ herramienta }}</div>
+                                        {% endfor %}
+                                      </div>
+                                    {% else %}
+                                      {{ cell }}
+                                    {% endif %}
+                                  </td>
                                 {% endfor %}
                               </tr>
                             {% endfor %}

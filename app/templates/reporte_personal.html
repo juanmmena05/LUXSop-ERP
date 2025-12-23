@@ -92,7 +92,6 @@
       font-size: .85rem;
       text-align: center;
     }
-
     .tiempo-box {
       background: #f8f9fa;
       font-size: 0.75rem;
@@ -104,22 +103,18 @@
       display: inline-block;
     }
     .section-line { border-top: 1px solid #eee; margin: 10px 0; }
-
     .metodologia ol {
       margin-left: 1.2rem;
       padding-left: 0;
       font-size: 0.85rem;
       margin-top: 4px;
     }
-
     .nota-tecnica {
       margin-top: 6px;
       font-size: 0.85rem;
       color: var(--muted);
       font-style: italic;
     }
-
-    /* Título principal de cada fracción */
     .list li > div strong {
       font-size: 1.1rem;
       color: var(--fg);
@@ -128,13 +123,11 @@
       display: inline-block;
       margin-bottom: 4px;
     }
-    /* Subtítulo 'Metodología' más ligero */
     .metodologia strong {
       font-size: 1rem !important;
       font-weight: 400 !important;
       letter-spacing: 0.10px;
     }
-
     .list li {
       border-bottom: none;
       box-shadow: 0 1px 0 0 rgba(0,0,0,0.06);
@@ -142,8 +135,6 @@
       margin-bottom: 12px;
     }
     .list li:last-child { box-shadow: none; }
-
-    /* Tabla de fracción (con o sin elementos) */
     table.elementos-tabla {
       width: 100%;
       border-collapse: collapse;
@@ -152,16 +143,14 @@
     }
     table.elementos-tabla th, table.elementos-tabla td {
       border: 1px solid #ddd;
-      padding: 6px 8px;
-      text-align: center;         /* ✅ CENTRAR */
-      vertical-align: middle;     /* ✅ CENTRAR */
+      padding: 4px 4px;
+      text-align: center;
+      vertical-align: middle;
     }
     table.elementos-tabla th {
       background-color: #f3f3f3;
       font-weight: 600;
     }
-
-    /* OBSERVACIÓN CRÍTICA DEL SOP */
     .observacion-critica {
       background-color: #fff3cd;
       border-left: 4px solid #f0ad4e;
@@ -173,14 +162,29 @@
       font-style: italic;
       max-width: 85%;
     }
-
-    /* ✅ "No aplica" centrado (si lo usas como texto) */
     .no-aplica {
       text-align: center;
       padding: 10px 0;
     }
-
     hr.separador { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+    .herramientas-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: center;
+      align-items: center;
+      width: max-content; /* 👈 clave */
+      margin: 0 auto;      /* 👈 centra el bloque en la celda */
+    }
+
+    .herramienta-box {
+      background: #eef2ff;
+      padding: 1px 3px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      text-align: center;
+    }
+
   </style>
 </head>
 <body>
@@ -188,7 +192,9 @@
   <div class="row" style="margin-bottom:10px">
     <div>
       <h1>[{{ fecha.strftime('%Y-%m-%d') }}]</h1>
-      <div class="sub">Operario: <strong>{{ persona.nombre }}</strong> ({{ persona.personal_id }})</div>
+      <div class="sub">
+        Operario: <strong>{{ persona.nombre }}</strong> ({{ persona.personal_id }})
+      </div>
     </div>
     <div class="spacer"></div>
     <div class="row">
@@ -240,7 +246,6 @@
                         </div>
                       {% endif %}
 
-                      {# ✅ Tabla única (con o sin elementos) usando f.tabla #}
                       {% if f.tabla and f.tabla.rows and f.tabla.rows|length > 0 %}
                         <div class="section-line"></div>
                         <table class="elementos-tabla">
@@ -255,7 +260,17 @@
                             {% for r in f.tabla.rows %}
                               <tr>
                                 {% for c in r %}
-                                  <td>{{ c }}</td>
+                                  <td>
+                                    {% if loop.last and c is iterable and c is not string %}
+                                      <div class="herramientas-grid">
+                                        {% for herramienta in c %}
+                                          <div class="herramienta-box">{{ herramienta }}</div>
+                                        {% endfor %}
+                                      </div>
+                                    {% else %}
+                                      {{ c }}
+                                    {% endif %}
+                                  </td>
                                 {% endfor %}
                               </tr>
                             {% endfor %}
@@ -283,10 +298,8 @@
       <p class="muted">No hay SOP asignado para este día.</p>
     {% endif %}
   </div>
-
   <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
 </div>
-
 <script>
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-acc-toggle]');

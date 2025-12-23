@@ -333,6 +333,7 @@ class Elemento(db.Model):
     nombre = db.Column(db.String, nullable=False)
     cantidad = db.Column(db.Float)
     estatus = db.Column(db.String)
+    descripcion = db.Column(db.Text, nullable=True) 
 
     subarea = db.relationship("SubArea", back_populates="elementos")
 
@@ -356,7 +357,8 @@ class ElementoSet(db.Model):
     detalles = db.relationship(
         "ElementoDetalle",
         back_populates="elemento_set",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        order_by="ElementoDetalle.orden"
     )
 
 
@@ -372,6 +374,7 @@ class ElementoDetalle(db.Model):
     receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'), nullable=True)
     kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), nullable=True)
     consumo_id = db.Column(db.String, db.ForeignKey("consumo.consumo_id"), nullable=True)
+    orden = db.Column(db.Integer, nullable=False, default=1000) 
 
 
     elemento_set = db.relationship("ElementoSet", back_populates="detalles")

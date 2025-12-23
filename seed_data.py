@@ -127,10 +127,11 @@ with app.app_context():
     # ======================================================
     # Aquí NO van amarradas a SOP.
 
-    fr_co_001 = Fraccion(fraccion_id= "FR-CO-001", fraccion_nombre="Colocar Senaletica", nota_tecnica= "")
+    fr_co_001 = Fraccion(fraccion_id="FR-CO-001", fraccion_nombre="Colocar Senaletica", nota_tecnica= "")
     fr_bs_001 = Fraccion(fraccion_id="FR-BS-001", fraccion_nombre="Sacar Basura", nota_tecnica="Si hay liquido en el bote, proceder a lavado extraordinario")
     fr_sp_001 = Fraccion(fraccion_id="FR-SP-001", fraccion_nombre="Sacudir Superficies", nota_tecnica="No sacudir superficies despues de la limpieza de pisos")
-    db.session.add_all([fr_co_001, fr_bs_001, fr_sp_001])
+    fr_vi_001 = Fraccion(fraccion_id="FR-VI-001", fraccion_nombre="Limpiar Vidrios", nota_tecnica="")
+    db.session.add_all([fr_co_001, fr_bs_001, fr_sp_001, fr_vi_001])
 
     # ======================================================
     # 6) METODOLOGÍAS (por fracción + nivel)
@@ -158,6 +159,11 @@ with app.app_context():
         # Solo existe la metodologia profunda para sacudir superficies
         Metodologia(metodologia_id="MT-SP-001-P", fraccion_id="FR-SP-001", nivel_limpieza_id=3,
                     descripcion="Despejar, limpiar y bordes y esquinas superiores."),
+
+        #Limpiar Vidrios
+        #Solo existe la metodologia profunda para limpiar vidrios
+        Metodologia(metodologia_id="MT-VI-001-P", fraccion_id="FR-VI-001", nivel_limpieza_id=3,
+                    descripcion="Limpiar Vidrios"),
     ]
     db.session.add_all(metodologias)
 
@@ -206,9 +212,17 @@ with app.app_context():
         MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=1, instruccion="Verificar que la funda de microfibra esté limpia, seca y en buen estado."),
         MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=2, instruccion="Colocar el plumero de forma que tenga contacto total con la superficie."),
         MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=3, instruccion="Sacude la superficie con movimientos suaves y rectos: De arriba hacia abajo lineales y continuos, y de atrás hacia adelante, evitando movimientos rápidos o circulares que provoquen dispersión del polvo."),
-        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=4, instruccion="ambiar la funda de microfibra cuando este visiblemente sucia o llena de polvo."),
-        
+        MetodologiaPasos(metodologia_id="MT-SP-001-P", orden=4, instruccion="Cambiar la funda de microfibra cuando este visiblemente sucia o llena de polvo."),
 
+        # Limpiar Vidrios
+        #Profunda
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=1, instruccion="Vidrios altos: Aplique el químico uniformemente sobre el mop de vidrios (TM-VI-02) y ajuste bastón retractil de acuerdo a la altura requerida."),
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=2, instruccion="Coloque el mop de vidrios en el área a limpiar, asegurando contacto completo con el vidrio, manteniendo presión ligera y uniforme."),
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=3, instruccion="Comenzar a limpiar de arriba hacia abajo y de izquerda a derecha hasta cubrir completamente la superficie alcanzable. "),
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=4, instruccion="Vidrios medios e inferiores: Aplique el químico directamente sobre la microfibra y prepare el paño utilizando la técnica de 8 caras (TM-SA-001)."),
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=5, instruccion="Limpie el vidrio de arriba hacia abajo y de izquierda a derecha utilizando la técnica (TM-VI-001) una cara húmeda de la microfibra; cambiar cara cuando esté sucia."),
+        MetodologiaPasos(metodologia_id="MT-VI-001-P", orden=6, instruccion="Revise el vidrio contra la luz y corrija irregularidades utilizando la técnica de 8 caras (TM-SA-001)."),
+        
     ]
     db.session.add_all(pasos)
 
@@ -217,10 +231,12 @@ with app.app_context():
     # 7) HERRAMIENTAS / KITS / QUÍMICOS / RECETAS (mínimo)
     # ======================================================
     herramientas = [
-        Herramienta(herramienta_id="HE-SE-001", nombre="SEÑALETICA", descripcion="Señal de piso 2 caras", estatus="activo"),
-        Herramienta(herramienta_id="HE-PA-001", nombre="PAÑO", descripcion="Paño de microfibra", estatus="activo"),
-        Herramienta(herramienta_id="HE-BA-002", nombre="BASTON", descripcion="Bastón retractil", estatus="activo"),
-        Herramienta(herramienta_id="HE-PL-001", nombre="PLUMERO", descripcion="Plumero de microfibra", estatus="activo"),
+        Herramienta(herramienta_id="HE-SE-001", nombre="SEÑALETICA", descripcion="Señaletica Humedo", estatus="activo"),
+        Herramienta(herramienta_id="HE-PA-001", nombre="PAÑO", descripcion="Paño Microfibra", estatus="activo"),
+        Herramienta(herramienta_id="HE-BA-002", nombre="BASTON", descripcion="Bastón Retractil ", estatus="activo"),
+        Herramienta(herramienta_id="HE-PL-001", nombre="PLUMERO", descripcion="Plumero Microfibra", estatus="activo"),
+        Herramienta(herramienta_id="HE-PA-002", nombre="PAÑO", descripcion="Paño Vidrios", estatus="activo"),
+        Herramienta(herramienta_id="HE-MO-003", nombre="MOP", descripcion="MOP Vidrios", estatus="activo"),
     ]
     db.session.add_all(herramientas)
 
@@ -228,6 +244,8 @@ with app.app_context():
         Kit(kit_id="KT-BS-001-P", nombre="Kit Basura"),
         Kit(kit_id="KT-CO-001-B", nombre="Kit Senaletica"),
         Kit(kit_id="KT-SP-001-P", nombre="Kit Superficie"),
+        Kit(kit_id="KT-VI-001-P", nombre="Kit Vidrios Superior"),
+        Kit(kit_id="KT-VI-002-P", nombre="Kit Vidrios Inferior"),
     ]
     db.session.add_all(kits)
 
@@ -241,36 +259,47 @@ with app.app_context():
         #Kit Superficie
         KitDetalle(kit_id="KT-SP-001-P", herramienta_id="HE-BA-002", nota="Kit Superficie"),
         KitDetalle(kit_id="KT-SP-001-P", herramienta_id="HE-PL-001", nota="Kit Superficie"),
+
+        #Kit Vidrios Superior
+        KitDetalle(kit_id="KT-VI-001-P", herramienta_id="HE-MO-003", nota="Kit Vidrios Superior"),
+        KitDetalle(kit_id="KT-VI-001-P", herramienta_id="HE-BA-002", nota="Kit Vidrios Superior"),
+
+        #Kit Vidrios Inferior
+        KitDetalle(kit_id="KT-VI-002-P", herramienta_id="HE-PA-002", nota="Kit Vidrios Inferior"),
+    
     ]
     db.session.add_all(kit_detalles)
 
     
     quimicos = [
         Quimico(quimico_id="QU-DS-001", nombre="Alpha HP", categoria="DESINFECTANTE", presentacion="Liquido", unidad_base="mL"),
+        Quimico(quimico_id="QU-LI-001", nombre="Kristalux", categoria="LIMPIADOR", presentacion="Liquido", unidad_base="mL")
     ]
     db.session.add_all(quimicos)
 
     recetas = [
         Receta(receta_id="RE-SA-001", nombre="Sacudir Elementos"),
+        Receta(receta_id="RE-VI-001", nombre="Limpiar Vidrios"),
     ]
     db.session.add_all(recetas)
 
     receta_detalles = [
         RecetaDetalle(receta_id="RE-SA-001", quimico_id="QU-DS-001", dosis=8, unidad_dosis="mL", volumen_base=1000, unidad_volumen="mL", nota="Sacudir Elementos"),
+        RecetaDetalle(receta_id="RE-VI-001", quimico_id="QU-LI-001", dosis=50, unidad_dosis="mL", volumen_base=1000, unidad_volumen="mL", nota="Limpiar Vidrios"),
     ]
     db.session.add_all(receta_detalles)
 
     # ======================================================
-    # 7.5) CONSUMO (solo aplica a Basura Profundo)
+    # 7.5) CONSUMO 
     # ======================================================
-    cm_ds_003 = Consumo(
-        consumo_id="CM-DS-003",
-        valor=3,
-        unidad="disparos",
-        regla="= 3 mL"
-    )
-    db.session.add(cm_ds_003)
+    consumo=[
+        Consumo(consumo_id="CM-DS-003", valor=3, unidad="disparos", regla="= 3 mL"),
+        Consumo(consumo_id="CM-DS-002", valor=2, unidad="disparos", regla="x 1m2 = 2 mL"),
+        Consumo(consumo_id="CM-DS-001", valor=1, unidad="disparos", regla="x 1m2 = 1 mL")
+    ]   
+    
 
+    db.session.add_all(consumo)
 
 
     # ======================================================
@@ -278,10 +307,12 @@ with app.app_context():
     # ======================================================
     elementos = [
         # AD-DI-BA-001
-        Elemento(elemento_id="EL-IL-001", subarea_id="AD-DI-BA-001", nombre="ILLUXLÁMPARA", cantidad=1, estatus="activo"),
-        Elemento(elemento_id="EL-BO-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo"),
-        Elemento(elemento_id="EL-LM-001", subarea_id="AD-DI-BA-001", nombre="LAMPARA", cantidad=1, estatus="activo"),
-        Elemento(elemento_id="EL-BP-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo"),
+        Elemento(elemento_id="EL-IL-001", subarea_id="AD-DI-BA-001", nombre="ILLUXLÁMPARA", cantidad=1, estatus="activo", descripcion= "Iluxlampara" ),
+        Elemento(elemento_id="EL-BO-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo", descripcion= "Borde Pared" ),
+        Elemento(elemento_id="EL-LM-001", subarea_id="AD-DI-BA-001", nombre="LAMPARA", cantidad=1, estatus="activo", descripcion= "Lampara Techo" ),
+        Elemento(elemento_id="EL-BP-001", subarea_id="AD-DI-BA-001", nombre="BORDE", cantidad=1, estatus="activo", descripcion= "Borde Puerta" ),
+        Elemento(elemento_id="EL-VI-001", subarea_id="AD-DI-BA-001", nombre="VIDRIO", cantidad=1, estatus="activo", descripcion= "Vidrio Superior" ),
+        Elemento(elemento_id="EL-VI-002", subarea_id="AD-DI-BA-001", nombre="VIDRIO", cantidad=1, estatus="activo", descripcion= "Vidrio Inferior" ),
     ]
     db.session.add_all(elementos)
 
@@ -289,23 +320,24 @@ with app.app_context():
     # 9) ELEMENTO SET (por subárea + fracción + nivel)
     # Formato sugerido: ES-<SUBAREA>-<FRACCION>-<B|M|P>
     # ======================================================
-    es_sp_001_p_ad_di_ba_001 = ElementoSet(
-        elemento_set_id="ES-SP-001-P", 
-        subarea_id="AD-DI-BA-001",
-        fraccion_id="FR-SP-001",
-        nivel_limpieza_id=3,
-        nombre="Set Sacudir superficies AD-DI-BA-001 (Profunda)"
-    )
-    db.session.add_all([es_sp_001_p_ad_di_ba_001])
+    
+    elementos_set = [
+        ElementoSet( elemento_set_id="ES-SP-001-P",  subarea_id="AD-DI-BA-001", fraccion_id="FR-SP-001", nivel_limpieza_id=3, nombre="Elementos Superfcies"),
+        ElementoSet( elemento_set_id="ES-VI-001-P",  subarea_id="AD-DI-BA-001", fraccion_id="FR-VI-001", nivel_limpieza_id=3, nombre="Vidrios Superiores")
+    ]
+    db.session.add_all(elementos_set)
 
     # ======================================================
     # 10) ELEMENTO DETALLE (cada elemento puede traer su kit/receta)
     # ======================================================
     elemento_detalles = [
-        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-IL-001", kit_id="KT-SP-001-P", receta_id=None),
-        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BO-001", kit_id="KT-SP-001-P", receta_id=None),
-        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-LM-001", kit_id="KT-SP-001-P", receta_id=None),
-        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BP-001", kit_id="KT-SP-001-P", receta_id=None),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-IL-001", kit_id="KT-SP-001-P", receta_id=None, orden=2),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BO-001", kit_id="KT-SP-001-P", receta_id=None, orden=3),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-LM-001", kit_id="KT-SP-001-P", receta_id=None, orden=1),
+        ElementoDetalle(elemento_set_id="ES-SP-001-P", elemento_id="EL-BP-001", kit_id="KT-SP-001-P", receta_id=None, orden=4),
+
+        ElementoDetalle(elemento_set_id="ES-VI-001-P", elemento_id="EL-VI-001", kit_id="KT-VI-001-P", receta_id="RE-VI-001",consumo_id="CM-DS-002", orden=1),
+        ElementoDetalle(elemento_set_id="ES-VI-001-P", elemento_id="EL-VI-002", kit_id="KT-VI-002-P", receta_id="RE-VI-001",consumo_id="CM-DS-001", orden=2),
     ]
     db.session.add_all(elemento_detalles)
 
@@ -314,12 +346,13 @@ with app.app_context():
     # Fracciones del SOP
     # ======================================================
     # BA-001: Senaletica + Basura + Sacudir Superficies
-    sf1 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-1", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-CO-001", orden=1)
-    sf2 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-2", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-BS-001", orden=2)
-    sf3 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-3", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-SP-001", orden=3)
+    sf1 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-CO-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-CO-001", orden=1)
+    sf2 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-BS-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-BS-001", orden=2)
+    sf3 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-SP-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-SP-001", orden=3)
+    sf4 = SopFraccion(sop_fraccion_id="SF-AD-DI-BA-001-VI-001", sop_id="SP-AD-DI-BA-001", fraccion_id="FR-VI-001", orden=4)
 
 
-    db.session.add_all([sf1, sf2, sf3])
+    db.session.add_all([sf1, sf2, sf3, sf4])
 
     # ======================================================
     # 12) SOPFRACCIONDETALLE (por nivel)
@@ -330,8 +363,8 @@ with app.app_context():
         #Colocar Senaletica
         #   Bajo
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-1",
-            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-CO-001-B",
+            sop_fraccion_id="SF-AD-DI-BA-001-CO-001",
             nivel_limpieza_id=1,
             metodologia_id="MT-CO-001-B",
             kit_id="KT-CO-001-B",
@@ -343,8 +376,8 @@ with app.app_context():
         #Colocar Senaletica
         #   Medio
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-2",
-            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-CO-001-M",
+            sop_fraccion_id="SF-AD-DI-BA-001-CO-001",
             nivel_limpieza_id=2,
             metodologia_id="MT-CO-001-M",
             kit_id="KT-CO-001-B",
@@ -356,8 +389,8 @@ with app.app_context():
         #Colocar Senaletica
         #   Profundo
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-3",
-            sop_fraccion_id="SF-AD-DI-BA-001-1",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-CO-001-P",
+            sop_fraccion_id="SF-AD-DI-BA-001-CO-001",
             nivel_limpieza_id=3,
             metodologia_id="MT-CO-001-P",
             kit_id="KT-CO-001-B",
@@ -370,8 +403,8 @@ with app.app_context():
         #Sacar Basura
         #   Bajo
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-4",
-            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-BS-001-B",
+            sop_fraccion_id="SF-AD-DI-BA-001-BS-001",
             nivel_limpieza_id=1,
             metodologia_id="MT-BS-001-B",
             kit_id=None,
@@ -383,8 +416,8 @@ with app.app_context():
         #Sacar Basura
         #   Medio
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-5",
-            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-BS-001-M",
+            sop_fraccion_id="SF-AD-DI-BA-001-BS-001",
             nivel_limpieza_id=2,
             metodologia_id="MT-BS-001-M",
             kit_id=None,
@@ -396,8 +429,8 @@ with app.app_context():
         #Sacar Basura
         #   Profundo
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-6",
-            sop_fraccion_id="SF-AD-DI-BA-001-2",
+            sop_fraccion_detalle_id="SD-AD-DI-BA-001-BS-001-P",
+            sop_fraccion_id="SF-AD-DI-BA-001-BS-001",
             nivel_limpieza_id=3,
             metodologia_id="MT-BS-001-P",
             kit_id="KT-BS-001-P",
@@ -410,13 +443,26 @@ with app.app_context():
         #Sacudir Superficies
         #   Profundo
         SopFraccionDetalle(
-            sop_fraccion_detalle_id="SD-AD-DI-BA-001-7",
-            sop_fraccion_id="SF-AD-DI-BA-001-3",
+            sop_fraccion_detalle_id="SF-AD-DI-BA-001-SP-001-P",
+            sop_fraccion_id="SF-AD-DI-BA-001-SP-001",
             nivel_limpieza_id=3,
             metodologia_id="MT-SP-001-P",
             kit_id=None,
             receta_id=None,
             elemento_set_id="ES-SP-001-P",
+            tiempo_unitario_min=10
+        ),
+
+        #Limpiar Vidrios
+        #   Profundo
+        SopFraccionDetalle(
+            sop_fraccion_detalle_id="SF-AD-DI-BA-001-VI-001-P",
+            sop_fraccion_id="SF-AD-DI-BA-001-VI-001",
+            nivel_limpieza_id=3,
+            metodologia_id="MT-VI-001-P",
+            kit_id=None,
+            receta_id=None,
+            elemento_set_id="ES-VI-001-P",
             tiempo_unitario_min=10
         ),
         
