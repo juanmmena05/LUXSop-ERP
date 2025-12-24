@@ -121,39 +121,66 @@ class Fraccion(db.Model):
 # ======================================================
 # 5. METODOLOGÍAS (por Fracción + Nivel)
 # ======================================================
+class MetodologiaBase(db.Model):
+    __tablename__ = "metodologia_base"
 
-class Metodologia(db.Model):
-    __tablename__ = 'metodologia'
-    __table_args__ = (
-        # Para que NO existan 2 metodologías del mismo nivel para la misma fracción
-        db.UniqueConstraint('fraccion_id', 'nivel_limpieza_id', name='uq_metodologia_fraccion_nivel'),
+    metodologia_base_id = db.Column(db.String, primary_key=True)  # MB-XX-###
+    nombre = db.Column(db.String, nullable=True)  # opcional (UI)
+    descripcion = db.Column(db.Text, nullable=True)
+
+    pasos = db.relationship(
+        "MetodologiaBasePaso",
+        back_populates="metodologia_base",
+        cascade="all, delete-orphan",
+        order_by="MetodologiaBasePaso.orden"
     )
 
-    metodologia_id = db.Column(db.String, primary_key=True)  # MT-XX-###-B/M/P
-    fraccion_id = db.Column(db.String, db.ForeignKey('fraccion.fraccion_id'), nullable=False, index=True)
-    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False, index=True)
+    asignaciones = db.relationship(
+        "Metodologia",
+        back_populates="metodologia_base"
+    )
 
-    descripcion = db.Column(db.Text)
+class MetodologiaBasePaso(db.Model):
+    __tablename__ = "metodologia_base_paso"
+
+    metodologia_base_id = db.Column(
+        db.String,
+        db.ForeignKey("metodologia_base.metodologia_base_id"),
+        primary_key=True
+    )
+    orden = db.Column(db.Integer, primary_key=True)
+    instruccion = db.Column(db.Text, nullable=False)
+
+    metodologia_base = db.relationship(
+        "MetodologiaBase",
+        back_populates="pasos"
+    )
+
+class Metodologia(db.Model):
+    __tablename__ = "metodologia"
+
+    fraccion_id = db.Column(
+        db.String,
+        db.ForeignKey("fraccion.fraccion_id"),
+        primary_key=True
+    )
+    nivel_limpieza_id = db.Column(
+        db.Integer,
+        db.ForeignKey("nivel_limpieza.nivel_limpieza_id"),
+        primary_key=True
+    )
+
+    metodologia_base_id = db.Column(
+        db.String,
+        db.ForeignKey("metodologia_base.metodologia_base_id"),
+        nullable=False
+    )
 
     fraccion = db.relationship("Fraccion", back_populates="metodologias")
     nivel_limpieza = db.relationship("NivelLimpieza", back_populates="metodologias")
-
-    pasos = db.relationship(
-        "MetodologiaPasos",
-        back_populates="metodologia",
-        cascade="all, delete-orphan",
-        order_by="MetodologiaPasos.orden"
-    )
+    metodologia_base = db.relationship("MetodologiaBase", back_populates="asignaciones")
 
 
-class MetodologiaPasos(db.Model):
-    __tablename__ = 'metodologia_pasos'
-
-    metodologia_id = db.Column(db.String, db.ForeignKey('metodologia.metodologia_id'), primary_key=True)
-    orden = db.Column(db.Integer, primary_key=True)
-    instruccion = db.Column(db.Text)
-
-    metodologia = db.relationship("Metodologia", back_populates="pasos")
 
 
 # ======================================================
@@ -200,8 +227,6 @@ class SopFraccionDetalle(db.Model):
     sop_fraccion_id = db.Column(db.String, db.ForeignKey('sop_fraccion.sop_fraccion_id'), nullable=False, index=True)
     nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey('nivel_limpieza.nivel_limpieza_id'), nullable=False, index=True)
 
-    metodologia_id = db.Column(db.String, db.ForeignKey('metodologia.metodologia_id'), nullable=False, index=True)
-
     # Opción A (sin elementos): kit/receta pueden ir aquí (uno o ambos)
     kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), nullable=True)
     receta_id = db.Column(db.String, db.ForeignKey('receta.receta_id'), nullable=True)
@@ -218,7 +243,6 @@ class SopFraccionDetalle(db.Model):
     sop_fraccion = db.relationship("SopFraccion", back_populates="detalles")
     nivel_limpieza = db.relationship("NivelLimpieza", back_populates="sop_fraccion_detalles")
     consumo = db.relationship("Consumo", back_populates="sop_fraccion_detalles")
-    metodologia = db.relationship("Metodologia")
 
     kit = db.relationship("Kit")
     receta = db.relationship("Receta")

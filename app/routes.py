@@ -13,7 +13,8 @@ from .models import (
     Area, SubArea, SOP, NivelLimpieza, Personal,
 
     # Catalogos / armado SOP
-    Fraccion, Metodologia, MetodologiaPasos,
+    Fraccion, Metodologia, MetodologiaBase, MetodologiaBasePaso,
+
     SopFraccion, SopFraccionDetalle,
 
     # Planeacion
@@ -595,7 +596,6 @@ def reporte_persona_dia(fecha, personal_id):
         if not nivel_id:
             continue
 
-        # Cargar SOP con toda la cadena necesaria (incluye consumo y detalles por elemento)
         sop_full = (
             SOP.query.options(
                 joinedload(SOP.sop_fracciones)
@@ -651,18 +651,17 @@ def reporte_persona_dia(fecha, personal_id):
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.consumo),
-
-                # Metodología/pasos
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.metodologia)
-                    .joinedload(Metodologia.pasos),
             )
             .filter_by(sop_id=sop.sop_id)
             .first()
         )
         if not sop_full:
             continue
+
+        # ✅ Construir mapa: (fraccion_id, nivel_id) -> MetodologiaBase (con pasos)
+        fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
+        nivel_ids = {nivel_id}
+        met_map = build_met_map(fraccion_ids, nivel_ids)
 
         fracciones_filtradas = []
 
@@ -672,7 +671,13 @@ def reporte_persona_dia(fecha, personal_id):
                 continue
 
             fr = sf.fraccion
-            metodologia = sd.metodologia
+
+            # ✅ metodologia aquí ES MetodologiaBase
+            metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
+            if not metodologia:
+                # Si quieres más estricto:
+                # abort(500, description=f"Falta metodología base para fracción {sf.fraccion_id} nivel {sd.nivel_limpieza_id}")
+                continue
 
             receta = sd.receta
             kit = sd.kit
@@ -717,14 +722,14 @@ def reporte_persona_dia(fecha, personal_id):
             fracciones_filtradas.append({
                 "orden": sf.orden,
                 "fraccion_nombre": fr.fraccion_nombre if fr else "",
-                "descripcion": (metodologia.descripcion if metodologia else ""),
+                "descripcion": metodologia.descripcion or "",
                 "nivel_limpieza": nivel_asignado,
                 "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
+
+                # ✅ ahora el template recibirá MetodologiaBase (con .pasos)
                 "metodologia": metodologia,
 
-                # ✅ lo nuevo
                 "tabla": tabla,
-
                 "observacion_critica": (fr.nota_tecnica if fr else None),
             })
 
@@ -745,6 +750,8 @@ def reporte_persona_dia(fecha, personal_id):
     )
 
     return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
+
+
 
 
 # =========================
@@ -841,17 +848,17 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.consumo),
 
-                # Metodología/pasos
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.metodologia)
-                    .joinedload(Metodologia.pasos),
             )
             .filter_by(sop_id=sop.sop_id)
             .first()
         )
         if not sop_full:
             continue
+
+        # ✅ mapa de metodologías necesarias para este SOP y este nivel
+        fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
+        nivel_ids = {nivel_id}
+        met_map = build_met_map(fraccion_ids, nivel_ids)
 
         fracciones_filtradas = []
 
@@ -861,16 +868,18 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 continue
 
             fr = sf.fraccion
-            metodologia = sd.metodologia
+
+            # ✅ lookup de metodología por (fraccion_id, nivel)
+            metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
+            if not metodologia:
+                continue
 
             # Metodología a dict (para PDF)
-            metodologia_dict = None
-            if metodologia:
-                pasos_items = sorted(list(metodologia.pasos or []), key=lambda p: (p.orden or 0))
-                metodologia_dict = {
-                    "descripcion": metodologia.descripcion or "",
-                    "pasos": [{"instruccion": p.instruccion} for p in pasos_items]
-                }
+            pasos_items = sorted(list(metodologia.pasos or []), key=lambda p: (p.orden or 0))
+            metodologia_dict = {
+                "descripcion": metodologia.descripcion or "",
+                "pasos": [{"instruccion": p.instruccion} for p in pasos_items]
+            }
 
             receta = sd.receta
             kit = sd.kit
@@ -914,11 +923,10 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             fracciones_filtradas.append({
                 "orden": sf.orden,
                 "fraccion_nombre": fr.fraccion_nombre if fr else "",
-                "descripcion": (metodologia.descripcion if metodologia else ""),
+                "descripcion": metodologia.descripcion or "",
                 "nivel_limpieza": nivel_asignado,
-                "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,  # macro usa tiempo_base
+                "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,
 
-                # ✅ lo nuevo
                 "tabla": tabla,
 
                 "nota_tecnica": (fr.nota_tecnica if fr else None),
@@ -1251,3 +1259,33 @@ def ordenar_elementoset(elemento_set_id):
 
     detalles = sorted((es.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id))
     return render_template("elementoset_orden.html", es=es, detalles=detalles)
+
+
+# =========================
+# Obtiene la Metodologia por Fraccion y Nivel Limpieza
+# =========================
+def build_met_map(fraccion_ids: set[str], nivel_ids: set[int]):
+    """
+    Regresa dict {(fraccion_id, nivel_id): MetodologiaBase} con pasos precargados.
+    """
+    if not fraccion_ids or not nivel_ids:
+        return {}
+
+    asignaciones = (
+        Metodologia.query.options(
+            joinedload(Metodologia.metodologia_base)
+                .joinedload(MetodologiaBase.pasos)
+        )
+        .filter(
+            Metodologia.fraccion_id.in_(list(fraccion_ids)),
+            Metodologia.nivel_limpieza_id.in_(list(nivel_ids)),
+        )
+        .all()
+    )
+
+    # map: (fraccion_id, nivel_id) -> MetodologiaBase
+    return {
+        (m.fraccion_id, m.nivel_limpieza_id): m.metodologia_base
+        for m in asignaciones
+        if m.metodologia_base is not None
+    }
