@@ -1,0 +1,86 @@
+{
+  "ok": true,
+  "errors": [],
+  "warnings": [],
+  "stats": {
+    "Area": {
+      "rows": 7
+    },
+    "SubArea": {
+      "rows": 19
+    },
+    "SOP": {
+      "rows": 4
+    },
+    "SOPFraccion": {
+      "rows": 8
+    },
+    "SOPFraccionDetalle": {
+      "rows": 20
+    },
+    "Fraccion": {
+      "rows": 9
+    },
+    "MetodologiaBase": {
+      "rows": 15
+    },
+    "MetodologiaBasePaso": {
+      "rows": 63
+    },
+    "Metodologia": {
+      "rows": 20
+    },
+    "Herramienta": {
+      "rows": 40
+    },
+    "Kit": {
+      "rows": 12
+    },
+    "KitDetalle": {
+      "rows": 23
+    },
+    "Quimico": {
+      "rows": 13
+    },
+    "Receta": {
+      "rows": 5
+    },
+    "RecetaDetalle": {
+      "rows": 5
+    },
+    "Consumo": {
+      "rows": 8
+    },
+    "Elemento": {
+      "rows": 44
+    },
+    "ElementoSet": {
+      "rows": 5
+    },
+    "ElementoDetalle": {
+      "rows": 28
+    },
+    "Personal": {
+      "rows": 3
+    },
+    "NivelLimpieza": {
+      "rows": 3
+    }
+  },
+  "meta": {
+    "created_at": "2025-12-25T04:06:39.672313+00:00",
+    "files_used": [
+      "Area-SubArea.xlsx",
+      "SOP.xlsx",
+      "Fraccion.xlsx",
+      "Metodologia.xlsx",
+      "Herramienta.xlsx",
+      "Quimico.xlsx",
+      "Consumo.xlsx",
+      "Elemento.xlsx",
+      "Personal.xlsx",
+      "NivelLimpieza.xlsx"
+    ],
+    "notes": []
+  }
+}

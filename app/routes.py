@@ -108,6 +108,89 @@ main_bp = Blueprint("main", __name__)
 
 
 # =========================
+# ====== HELPERS DE PLANTILLA ======
+# =========================
+def lunes_de(fecha: date) -> date:
+    return fecha - timedelta(days=fecha.weekday())
+
+def rango_lunes_a_sabado(lunes: date):
+    return [lunes + timedelta(days=i) for i in range(6)]
+
+def borrar_asignaciones_semana(lunes_destino: date):
+    dias = [lunes_destino + timedelta(days=i) for i in range(6)]
+    for d in dias:
+        dia = LanzamientoDia.query.filter_by(fecha=d).first()
+        if not dia:
+            continue
+        LanzamientoTarea.query.filter_by(dia_id=dia.dia_id).delete()
+    db.session.commit()
+
+def upsert_dia(fecha_obj: date) -> LanzamientoDia:
+    return get_or_create_dia(fecha_obj)
+
+def existe_tarea(fecha_obj: date, personal_id, subarea_id) -> bool:
+    dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
+    if not dia:
+        return False
+    return LanzamientoTarea.query.filter_by(
+        dia_id=dia.dia_id,
+        personal_id=personal_id,
+        subarea_id=subarea_id
+    ).first() is not None
+
+def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel):
+    dia = upsert_dia(fecha_obj)
+    t = LanzamientoTarea(
+        dia_id=dia.dia_id,
+        personal_id=personal_id,
+        area_id=area_id,
+        subarea_id=subarea_id,
+        nivel_limpieza_asignado=canon_nivel(nivel) or "basica"
+    )
+    db.session.add(t)
+
+# ====== APLICADORES ======
+def aplicar_ruta_base_personal(lunes_destino: date, overwrite: bool):
+    if overwrite:
+        borrar_asignaciones_semana(lunes_destino)
+
+    base = AsignacionPersonal.query.all()
+    dias = rango_lunes_a_sabado(lunes_destino)
+    for fecha_obj in dias:
+        for ap in base:
+            if not existe_tarea(fecha_obj, ap.personal_id, ap.subarea_id):
+                crear_tarea(fecha_obj, ap.personal_id, ap.area_id, ap.subarea_id, ap.nivel_limpieza_asignado)
+    db.session.commit()
+
+def aplicar_desde_semana(origen_lunes: date, destino_lunes: date, overwrite: bool):
+    if overwrite:
+        borrar_asignaciones_semana(destino_lunes)
+
+    for i in range(6):
+        fecha_origen = origen_lunes + timedelta(days=i)
+        fecha_dest = destino_lunes + timedelta(days=i)
+        dia_origen = LanzamientoDia.query.filter_by(fecha=fecha_origen).first()
+        if not dia_origen:
+            continue
+        tareas = LanzamientoTarea.query.filter_by(dia_id=dia_origen.dia_id).all()
+        for t in tareas:
+            if not existe_tarea(fecha_dest, t.personal_id, t.subarea_id):
+                crear_tarea(fecha_dest, t.personal_id, t.area_id, t.subarea_id, canon_nivel(t.nivel_limpieza_asignado) or "basica")
+    db.session.commit()
+
+def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite: bool):
+    if overwrite:
+        borrar_asignaciones_semana(destino_lunes)
+
+    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+    for it in plantilla.items:
+        fecha_dest = destino_lunes + timedelta(days=it.dia_index)
+        if not existe_tarea(fecha_dest, it.personal_id, it.subarea_id):
+            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica")
+    db.session.commit()
+
+
+# =========================
 # Helpers Tablas HTML
 # =========================
 def na(x) -> str:
@@ -153,6 +236,12 @@ def fmt_herramientas(kit) -> list[str]:
         for kd in dets
         if getattr(kd, "herramienta", None) and getattr(kd.herramienta, "descripcion", None)
     ]
+
+
+def fmt_herramientas_list(kit) -> list[str]:
+    items = fmt_herramientas(kit)  # lista real de herramientas
+    return items if items else ["No aplica"]
+
 
 
 
@@ -672,11 +761,8 @@ def reporte_persona_dia(fecha, personal_id):
 
             fr = sf.fraccion
 
-            # ✅ metodologia aquí ES MetodologiaBase
             metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
             if not metodologia:
-                # Si quieres más estricto:
-                # abort(500, description=f"Falta metodología base para fracción {sf.fraccion_id} nivel {sd.nivel_limpieza_id}")
                 continue
 
             receta = sd.receta
@@ -698,7 +784,7 @@ def reporte_persona_dia(fecha, personal_id):
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
                     c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas(getattr(ed, "kit", None))
+                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ CAMBIO
 
                     rows.append([
                         na(getattr(elemento, "descripcion", None)),
@@ -715,7 +801,7 @@ def reporte_persona_dia(fecha, personal_id):
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas(kit)
+                h_str = fmt_herramientas_list(kit)  # ✅ CAMBIO
 
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
@@ -725,10 +811,7 @@ def reporte_persona_dia(fecha, personal_id):
                 "descripcion": metodologia.descripcion or "",
                 "nivel_limpieza": nivel_asignado,
                 "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
-
-                # ✅ ahora el template recibirá MetodologiaBase (con .pasos)
                 "metodologia": metodologia,
-
                 "tabla": tabla,
                 "observacion_critica": (fr.nota_tecnica if fr else None),
             })
@@ -750,8 +833,6 @@ def reporte_persona_dia(fecha, personal_id):
     )
 
     return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
-
-
 
 
 # =========================
@@ -797,33 +878,28 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.fraccion),
 
-                # Detalle sin elementos: kit/herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.kit)
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
 
-                # Detalle sin elementos: receta/químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.receta)
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
 
-                # Detalle sin elementos: consumo
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.consumo),
 
-                # Detalle con elementos: elemento_set -> elemento
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.elemento),
 
-                # Detalle con elementos: ElementoDetalle.receta -> químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
@@ -832,7 +908,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
 
-                # Detalle con elementos: ElementoDetalle.kit -> herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
@@ -841,13 +916,11 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
 
-                # Detalle con elementos: ElementoDetalle.consumo
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.consumo),
-
             )
             .filter_by(sop_id=sop.sop_id)
             .first()
@@ -855,7 +928,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         if not sop_full:
             continue
 
-        # ✅ mapa de metodologías necesarias para este SOP y este nivel
         fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
         nivel_ids = {nivel_id}
         met_map = build_met_map(fraccion_ids, nivel_ids)
@@ -868,13 +940,10 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 continue
 
             fr = sf.fraccion
-
-            # ✅ lookup de metodología por (fraccion_id, nivel)
             metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
             if not metodologia:
                 continue
 
-            # Metodología a dict (para PDF)
             pasos_items = sorted(list(metodologia.pasos or []), key=lambda p: (p.orden or 0))
             metodologia_dict = {
                 "descripcion": metodologia.descripcion or "",
@@ -888,7 +957,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
-            # ====== TABLA UNICA POR FRACCIÓN ======
             tabla = None
 
             if elemento_set:
@@ -900,7 +968,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
                     c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas(getattr(ed, "kit", None))
+                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ CAMBIO
 
                     rows.append([
                         na(getattr(elemento, "descripcion", None)),
@@ -917,7 +985,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas(kit)
+                h_str = fmt_herramientas_list(kit)  # ✅ CAMBIO
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
             fracciones_filtradas.append({
@@ -926,9 +994,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 "descripcion": metodologia.descripcion or "",
                 "nivel_limpieza": nivel_asignado,
                 "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,
-
                 "tabla": tabla,
-
                 "nota_tecnica": (fr.nota_tecnica if fr else None),
                 "observacion_critica": sop.observacion_critica_sop,
                 "metodologia": metodologia_dict,
@@ -957,88 +1023,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
         "Content-Disposition": f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
     }))
 
-
-# =========================
-# ====== HELPERS DE PLANTILLA ======
-# =========================
-def lunes_de(fecha: date) -> date:
-    return fecha - timedelta(days=fecha.weekday())
-
-def rango_lunes_a_sabado(lunes: date):
-    return [lunes + timedelta(days=i) for i in range(6)]
-
-def borrar_asignaciones_semana(lunes_destino: date):
-    dias = [lunes_destino + timedelta(days=i) for i in range(6)]
-    for d in dias:
-        dia = LanzamientoDia.query.filter_by(fecha=d).first()
-        if not dia:
-            continue
-        LanzamientoTarea.query.filter_by(dia_id=dia.dia_id).delete()
-    db.session.commit()
-
-def upsert_dia(fecha_obj: date) -> LanzamientoDia:
-    return get_or_create_dia(fecha_obj)
-
-def existe_tarea(fecha_obj: date, personal_id, subarea_id) -> bool:
-    dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
-    if not dia:
-        return False
-    return LanzamientoTarea.query.filter_by(
-        dia_id=dia.dia_id,
-        personal_id=personal_id,
-        subarea_id=subarea_id
-    ).first() is not None
-
-def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel):
-    dia = upsert_dia(fecha_obj)
-    t = LanzamientoTarea(
-        dia_id=dia.dia_id,
-        personal_id=personal_id,
-        area_id=area_id,
-        subarea_id=subarea_id,
-        nivel_limpieza_asignado=canon_nivel(nivel) or "basica"
-    )
-    db.session.add(t)
-
-# ====== APLICADORES ======
-def aplicar_ruta_base_personal(lunes_destino: date, overwrite: bool):
-    if overwrite:
-        borrar_asignaciones_semana(lunes_destino)
-
-    base = AsignacionPersonal.query.all()
-    dias = rango_lunes_a_sabado(lunes_destino)
-    for fecha_obj in dias:
-        for ap in base:
-            if not existe_tarea(fecha_obj, ap.personal_id, ap.subarea_id):
-                crear_tarea(fecha_obj, ap.personal_id, ap.area_id, ap.subarea_id, ap.nivel_limpieza_asignado)
-    db.session.commit()
-
-def aplicar_desde_semana(origen_lunes: date, destino_lunes: date, overwrite: bool):
-    if overwrite:
-        borrar_asignaciones_semana(destino_lunes)
-
-    for i in range(6):
-        fecha_origen = origen_lunes + timedelta(days=i)
-        fecha_dest = destino_lunes + timedelta(days=i)
-        dia_origen = LanzamientoDia.query.filter_by(fecha=fecha_origen).first()
-        if not dia_origen:
-            continue
-        tareas = LanzamientoTarea.query.filter_by(dia_id=dia_origen.dia_id).all()
-        for t in tareas:
-            if not existe_tarea(fecha_dest, t.personal_id, t.subarea_id):
-                crear_tarea(fecha_dest, t.personal_id, t.area_id, t.subarea_id, canon_nivel(t.nivel_limpieza_asignado) or "basica")
-    db.session.commit()
-
-def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite: bool):
-    if overwrite:
-        borrar_asignaciones_semana(destino_lunes)
-
-    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
-    for it in plantilla.items:
-        fecha_dest = destino_lunes + timedelta(days=it.dia_index)
-        if not existe_tarea(fecha_dest, it.personal_id, it.subarea_id):
-            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica")
-    db.session.commit()
 
 # =========================
 # UI: GET formulario aplicar plantilla
