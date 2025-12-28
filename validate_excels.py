@@ -18,6 +18,31 @@ def is_blank(v) -> bool:
     return False
 
 
+def _norm_id(v):
+    """
+    Normaliza IDs que vienen de Excel:
+      - None/NaN/"" -> None
+      - 3.0 -> "3"
+      - "3.0" -> "3"
+      - int -> "3"
+      - str -> stripped
+    """
+    if v is None:
+        return None
+    if isinstance(v, float) and np.isnan(v):
+        return None
+    if isinstance(v, float) and float(v).is_integer():
+        return str(int(v))
+    if isinstance(v, (int, np.integer)):
+        return str(int(v))
+    s = str(v).strip()
+    if s == "":
+        return None
+    if s.endswith(".0") and s[:-2].isdigit():
+        return s[:-2]
+    return s
+
+
 def sample_ids(df: pd.DataFrame, cols, limit=10):
     cols = [c for c in cols if c in df.columns]
     if not cols:
@@ -32,26 +57,20 @@ def sample_ids(df: pd.DataFrame, cols, limit=10):
 def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
     raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    # fila 0 = grupos (BD/AGRUPAMIENTO/GLOSARIO) con celdas combinadas => ffill
     groups = raw.iloc[0].replace({np.nan: None}).ffill().astype(str).str.strip().str.upper()
-
     bd_mask = groups.eq("BD").to_numpy()
     if bd_mask.sum() == 0:
         return pd.DataFrame()
 
-    # fila 1 = headers reales
     cols = raw.iloc[1, bd_mask].astype(str).str.strip().tolist()
 
-    # fila 2+ = datos
     df = raw.iloc[2:, bd_mask].copy()
     df.columns = cols
 
     df = df.replace({np.nan: None})
 
     # quitar filas completamente vacías
-    df = df.loc[
-        df.apply(lambda r: any(not is_blank(v) for v in r), axis=1)
-    ].copy()
+    df = df.loc[df.apply(lambda r: any(not is_blank(v) for v in r), axis=1)].copy()
 
     # strip strings
     for c in df.columns:
@@ -62,137 +81,78 @@ def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
 
 # ========= 2) Config por tabla =========
 CFG = {
-    "NivelLimpieza": {
-        "sheet": "NivelLimpieza",
-        "pk": "nivel_limpieza_id",
-        "required": ["nivel_limpieza_id", "nombre"],
-    },
+    "NivelLimpieza": {"sheet": "NivelLimpieza", "pk": "nivel_limpieza_id",
+                      "required": ["nivel_limpieza_id", "nombre"]},
 
-    "Personal": {
-        "sheet": "Personal",
-        "pk": "personal_id",
-        "required": ["personal_id", "nombre"],
-    },
+    "Personal": {"sheet": "Personal", "pk": "personal_id",
+                 "required": ["personal_id", "nombre"]},
 
-    "Area": {
-        "sheet": "Area",
-        "pk": "area_id",
-        "required": ["area_id", "area_nombre", "tipo_area", "cantidad_subareas", "orden_area"],
-    },
+    "Area": {"sheet": "Area", "pk": "area_id",
+             "required": ["area_id", "area_nombre", "tipo_area", "cantidad_subareas", "orden_area"]},
 
-    "SubArea": {
-        "sheet": "SubArea",
-        "pk": "subarea_id",
-        "required": ["subarea_id", "area_id", "subarea_nombre", "superficie_subarea", "frecuencia", "orden_subarea"],
-    },
+    "SubArea": {"sheet": "SubArea", "pk": "subarea_id",
+                "required": ["subarea_id", "area_id", "subarea_nombre", "superficie_subarea", "frecuencia", "orden_subarea"]},
 
-    "SOP": {
-        "sheet": "SOP",
-        "pk": "sop_id",
-        "required": ["sop_id", "subarea_id"],
-    },
+    "SOP": {"sheet": "SOP", "pk": "sop_id",
+            "required": ["sop_id", "subarea_id"]},
 
-    "Fraccion": {
-        "sheet": "Fraccion",
-        "pk": "fraccion_id",
-        "required": ["fraccion_id", "fraccion_nombre"],
-    },
+    "Fraccion": {"sheet": "Fraccion", "pk": "fraccion_id",
+                 "required": ["fraccion_id", "fraccion_nombre"]},
 
-    "MetodologiaBase": {
-        "sheet": "MetodologiaBase",
-        "pk": "metodologia_base_id",
-        "required": ["metodologia_base_id"],
-    },
+    "MetodologiaBase": {"sheet": "MetodologiaBase", "pk": "metodologia_base_id",
+                        "required": ["metodologia_base_id"]},
 
-    "MetodologiaBasePaso": {
-        "sheet": "MetodologiaBasePaso",
-        "pk": None,
-        "required": ["metodologia_base_id", "orden", "instruccion"],
-        "uniq": ["metodologia_base_id", "orden"],  # PK compuesta real
-    },
+    "MetodologiaBasePaso": {"sheet": "MetodologiaBasePaso", "pk": None,
+                            "required": ["metodologia_base_id", "orden", "instruccion"],
+                            "uniq": ["metodologia_base_id", "orden"]},
 
-    "Metodologia": {
-        "sheet": "Metodologia",
-        "pk": None,
-        "required": ["fraccion_id", "nivel_limpieza_id", "metodologia_base_id"],
-        "uniq": ["fraccion_id", "nivel_limpieza_id"],  # PK compuesta real
-    },
+    "Metodologia": {"sheet": "Metodologia", "pk": None,
+                    "required": ["fraccion_id", "nivel_limpieza_id", "metodologia_base_id"],
+                    "uniq": ["fraccion_id", "nivel_limpieza_id"]},
 
-    "Herramienta": {
-        "sheet": "Herramienta",
-        "pk": "herramienta_id",
-        "required": ["herramienta_id", "nombre"],
-    },
+    "Herramienta": {"sheet": "Herramienta", "pk": "herramienta_id",
+                    "required": ["herramienta_id", "nombre"]},
 
-
+    # ✅ IMPORT-LIKE: Kit requiere fraccion_id (NOT NULL). nivel_limpieza_id puede ser NULL (kit general).
     "Kit": {"sheet": "Kit", "pk": "kit_id",
-        "required": ["kit_id", "fraccion_id", "nombre"]},
+            "required": ["kit_id", "fraccion_id", "nombre"]},
 
+    "KitDetalle": {"sheet": "KitDetalle", "pk": None,
+                   "required": ["kit_id", "herramienta_id"],
+                   "uniq": ["kit_id", "herramienta_id"]},
 
-    "KitDetalle": {
-        "sheet": "KitDetalle",
-        "pk": None,
-        "required": ["kit_id", "herramienta_id"],
-        "uniq": ["kit_id", "herramienta_id"],  # PK compuesta real
-    },
+    "Quimico": {"sheet": "Quimico", "pk": "quimico_id",
+                "required": ["quimico_id", "nombre"]},
 
-    "Quimico": {
-        "sheet": "Quimico",
-        "pk": "quimico_id",
-        "required": ["quimico_id", "nombre"],
-    },
+    "Receta": {"sheet": "Receta", "pk": "receta_id",
+               "required": ["receta_id", "nombre"]},
 
-    "Receta": {
-        "sheet": "Receta",
-        "pk": "receta_id",
-        "required": ["receta_id", "nombre"],
-    },
+    "RecetaDetalle": {"sheet": "RecetaDetalle", "pk": None,
+                      "required": ["receta_id", "quimico_id"],
+                      "uniq": ["receta_id", "quimico_id"]},
 
-    "RecetaDetalle": {
-        "sheet": "RecetaDetalle",
-        "pk": None,
-        "required": ["receta_id", "quimico_id"],
-        "uniq": ["receta_id", "quimico_id"],  # PK compuesta real
-    },
+    # ✅ regla opcional (tu modelo lo permite), valor/unidad pueden ser requeridos por negocio.
+    "Consumo": {"sheet": "Consumo", "pk": "consumo_id",
+                "required": ["consumo_id", "valor", "unidad"]},
 
-    "Consumo": {
-        "sheet": "Consumo",
-        "pk": "consumo_id",
-        "required": ["consumo_id", "valor", "unidad"],
-    },
+    "Elemento": {"sheet": "Elemento", "pk": "elemento_id",
+                 "required": ["elemento_id", "subarea_id", "nombre"]},
 
-    "Elemento": {
-        "sheet": "Elemento",
-        "pk": "elemento_id",
-        "required": ["elemento_id", "subarea_id", "nombre"],
-    },
+    "ElementoSet": {"sheet": "ElementoSet", "pk": "elemento_set_id",
+                    "required": ["elemento_set_id", "subarea_id", "fraccion_id", "nivel_limpieza_id", "nombre"]},
 
-    "ElementoSet": {
-        "sheet": "ElementoSet",
-        "pk": "elemento_set_id",
-        "required": ["elemento_set_id", "subarea_id", "fraccion_id", "nivel_limpieza_id", "nombre"],
-    },
+    "ElementoDetalle": {"sheet": "ElementoDetalle", "pk": None,
+                        "required": ["elemento_set_id", "elemento_id"],
+                        "uniq": ["elemento_set_id", "elemento_id"]},
 
-    "ElementoDetalle": {
-        "sheet": "ElementoDetalle",
-        "pk": None,
-        "required": ["elemento_set_id", "elemento_id"],
-        "uniq": ["elemento_set_id", "elemento_id"],  # PK compuesta real
-    },
+    "SOPFraccion": {"sheet": "SOPFraccion", "pk": "sop_fraccion_id",
+                    "required": ["sop_fraccion_id", "sop_id", "fraccion_id", "orden"]},
 
-    "SOPFraccion": {
-        "sheet": "SOPFraccion",
-        "pk": "sop_fraccion_id",
-        "required": ["sop_fraccion_id", "sop_id", "fraccion_id", "orden"],
-    },
-
-    "SOPFraccionDetalle": {
-        "sheet": "SOPFraccionDetalle",
-        "pk": "sop_fraccion_detalle_id",
-        "required": ["sop_fraccion_detalle_id", "sop_fraccion_id", "nivel_limpieza_id"],
-        "uniq": ["sop_fraccion_id", "nivel_limpieza_id"],  # constraint uq_sop_fraccion_detalle_nivel
-    },
+    "SOPFraccionDetalle": {"sheet": "SOPFraccionDetalle", "pk": "sop_fraccion_detalle_id",
+                           "required": ["sop_fraccion_detalle_id", "sop_fraccion_id", "nivel_limpieza_id"],
+                           "uniq": ["sop_fraccion_id", "nivel_limpieza_id"]},
 }
+
 
 FILES_HINT = {
     "Area-SubArea.xlsx": ["Area", "SubArea"],
@@ -209,7 +169,7 @@ FILES_HINT = {
 
 
 def load_tables_from_excels(excel_paths):
-    data = {}   # table_name -> df
+    data = {}
     notes = []
 
     for path in excel_paths:
@@ -246,7 +206,7 @@ def load_tables_from_excels(excel_paths):
 def unique_check_pk(df, pk_col):
     if pk_col is None or pk_col not in df.columns:
         return []
-    s = df[pk_col].dropna().astype(str)
+    s = df[pk_col].apply(_norm_id).dropna()
     dup = s[s.duplicated()].unique().tolist()
     return dup
 
@@ -257,41 +217,20 @@ def unique_check_composite(df, cols):
         return []
 
     tmp = df[cols].copy()
+    # normaliza cada columna
+    for c in cols:
+        tmp[c] = tmp[c].apply(_norm_id)
+
     tmp = tmp.dropna(how="any")  # solo tuples completos
     if tmp.empty:
         return []
-
-    # normaliza a str para comparar
-    for c in cols:
-        tmp[c] = tmp[c].astype(str).str.strip()
 
     dup_mask = tmp.duplicated(keep=False)
     if not dup_mask.any():
         return []
 
-    dup_rows = tmp[dup_mask].head(10)
-    return dup_rows.to_dict(orient="records")
+    return tmp[dup_mask].head(10).to_dict(orient="records")
 
-import numpy as np
-
-
-def _norm_id(v):
-    if v is None:
-        return None
-    # NaN de Excel
-    if isinstance(v, float) and np.isnan(v):
-        return None
-    # 3.0 -> "3"
-    if isinstance(v, float) and float(v).is_integer():
-        return str(int(v))
-    # int -> "3"
-    if isinstance(v, (int, np.integer)):
-        return str(int(v))
-    # "3.0" -> "3"
-    s = str(v).strip()
-    if s.endswith(".0") and s[:-2].isdigit():
-        return s[:-2]
-    return s
 
 def fk_check(child_df, child_col, parent_df, parent_pk, allow_null=True):
     if child_df is None or parent_df is None:
@@ -299,11 +238,13 @@ def fk_check(child_df, child_col, parent_df, parent_pk, allow_null=True):
     if child_col not in child_df.columns or parent_pk not in parent_df.columns:
         return []
 
-    child_vals = [_norm_id(v) for v in child_df[child_col].tolist()]
+    child_vals_raw = [child_df[child_col].iloc[i] for i in range(len(child_df))]
+    child_vals = [_norm_id(v) for v in child_vals_raw]
+
     if allow_null:
-        child_vals = [v for v in child_vals if v is not None]  # ignora nulls
+        child_vals = [v for v in child_vals if v is not None]
     else:
-        # si no permites null, los None cuentan como "malos"
+        # dejamos los None para reportarlos como <NULL>
         pass
 
     parent_vals = set(_norm_id(v) for v in parent_df[parent_pk].tolist())
@@ -311,7 +252,7 @@ def fk_check(child_df, child_col, parent_df, parent_pk, allow_null=True):
 
     bad = sorted(set(v for v in set(child_vals) if v is not None and v not in parent_vals))
 
-    if not allow_null and any(v is None for v in [_norm_id(x) for x in child_df[child_col].tolist()]):
+    if not allow_null and any(v is None for v in [_norm_id(x) for x in child_vals_raw]):
         bad = ["<NULL>"] + bad
 
     return bad
@@ -331,7 +272,7 @@ def validate_required_values(df, required_cols):
 def validate(data):
     report = {"ok": True, "errors": [], "warnings": [], "stats": {}}
 
-    # 1) columnas requeridas + valores vacíos + duplicados
+    # 1) required cols + empty required values + duplicates
     for tname, df in data.items():
         cfg = CFG[tname]
         req = cfg["required"]
@@ -341,20 +282,17 @@ def validate(data):
             report["ok"] = False
             report["errors"].append(f"[{tname}] Faltan columnas BD requeridas: {missing_cols}")
 
-        # valores vacíos en required (solo si la columna existe)
         bad_vals = validate_required_values(df, req)
         if bad_vals:
             report["ok"] = False
             report["errors"].append(f"[{tname}] Hay valores vacíos en columnas requeridas: {bad_vals}")
 
-        # PK duplicadas
         pk = cfg["pk"]
         dups = unique_check_pk(df, pk)
         if dups:
             report["ok"] = False
             report["errors"].append(f"[{tname}] PK duplicadas en {pk}: ejemplos {dups[:10]}")
 
-        # Uniques compuestas
         if "uniq" in cfg:
             dup_rows = unique_check_composite(df, cfg["uniq"])
             if dup_rows:
@@ -382,26 +320,26 @@ def validate(data):
 
         # 1 SOP por subarea
         if "subarea_id" in get("SOP").columns:
-            s = get("SOP")["subarea_id"].dropna().astype(str).str.strip()
+            s = get("SOP")["subarea_id"].apply(_norm_id).dropna()
             dup_vals = s[s.duplicated()].unique().tolist()
             if dup_vals:
                 report["ok"] = False
                 report["errors"].append(f"[SOP] Hay más de 1 SOP por subarea_id: ejemplos {dup_vals[:10]}")
 
     if get("SOPFraccion") is not None and get("SOP") is not None:
-        bad = fk_check(get("SOPFraccion"), "sop_id", get("SOP"), "sop_id")
+        bad = fk_check(get("SOPFraccion"), "sop_id", get("SOP"), "sop_id", allow_null=False)
         if bad:
             report["ok"] = False
             report["errors"].append(f"[SOPFraccion] sop_id no existe en SOP: ejemplos {bad[:10]}")
 
     if get("SOPFraccion") is not None and get("Fraccion") is not None:
-        bad = fk_check(get("SOPFraccion"), "fraccion_id", get("Fraccion"), "fraccion_id")
+        bad = fk_check(get("SOPFraccion"), "fraccion_id", get("Fraccion"), "fraccion_id", allow_null=False)
         if bad:
             report["ok"] = False
             report["errors"].append(f"[SOPFraccion] fraccion_id no existe en Fraccion: ejemplos {bad[:10]}")
 
     if get("SOPFraccionDetalle") is not None and get("SOPFraccion") is not None:
-        bad = fk_check(get("SOPFraccionDetalle"), "sop_fraccion_id", get("SOPFraccion"), "sop_fraccion_id")
+        bad = fk_check(get("SOPFraccionDetalle"), "sop_fraccion_id", get("SOPFraccion"), "sop_fraccion_id", allow_null=False)
         if bad:
             report["ok"] = False
             report["errors"].append(f"[SOPFraccionDetalle] sop_fraccion_id no existe en SOPFraccion: ejemplos {bad[:10]}")
@@ -409,30 +347,31 @@ def validate(data):
     # NivelLimpieza usado en varios
     if get("NivelLimpieza") is not None:
         if get("Metodologia") is not None:
-            bad = fk_check(get("Metodologia"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id")
+            bad = fk_check(get("Metodologia"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id", allow_null=False)
             if bad:
                 report["ok"] = False
                 report["errors"].append(f"[Metodologia] nivel_limpieza_id no existe en NivelLimpieza: ejemplos {bad[:10]}")
 
         if get("ElementoSet") is not None:
-            bad = fk_check(get("ElementoSet"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id")
+            bad = fk_check(get("ElementoSet"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id", allow_null=False)
             if bad:
                 report["ok"] = False
                 report["errors"].append(f"[ElementoSet] nivel_limpieza_id no existe en NivelLimpieza: ejemplos {bad[:10]}")
 
         if get("SOPFraccionDetalle") is not None:
-            bad = fk_check(get("SOPFraccionDetalle"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id")
+            bad = fk_check(get("SOPFraccionDetalle"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id", allow_null=False)
             if bad:
                 report["ok"] = False
                 report["errors"].append(f"[SOPFraccionDetalle] nivel_limpieza_id no existe en NivelLimpieza: ejemplos {bad[:10]}")
 
+        # ✅ Kit.nivel_limpieza_id puede ser NULL (kit general)
         if get("Kit") is not None and "nivel_limpieza_id" in get("Kit").columns:
             bad = fk_check(get("Kit"), "nivel_limpieza_id", get("NivelLimpieza"), "nivel_limpieza_id", allow_null=True)
             if bad:
                 report["ok"] = False
                 report["errors"].append(f"[Kit] nivel_limpieza_id no existe en NivelLimpieza: ejemplos {bad[:10]}")
 
-    # Kit -> Fraccion
+    # Kit -> Fraccion (NO NULL)
     if get("Kit") is not None and get("Fraccion") is not None:
         bad = fk_check(get("Kit"), "fraccion_id", get("Fraccion"), "fraccion_id", allow_null=False)
         if bad:
@@ -509,7 +448,7 @@ def validate(data):
                 report["ok"] = False
                 report["errors"].append(f"[ElementoDetalle] elemento_id no existe en Elemento: ejemplos {bad[:10]}")
 
-        # opcionales: kit_id / receta_id / consumo_id si vienen
+        # opcionales
         if get("Kit") is not None and "kit_id" in get("ElementoDetalle").columns:
             bad = fk_check(get("ElementoDetalle"), "kit_id", get("Kit"), "kit_id", allow_null=True)
             if bad:
@@ -535,7 +474,7 @@ def validate(data):
                 report["ok"] = False
                 report["errors"].append(f"[ElementoDetalle] consumo_id no existe en Consumo: ejemplos {bad[:10]}")
 
-    # SOPFraccionDetalle opcionales: kit_id / receta_id / elemento_set_id
+    # SOPFraccionDetalle opcionales
     if get("SOPFraccionDetalle") is not None:
         df = get("SOPFraccionDetalle")
         cols = df.columns
@@ -558,7 +497,7 @@ def validate(data):
                 report["ok"] = False
                 report["errors"].append(f"[SOPFraccionDetalle] elemento_set_id no existe en ElementoSet: ejemplos {bad[:10]}")
 
-        # Regla clave: si hay elemento_set_id => NO puede haber kit/receta
+        # Regla: elemento_set_id => NO kit/receta
         if "elemento_set_id" in cols and ("kit_id" in cols or "receta_id" in cols):
             bad_rows = df[
                 df["elemento_set_id"].apply(lambda v: not is_blank(v))
@@ -574,7 +513,7 @@ def validate(data):
                     f"[SOPFraccionDetalle] Regla rota: elemento_set_id tiene valor pero kit_id/receta_id también. Ejemplos: {ids}"
                 )
 
-    # warning suave: superficie_subarea vacía
+    # warnings
     if get("SubArea") is not None and "superficie_subarea" in get("SubArea").columns:
         empty = int(get("SubArea")["superficie_subarea"].apply(is_blank).sum())
         if empty:
