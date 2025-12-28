@@ -1,6 +1,8 @@
 {
-  "ok": true,
-  "errors": [],
+  "ok": false,
+  "errors": [
+    "[ElementoSet] fraccion_id no existe en Fraccion: ejemplos ['FR-SA-002', 'FR-SA-003']"
+  ],
   "warnings": [],
   "stats": {
     "Area": {
@@ -13,31 +15,31 @@
       "rows": 4
     },
     "SOPFraccion": {
-      "rows": 8
-    },
-    "SOPFraccionDetalle": {
-      "rows": 20
-    },
-    "Fraccion": {
-      "rows": 8
-    },
-    "MetodologiaBase": {
       "rows": 15
     },
+    "SOPFraccionDetalle": {
+      "rows": 37
+    },
+    "Fraccion": {
+      "rows": 9
+    },
+    "MetodologiaBase": {
+      "rows": 18
+    },
     "MetodologiaBasePaso": {
-      "rows": 63
+      "rows": 73
     },
     "Metodologia": {
-      "rows": 20
+      "rows": 23
     },
     "Herramienta": {
       "rows": 40
     },
     "Kit": {
-      "rows": 13
+      "rows": 14
     },
     "KitDetalle": {
-      "rows": 26
+      "rows": 27
     },
     "Quimico": {
       "rows": 13
@@ -52,13 +54,13 @@
       "rows": 8
     },
     "Elemento": {
-      "rows": 44
+      "rows": 48
     },
     "ElementoSet": {
-      "rows": 5
+      "rows": 10
     },
     "ElementoDetalle": {
-      "rows": 28
+      "rows": 71
     },
     "Personal": {
       "rows": 3
@@ -68,7 +70,7 @@
     }
   },
   "meta": {
-    "created_at": "2025-12-28T01:02:37.576051+00:00",
+    "created_at": "2025-12-28T07:00:17.085591+00:00",
     "files_used": [
       "Area-SubArea.xlsx",
       "SOP.xlsx",
