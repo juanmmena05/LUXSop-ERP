@@ -94,6 +94,8 @@ class NivelLimpieza(db.Model):
     metodologias = db.relationship("Metodologia", back_populates="nivel_limpieza")
     sop_fraccion_detalles = db.relationship("SopFraccionDetalle", back_populates="nivel_limpieza")
     elemento_sets = db.relationship("ElementoSet", back_populates="nivel_limpieza")
+    kits = db.relationship("Kit", back_populates="nivel_limpieza")
+
 
 
 # ======================================================
@@ -116,6 +118,9 @@ class Fraccion(db.Model):
     sop_fracciones = db.relationship("SopFraccion", back_populates="fraccion")
 
     elemento_sets = db.relationship("ElementoSet", back_populates="fraccion")
+
+    kits = db.relationship("Kit", back_populates="fraccion", lazy="selectin")
+
 
 
 # ======================================================
@@ -266,24 +271,44 @@ class Herramienta(db.Model):
     kit_detalles = db.relationship("KitDetalle", back_populates="herramienta", cascade="all, delete-orphan")
 
 
-class Kit(db.Model):
-    __tablename__ = 'kit'
+from sqlalchemy import Column, String, Integer, ForeignKey
+from sqlalchemy.orm import relationship
 
-    kit_id = db.Column(db.String, primary_key=True)
+class Kit(db.Model):
+    __tablename__ = "kit"
+
+    kit_id = db.Column(db.String, primary_key=True)  # ej: KT-TL-001
+    fraccion_id = db.Column(db.String, db.ForeignKey("fraccion.fraccion_id"), nullable=False, index=True)
+    nivel_limpieza_id = db.Column(db.Integer, db.ForeignKey("nivel_limpieza.nivel_limpieza_id"), nullable=True, index=True)
     nombre = db.Column(db.String, nullable=False)
 
-    detalles = db.relationship("KitDetalle", back_populates="kit", cascade="all, delete-orphan")
+    fraccion = db.relationship("Fraccion", back_populates="kits")
+    nivel_limpieza = db.relationship("NivelLimpieza", back_populates="kits")
+
+    detalles = db.relationship(
+        "KitDetalle",
+        back_populates="kit",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    def __repr__(self):
+        return f"<Kit {self.kit_id} fr={self.fraccion_id} nivel={self.nivel_limpieza_id}>"
+
 
 
 class KitDetalle(db.Model):
-    __tablename__ = 'kit_detalle'
+    __tablename__ = "kit_detalle"
 
-    kit_id = db.Column(db.String, db.ForeignKey('kit.kit_id'), primary_key=True)
-    herramienta_id = db.Column(db.String, db.ForeignKey('herramienta.herramienta_id'), primary_key=True)
-    nota = db.Column(db.String)
+    kit_id = Column(String, ForeignKey("kit.kit_id"), primary_key=True)
+    herramienta_id = Column(String, ForeignKey("herramienta.herramienta_id"), primary_key=True)
+    nota = Column(String, nullable=True)
 
-    kit = db.relationship("Kit", back_populates="detalles")
-    herramienta = db.relationship("Herramienta", back_populates="kit_detalles")
+    kit = relationship("Kit", back_populates="detalles")
+    herramienta = relationship("Herramienta")
+
+    def __repr__(self):
+        return f"<KitDetalle {self.kit_id} {self.herramienta_id}>"
 
 
 # ======================================================

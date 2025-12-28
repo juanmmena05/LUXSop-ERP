@@ -37,23 +37,65 @@ def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
     # quitar filas vacías
     df = df.loc[df.apply(lambda r: any(v is not None and str(v).strip() != "" for v in r), axis=1)]
 
+    # strip strings
     for c in df.columns:
         df[c] = df[c].apply(lambda v: v.strip() if isinstance(v, str) else v)
 
     return df
 
 
+# ========= Casters robustos =========
 def to_int(v):
-    if v in (None, "", " "):
+    """Convierte Excel/str/float a int, soporta '1.0', 1.0, np.nan, ''."""
+    if v is None:
+        return None
+    if isinstance(v, float) and np.isnan(v):
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return None
+        # "3.0" -> 3
+        if s.endswith(".0") and s[:-2].isdigit():
+            return int(s[:-2])
+        # "3" -> 3
+        if s.isdigit():
+            return int(s)
+        # intenta float
+        try:
+            f = float(s)
+            if float(f).is_integer():
+                return int(f)
+            return None
+        except Exception:
+            return None
+    if isinstance(v, (int, np.integer)):
+        return int(v)
+    if isinstance(v, float):
+        if float(v).is_integer():
+            return int(v)
         return None
     try:
         return int(v)
     except Exception:
         return None
 
+
 def to_float(v):
-    if v in (None, "", " "):
+    if v is None:
         return None
+    if isinstance(v, float) and np.isnan(v):
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return None
+        # por si viene con coma decimal
+        s = s.replace(",", ".")
+        try:
+            return float(s)
+        except Exception:
+            return None
     try:
         return float(v)
     except Exception:
@@ -61,7 +103,6 @@ def to_float(v):
 
 
 # ========= 2) Config global =========
-# NombreTabla -> cómo leerla + modelo + PK + columnas
 CFG: Dict[str, Dict[str, Any]] = {
     "NivelLimpieza": {
         "file": "NivelLimpieza.xlsx", "sheet": "NivelLimpieza", "model": NivelLimpieza,
@@ -107,13 +148,13 @@ CFG: Dict[str, Dict[str, Any]] = {
     },
     "MetodologiaBasePaso": {
         "file": "Metodologia.xlsx", "sheet": "MetodologiaBasePaso", "model": MetodologiaBasePaso,
-        "pk": ["metodologia_base_id", "orden"],  # PK compuesta
+        "pk": ["metodologia_base_id", "orden"],
         "fields": ["metodologia_base_id", "orden", "instruccion"],
         "casters": {"orden": to_int},
     },
     "Metodologia": {
         "file": "Metodologia.xlsx", "sheet": "Metodologia", "model": Metodologia,
-        "pk": ["fraccion_id", "nivel_limpieza_id"],  # PK compuesta
+        "pk": ["fraccion_id", "nivel_limpieza_id"],
         "fields": ["fraccion_id", "nivel_limpieza_id", "metodologia_base_id"],
         "casters": {"nivel_limpieza_id": to_int},
     },
@@ -123,15 +164,18 @@ CFG: Dict[str, Dict[str, Any]] = {
         "fields": ["herramienta_id", "nombre", "descripcion", "estatus"],
         "casters": {},
     },
+
+    # ✅ FIX: Kit debe incluir fraccion_id (NOT NULL). nivel_limpieza_id puede ser NULL (kit general).
     "Kit": {
         "file": "Herramienta.xlsx", "sheet": "Kit", "model": Kit,
         "pk": ["kit_id"],
-        "fields": ["kit_id", "nombre"],
-        "casters": {},
+        "fields": ["kit_id", "fraccion_id", "nivel_limpieza_id", "nombre"],
+        "casters": {"nivel_limpieza_id": to_int},
     },
+
     "KitDetalle": {
         "file": "Herramienta.xlsx", "sheet": "KitDetalle", "model": KitDetalle,
-        "pk": ["kit_id", "herramienta_id"],  # PK compuesta
+        "pk": ["kit_id", "herramienta_id"],
         "fields": ["kit_id", "herramienta_id", "nota"],
         "casters": {},
     },
@@ -149,7 +193,7 @@ CFG: Dict[str, Dict[str, Any]] = {
     },
     "RecetaDetalle": {
         "file": "Quimico.xlsx", "sheet": "RecetaDetalle", "model": RecetaDetalle,
-        "pk": ["receta_id", "quimico_id"],  # PK compuesta
+        "pk": ["receta_id", "quimico_id"],
         "fields": ["receta_id", "quimico_id", "dosis", "unidad_dosis", "volumen_base", "unidad_volumen", "nota"],
         "casters": {"dosis": to_float, "volumen_base": to_float},
     },
@@ -173,7 +217,7 @@ CFG: Dict[str, Dict[str, Any]] = {
     },
     "ElementoDetalle": {
         "file": "Elemento.xlsx", "sheet": "ElementoDetalle", "model": ElementoDetalle,
-        "pk": ["elemento_set_id", "elemento_id"],  # PK compuesta
+        "pk": ["elemento_set_id", "elemento_id"],
         "fields": ["elemento_set_id", "elemento_id", "receta_id", "kit_id", "consumo_id", "orden"],
         "casters": {"orden": to_int},
     },
@@ -192,7 +236,6 @@ CFG: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Orden correcto (padres -> hijos)
 IMPORT_ORDER = [
     "NivelLimpieza",
     "Personal",
@@ -253,20 +296,23 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
     if df.empty:
         return inserted, updated
 
-    # nos quedamos solo con campos que importamos
+    # solo columnas declaradas
     df = df[[c for c in fields if c in df.columns]].copy()
     df = df.replace({np.nan: None})
 
     for row in df.to_dict(orient="records"):
         row = cast_row(row, casters)
+
         pk_val = get_pk_value(pk_cols, row)
         if pk_val is None or (isinstance(pk_val, tuple) and any(v is None for v in pk_val)):
             continue
 
-        obj = db.session.get(Model, pk_val)
+        # ✅ evita autoflush durante el SELECT
+        with db.session.no_autoflush:
+            obj = db.session.get(Model, pk_val)
+
         is_new = obj is None
         if is_new:
-            # construir con PK
             init_kwargs = {c: row.get(c) for c in pk_cols}
             obj = Model(**init_kwargs)
 
@@ -276,6 +322,10 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
                 continue
             if f in row:
                 setattr(obj, f, row.get(f))
+
+        # ✅ guard: Kit debe traer fraccion_id sí o sí
+        if table_name == "Kit" and getattr(obj, "fraccion_id", None) in (None, "", " "):
+            raise ValueError(f"Kit {getattr(obj,'kit_id',None)} quedó sin fraccion_id (NOT NULL).")
 
         db.session.add(obj)
         if is_new:
@@ -288,34 +338,34 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
 
 def reset_db():
     # Borrar en orden seguro (hijas -> padres)
-    db.session.query(SopFraccionDetalle).delete()
-    db.session.query(SopFraccion).delete()
+    db.session.query(SopFraccionDetalle).delete(synchronize_session=False)
+    db.session.query(SopFraccion).delete(synchronize_session=False)
 
-    db.session.query(ElementoDetalle).delete()
-    db.session.query(ElementoSet).delete()
-    db.session.query(Elemento).delete()
+    db.session.query(ElementoDetalle).delete(synchronize_session=False)
+    db.session.query(ElementoSet).delete(synchronize_session=False)
+    db.session.query(Elemento).delete(synchronize_session=False)
 
-    db.session.query(RecetaDetalle).delete()
-    db.session.query(Receta).delete()
-    db.session.query(Quimico).delete()
+    db.session.query(RecetaDetalle).delete(synchronize_session=False)
+    db.session.query(Receta).delete(synchronize_session=False)
+    db.session.query(Quimico).delete(synchronize_session=False)
 
-    db.session.query(KitDetalle).delete()
-    db.session.query(Kit).delete()
-    db.session.query(Herramienta).delete()
+    db.session.query(KitDetalle).delete(synchronize_session=False)
+    db.session.query(Kit).delete(synchronize_session=False)
+    db.session.query(Herramienta).delete(synchronize_session=False)
 
-    db.session.query(MetodologiaBasePaso).delete()
-    db.session.query(Metodologia).delete()
-    db.session.query(MetodologiaBase).delete()
+    db.session.query(MetodologiaBasePaso).delete(synchronize_session=False)
+    db.session.query(Metodologia).delete(synchronize_session=False)
+    db.session.query(MetodologiaBase).delete(synchronize_session=False)
 
-    db.session.query(Consumo).delete()
-    db.session.query(Fraccion).delete()
+    db.session.query(Consumo).delete(synchronize_session=False)
+    db.session.query(Fraccion).delete(synchronize_session=False)
 
-    db.session.query(SOP).delete()
-    db.session.query(SubArea).delete()
-    db.session.query(Area).delete()
+    db.session.query(SOP).delete(synchronize_session=False)
+    db.session.query(SubArea).delete(synchronize_session=False)
+    db.session.query(Area).delete(synchronize_session=False)
 
-    db.session.query(Personal).delete()
-    db.session.query(NivelLimpieza).delete()
+    db.session.query(Personal).delete(synchronize_session=False)
+    db.session.query(NivelLimpieza).delete(synchronize_session=False)
 
 
 def main():
@@ -331,15 +381,18 @@ def main():
             db.session.commit()
             print("✅ BD limpiada (reset).")
 
-        stats = {}
         for t in IMPORT_ORDER:
-            df = load_df(args.dir, t)
-            ins, upd = upsert_table(df, t)
-            stats[t] = {"inserted": ins, "updated": upd}
-            print(f"{t}: +{ins} insert / ~{upd} update")
+            try:
+                df = load_df(args.dir, t)
+                ins, upd = upsert_table(df, t)
+                db.session.commit()  # ✅ commit por tabla
+                print(f"{t}: +{ins} insert / ~{upd} update")
+            except Exception as e:
+                db.session.rollback()
+                raise RuntimeError(f"Fallo importando tabla {t}: {e}") from e
 
-        db.session.commit()
         print("🎉 Import terminado.")
+
 
 if __name__ == "__main__":
     main()
