@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Plantillas · LuxSOP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --green: #198754;
+      --red: #dc3545;
+      --red-d: #b02a37;
+      --card: #fff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      max-width: 1200px;
+      margin-inline: auto;
+    }
+
+    /* Header */
+    .head-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:12px;
+      padding-bottom:.6rem;
+      border-bottom:1px solid var(--line);
+      margin-bottom: 14px;
+    }
+    .title h1{ margin:0; font-size:1.25rem; font-weight:600; }
+    .title .sub{ margin-top:.2rem; color:var(--muted); font-size:.85rem; }
+
+    /* Controls */
+    .panel-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 900px){
+      .panel-grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:12px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding: 12px;
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .label{ font-size:.85rem; color:#555; }
+
+    select, input[type="text"]{
+      appearance:none;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:.45rem .6rem;
+      font-size:.9rem;
+      height: 36px;
+    }
+
+    .btn{
+      border: none;
+      border-radius: 10px;
+      padding: .55rem .85rem;
+      cursor: pointer;
+      font-size: .9rem;
+      height: 36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      text-decoration:none;
+      line-height:1;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-blue:hover{ filter: brightness(.95); }
+    .btn-red{ background: var(--red); color:#fff; }
+    .btn-red:hover{ background: var(--red-d); }
+
+    /* Flash */
+    .flash-wrap { margin: .75rem 0 1rem; }
+    .flash {
+      background: #eef9f0;
+      border: 1px solid #cde8d5;
+      color: #226b3d;
+      padding: .45rem .6rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      transition: opacity 0.5s ease;
+    }
+
+    /* Week grid (igual idea que home) */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    .day-card {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 170px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.9rem;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+      transition: box-shadow .18s ease;
+    }
+    .day-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+
+    .day-head { font-size: 1rem; font-weight: 700; }
+    .muted { color: var(--muted); font-size: .85rem; }
+
+    .stats{
+      font-size: .85rem;
+      color: #444;
+      margin-top: 2px;
+      display:grid;
+      gap:4px;
+    }
+    .stats span{
+      font-weight:700;
+      color:#000;
+    }
+
+    .actions{
+      margin-top:auto;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    /* ======================================================
+       ✅ MENÚ LATERAL (IGUAL QUE PROGRAMACIÓN)
+       ====================================================== */
+    .burger {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1101;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .burger:hover { filter: brightness(.98); }
+
+    .nav-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 1100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .side-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 300px;
+      max-width: 84vw;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(0,0,0,.14);
+      z-index: 1102;
+
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .side-nav.is-open { transform: translateX(0); }
+
+    .side-nav__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 6px;
+    }
+    .side-nav__brand { display: grid; line-height: 1.1; }
+    .side-nav__brand strong { font-size: 1rem; }
+    .side-nav__brand span { font-size: .78rem; color: var(--muted); }
+
+    .side-nav__close {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .side-nav__link {
+      text-decoration: none;
+      color: var(--fg);
+      padding: 10px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: .92rem;
+    }
+    .side-nav__link:hover { background: #f3f3f3; }
+  </style>
+</head>
+
+<body>
+  <!-- ✅ Menú lateral -->
+  <button class="burger" id="navToggle"
+          aria-label="Abrir menú"
+          aria-controls="sideNav"
+          aria-expanded="false">☰</button>
+
+  <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+  <nav class="side-nav" id="sideNav" aria-label="Menú principal">
+    <div class="side-nav__head">
+      <div class="side-nav__brand">
+        <strong>LuxSOP</strong>
+        <span>ERP · Limpieza</span>
+      </div>
+      <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+    </div>
+
+    <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+    <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+    <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+
+  </nav>
+
+  <div class="head-row">
+    <div class="title">
+      <h1>Plantillas</h1>
+      <div class="sub">Crea o edita plantillas (Lun–Sáb, sin fechas).</div>
+      {% if plantilla %}
+        <div class="sub" style="margin-top:.15rem;">
+          Editando: <strong>{{ plantilla.nombre }}</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap" role="status" aria-live="polite">
+        {% for category, msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Panel superior: seleccionar existente / crear nueva -->
+  <div class="panel-grid">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <div style="font-weight:700;">Editar plantilla existente</div>
+          <div class="muted">Selecciona una plantilla para verla y modificarla.</div>
+        </div>
+      </div>
+
+      <form method="GET" action="{{ url_for('main.plantillas_panel') }}" class="row" style="margin-top:10px;">
+        <span class="label">Plantilla</span>
+        <select name="plantilla_id">
+          <option value="">— Selecciona —</option>
+          {% for p in plantillas %}
+            <option value="{{ p.plantilla_id }}"
+              {% if plantilla and p.plantilla_id == plantilla.plantilla_id %}selected{% endif %}>
+              {{ p.nombre }}
+            </option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-blue" type="submit">Abrir</button>
+      </form>
+
+      {% if plantilla %}
+        <div class="row" style="margin-top:12px;">
+          <form method="POST" action="{{ url_for('main.plantilla_rename', plantilla_id=plantilla.plantilla_id) }}" class="row">
+            <span class="label">Renombrar</span>
+            <input type="text" name="nombre" value="{{ plantilla.nombre }}" />
+            <button class="btn btn-blue" type="submit">Guardar</button>
+          </form>
+
+          <form method="POST" action="{{ url_for('main.borrar_plantilla', plantilla_id=plantilla.plantilla_id) }}"
+                onsubmit="return confirm('¿Seguro que deseas eliminar esta plantilla?');">
+            <button class="btn btn-red" type="submit">Eliminar</button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;">Crear plantilla nueva</div>
+      <div class="muted">Crea una plantilla vacía y luego rellénala en los 6 días.</div>
+
+      <form method="POST" action="{{ url_for('main.plantillas_crear') }}" class="row" style="margin-top:10px;">
+        <span class="label">Nombre</span>
+        <input type="text" name="nombre" placeholder="Ej: Turno Mañana" />
+        <button class="btn btn-blue" type="submit">Crear</button>
+      </form>
+    </div>
+  </div>
+
+  {% set day_names = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"] %}
+
+  {% if not plantilla %}
+    <div class="card">
+      <div style="font-weight:700;">Semana</div>
+      <div class="muted">Crea o abre una plantilla para editarla.</div>
+    </div>
+
+    <section class="week-grid">
+      {% for i in range(6) %}
+        <div class="day-card">
+          <div>
+            <div class="day-head">{{ day_names[i] }}</div>
+            <div class="muted">— Sin plantilla seleccionada —</div>
+          </div>
+          <div class="actions">
+            <span class="muted">Edita una plantilla para habilitar.</span>
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+  {% else %}
+
+    <section class="week-grid">
+      {% for d in dias %}
+        {% set total = (d['items']|length) %}
+        <div class="day-card">
+          <div>
+            <div class="day-head">{{ d.nombre }}</div>
+            <div class="muted">Plantilla general (sin fecha).</div>
+
+            <div class="stats">
+              <div><span>{{ total }}</span> actividad(es)</div>
+              {# si luego pasamos total_personas desde routes, se muestra #}
+              {% if d.get('total_personas') is not none %}
+                <div><span>{{ d.get('total_personas') }}</span> persona(s)</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="actions">
+            <a class="btn btn-blue"
+               href="{{ url_for('main.plantilla_dia', plantilla_id=plantilla.plantilla_id, dia_index=d.index) }}">
+              Editar día
+            </a>
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  <script>
+    // Sidebar: abrir/cerrar + overlay + ESC + cerrar al navegar
+    (function(){
+      const nav = document.getElementById('sideNav');
+      const btn = document.getElementById('navToggle');
+      const closeBtn = document.getElementById('navClose');
+      const overlay = document.getElementById('navOverlay');
+      if(!nav || !btn || !overlay) return;
+
+      function openNav(){
+        nav.classList.add('is-open');
+        overlay.classList.add('is-open');
+        btn.setAttribute('aria-expanded','true');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeNav(){
+        nav.classList.remove('is-open');
+        overlay.classList.remove('is-open');
+        btn.setAttribute('aria-expanded','false');
+        document.body.style.overflow = '';
+      }
+
+      btn.addEventListener('click', openNav);
+      overlay.addEventListener('click', closeNav);
+      closeBtn && closeBtn.addEventListener('click', closeNav);
+
+      document.addEventListener('keydown', (e) => {
+        if(e.key === 'Escape') closeNav();
+      });
+
+      nav.addEventListener('click', (e) => {
+        const a = e.target.closest('a');
+        if(a) closeNav();
+      });
+    })();
+
+    // Fade-out flash
+    (function() {
+      const flashes = document.querySelectorAll('.flash');
+      if (!flashes.length) return;
+      setTimeout(() => {
+        flashes.forEach(flash => {
+          flash.style.transition = 'opacity 0.8s ease';
+          flash.style.opacity = '0';
+          setTimeout(() => flash.remove(), 1000);
+        });
+      }, 1500);
+    })();
+  </script>
+</body>
+</html>

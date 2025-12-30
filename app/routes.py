@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta
 import pdfkit
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort
 from sqlalchemy.orm import joinedload
+from sqlalchemy import and_, or_ 
 
 from .extensions import db
 from .models import (
@@ -588,7 +589,8 @@ def plan_dia_asignar(fecha):
         tareas_del_dia=tareas_del_dia,
         tareas_por_persona=tareas_por_persona,
         tiempos_por_tarea=tiempos_por_tarea,
-        asignadas_ids=asignadas_ids
+        asignadas_ids=asignadas_ids,
+        hide_nav=True,
     )
 
 # =========================
@@ -648,7 +650,7 @@ def ruta_dia(fecha):
                 personas.append(p)
                 vistos.add(p.personal_id)
 
-    return render_template("ruta_dia.html", fecha=fecha_obj, personas=personas)
+    return render_template("ruta_dia.html", fecha=fecha_obj, personas=personas, hide_nav=True)
 
 # =========================
 # REPORTE (micro) — HTML reporte_personal.html
@@ -832,7 +834,7 @@ def reporte_persona_dia(fecha, personal_id):
         )
     )
 
-    return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles)
+    return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles, hide_nav=True)
 
 
 # =========================
@@ -1246,6 +1248,167 @@ def ordenar_elementoset(elemento_set_id):
 
 
 # =========================
+# SOP · Editor completo ElementoSet (selección + orden + kit/receta/consumo)
+# =========================
+@main_bp.route("/sop/<sop_id>/elementoset", methods=["GET", "POST"])
+def sop_elementoset_edit(sop_id):
+    # nivel por query o form
+    nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
+    if nivel not in ("basica", "media", "profundo"):
+        nivel = "media"
+
+    nivel_obj = NivelLimpieza.query.filter_by(nombre=nivel).first()
+    if not nivel_obj:
+        flash("Nivel de limpieza inválido.", "error")
+        return redirect(url_for("main.sop_panel"))
+
+    nivel_id = int(nivel_obj.nivel_limpieza_id)
+
+    sop = SOP.query.filter_by(sop_id=sop_id).first_or_404()
+    subarea = sop.subarea
+
+    sop_fraccion_id = (request.args.get("sop_fraccion_id") or request.form.get("sop_fraccion_id") or "").strip()
+    if not sop_fraccion_id:
+        flash("Falta sop_fraccion_id.", "warning")
+        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel))
+
+    sf = SopFraccion.query.filter_by(sop_fraccion_id=sop_fraccion_id, sop_id=sop_id).first()
+    if not sf:
+        abort(404)
+
+    fr = sf.fraccion
+
+    # Asegurar SopFraccionDetalle
+    detalle = (
+        SopFraccionDetalle.query
+        .filter_by(sop_fraccion_id=sf.sop_fraccion_id, nivel_limpieza_id=nivel_id)
+        .first()
+    )
+    if not detalle:
+        detalle = SopFraccionDetalle(
+            sop_fraccion_detalle_id=make_sd_id(sop.sop_id, fr.fraccion_id, nivel_id),
+            sop_fraccion_id=sf.sop_fraccion_id,
+            nivel_limpieza_id=nivel_id,
+        )
+        db.session.add(detalle)
+        db.session.flush()
+
+    # Asegurar ElementoSet único por (subarea, fraccion, nivel)
+    es = None
+    if detalle.elemento_set_id:
+        es = ElementoSet.query.filter_by(elemento_set_id=detalle.elemento_set_id).first()
+
+    if not es:
+        es = ElementoSet.query.filter_by(
+            subarea_id=subarea.subarea_id,
+            fraccion_id=fr.fraccion_id,
+            nivel_limpieza_id=nivel_id,
+        ).first()
+
+        if not es:
+            es_id_new = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
+            es = ElementoSet(
+                elemento_set_id=es_id_new,
+                subarea_id=subarea.subarea_id,
+                fraccion_id=fr.fraccion_id,
+                nivel_limpieza_id=nivel_id,
+                nombre=f"{subarea.subarea_nombre} · {fr.fraccion_nombre} ({nivel})"
+            )
+            db.session.add(es)
+            db.session.flush()
+
+        detalle.elemento_set_id = es.elemento_set_id
+        # regla: si hay elementos, limpio directos
+        detalle.kit_id = None
+        detalle.receta_id = None
+        detalle.consumo_id = None
+        db.session.commit()
+
+    # ===== Elementos disponibles (por subárea) =====
+    # OJO: si tu modelo Elemento NO tiene subarea_id, cambia este filtro a Elemento.query.all()
+    elementos = (
+        Elemento.query
+        .filter_by(subarea_id=subarea.subarea_id)
+        .order_by(Elemento.elemento_id.asc())
+        .all()
+    )
+
+    # Detalles actuales del set
+    detalles = (
+        ElementoDetalle.query
+        .filter_by(elemento_set_id=es.elemento_set_id)
+        .all()
+    )
+    det_by_el = {d.elemento_id: d for d in (detalles or [])}
+
+    # Catálogos
+    recetas = Receta.query.order_by(Receta.nombre.asc()).all()
+    consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
+    kits = (
+        Kit.query
+        .filter(
+            Kit.fraccion_id == fr.fraccion_id,
+            or_(Kit.nivel_limpieza_id == None, Kit.nivel_limpieza_id == nivel_id)
+        )
+        .order_by(Kit.nombre.asc())
+        .all()
+    )
+
+    # ===== POST: upsert + delete =====
+    if request.method == "POST":
+        selected_ids = request.form.getlist("elemento_id")
+        selected_set = set(selected_ids)
+
+        # borrar los que ya no están marcados
+        for d in list(detalles or []):
+            if str(d.elemento_id) not in selected_set:
+                db.session.delete(d)
+
+        # upsert marcados
+        for el_id in selected_ids:
+            orden_raw = (request.form.get(f"orden_{el_id}") or "").strip()
+            orden = int(orden_raw) if orden_raw.isdigit() else None
+
+            kit_id = (request.form.get(f"kit_{el_id}") or "").strip() or None
+            receta_id = (request.form.get(f"receta_{el_id}") or "").strip() or None
+            consumo_id = (request.form.get(f"consumo_{el_id}") or "").strip() or None
+
+            d = det_by_el.get(el_id)
+            if not d:
+                d = ElementoDetalle(
+                    elemento_set_id=es.elemento_set_id,
+                    elemento_id=el_id,
+                )
+                db.session.add(d)
+
+            d.orden = orden
+            d.kit_id = kit_id
+            d.receta_id = receta_id
+            d.consumo_id = consumo_id
+
+        db.session.commit()
+        flash("✅ Elementos del set guardados.", "success")
+        return redirect(url_for("main.sop_elementoset_edit", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf.sop_fraccion_id))
+
+    return render_template(
+        "sop_elementoset.html",
+        sop=sop,
+        subarea=subarea,
+        nivel=nivel,
+        nivel_id=nivel_id,
+        nivel_obj=nivel_obj,
+        sf=sf,
+        fr=fr,
+        es=es,
+        elementos=elementos,
+        det_by_el=det_by_el,
+        kits=kits,
+        recetas=recetas,
+        consumos=consumos,
+    )
+
+
+# =========================
 # Obtiene la Metodologia por Fraccion y Nivel Limpieza
 # =========================
 def build_met_map(fraccion_ids: set[str], nivel_ids: set[int]):
@@ -1273,3 +1436,711 @@ def build_met_map(fraccion_ids: set[str], nivel_ids: set[int]):
         for m in asignaciones
         if m.metodologia_base is not None
     }
+
+
+
+# =========================
+# Panel de Plantillas
+# =========================
+@main_bp.route("/plantillas")
+def plantillas_panel():
+    hoy = date.today()
+    lunes_ref = get_monday(hoy)
+
+    plantillas = PlantillaSemanal.query.order_by(PlantillaSemanal.nombre.asc()).all()
+
+    plantilla = None
+    plantilla_id_str = request.args.get("plantilla_id", "").strip()
+    if plantilla_id_str.isdigit():
+        plantilla_id = int(plantilla_id_str)
+        plantilla = (
+            PlantillaSemanal.query.options(
+                joinedload(PlantillaSemanal.items).joinedload(PlantillaItem.personal),
+                joinedload(PlantillaSemanal.items).joinedload(PlantillaItem.subarea),
+                joinedload(PlantillaSemanal.items).joinedload(PlantillaItem.area),
+            )
+            .filter_by(plantilla_id=plantilla_id)
+            .first()
+        )
+
+    day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+    dias = [{"index": i, "nombre": day_names[i], "items": []} for i in range(6)]
+
+    if plantilla:
+        # agrupar items por dia_index
+        for it in (plantilla.items or []):
+            if it.dia_index is None:
+                continue
+            if 0 <= int(it.dia_index) <= 5:
+                dias[int(it.dia_index)]["items"].append(it)
+
+        # orden amigable dentro del día
+        for d in dias:
+            d["items"].sort(key=lambda x: (x.personal_id or "", x.area_id or "", x.subarea_id or ""))
+
+    return render_template(
+        "plantillas_panel.html",
+        plantillas=plantillas,
+        plantilla=plantilla,
+        dias=dias,
+        lunes_ref=lunes_ref.strftime("%Y-%m-%d"),
+    )
+
+# =========================
+# REMOVER plantilla activa (NO borra tareas)
+# =========================
+@main_bp.route("/plantillas/remover_semana", methods=["POST"])
+def remover_plantilla_semana():
+    lunes_destino_str = request.form.get("lunes_destino")
+    if not lunes_destino_str:
+        return "Falta lunes_destino", 400
+
+    lunes_destino = datetime.strptime(lunes_destino_str, "%Y-%m-%d").date()
+
+    # Solo desvincula plantilla activa, NO toca LanzamientoTarea
+    set_plantilla_activa(lunes_destino, None)
+    flash("Plantilla removida (no se borraron tareas).", "success")
+    return redirect(url_for("main.home"))
+
+
+# =========================
+# Crear plantilla vacía (desde cero)
+# =========================
+@main_bp.route("/plantillas/crear", methods=["POST"])
+def plantillas_crear():
+    nombre = (request.form.get("nombre") or "").strip()
+    if not nombre:
+        flash("Escribe un nombre para la plantilla.", "warning")
+        return redirect(url_for("main.plantillas_panel"))
+
+    if PlantillaSemanal.query.filter_by(nombre=nombre).first():
+        flash("Ya existe una plantilla con ese nombre.", "warning")
+        return redirect(url_for("main.plantillas_panel"))
+
+    plantilla = PlantillaSemanal(nombre=nombre)
+    db.session.add(plantilla)
+    db.session.commit()
+
+    flash(f'Plantilla "{plantilla.nombre}" creada. Ahora puedes llenarla.', "success")
+    return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla.plantilla_id))
+
+
+# =========================
+# Agregar item a un día de una plantilla
+# =========================
+@main_bp.route("/plantillas/<int:plantilla_id>/item/add", methods=["POST"])
+def plantilla_item_add(plantilla_id: int):
+    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+
+    dia_index = request.form.get("dia_index")
+    personal_id = request.form.get("personal_id")
+    area_id = request.form.get("area_id")
+    subarea_id = request.form.get("subarea_id")
+    nivel = canon_nivel(request.form.get("nivel_limpieza_asignado")) or "basica"
+
+    if dia_index is None or not str(dia_index).isdigit():
+        flash("Día inválido.", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    dia_index = int(dia_index)
+    if dia_index < 0 or dia_index > 5:
+        flash("Día inválido (0..5).", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    if not (personal_id and area_id and subarea_id):
+        flash("Faltan datos (personal/área/subárea).", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    # (Opcional) Evitar duplicados exactos en el mismo día
+    exists = PlantillaItem.query.filter_by(
+        plantilla_id=plantilla_id,
+        dia_index=dia_index,
+        personal_id=personal_id,
+        subarea_id=subarea_id
+    ).first()
+    if exists:
+        flash("Ese personal ya tiene esa subárea en ese día dentro de la plantilla.", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    it = PlantillaItem(
+        plantilla_id=plantilla_id,
+        dia_index=dia_index,
+        personal_id=personal_id,
+        area_id=area_id,
+        subarea_id=subarea_id,
+        nivel_limpieza_asignado=nivel
+    )
+    db.session.add(it)
+    db.session.commit()
+
+    flash("Actividad agregada.", "success")
+    return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
+
+
+
+# =========================
+# Borrar item
+# =========================
+@main_bp.route("/plantillas/item/<int:item_id>/delete", methods=["POST"])
+def plantilla_item_delete(item_id: int):
+    it = PlantillaItem.query.get_or_404(item_id)
+    plantilla_id = it.plantilla_id
+    dia_index = it.dia_index
+    db.session.delete(it)
+    db.session.commit()
+    flash("Actividad eliminada.", "success")
+    return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
+
+
+
+# =========================
+# (Opcional) Renombrar plantilla
+# =========================
+@main_bp.route("/plantillas/<int:plantilla_id>/rename", methods=["POST"])
+def plantilla_rename(plantilla_id: int):
+    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+    nombre = (request.form.get("nombre") or "").strip()
+    if not nombre:
+        flash("Nombre inválido.", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    dup = PlantillaSemanal.query.filter(PlantillaSemanal.nombre == nombre, PlantillaSemanal.plantilla_id != plantilla_id).first()
+    if dup:
+        flash("Ya existe una plantilla con ese nombre.", "warning")
+        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+    plantilla.nombre = nombre
+    db.session.commit()
+    flash("Nombre actualizado.", "success")
+    return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+
+
+# =========================
+# Editor de día (Plantilla) — Lun..Sáb sin fecha
+# =========================
+@main_bp.route("/plantillas/<int:plantilla_id>/dia/<int:dia_index>")
+def plantilla_dia(plantilla_id: int, dia_index: int):
+    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+
+    if dia_index < 0 or dia_index > 5:
+        abort(404)
+
+    day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
+    dia_nombre = day_names[dia_index]
+
+    # items del día (precargamos relaciones para mostrar nombres)
+    items = (
+        PlantillaItem.query
+        .options(
+            joinedload(PlantillaItem.personal),
+            joinedload(PlantillaItem.area),
+            joinedload(PlantillaItem.subarea),
+        )
+        .filter_by(plantilla_id=plantilla_id, dia_index=dia_index)
+        .all()
+    )
+
+    asignadas_ids = {it.subarea_id for it in items}
+
+    personal_list = Personal.query.order_by(Personal.nombre.asc()).all()
+    areas_list = Area.query.order_by(Area.orden_area.asc(), Area.area_nombre.asc()).all()
+    subareas_list = SubArea.query.order_by(SubArea.orden_subarea.asc()).all()
+
+    # (Opcional) agrupar por persona como en plan_dia_form
+    items_por_persona = {}
+    for it in items:
+        pid = it.personal_id
+        if pid not in items_por_persona:
+            items_por_persona[pid] = {"persona": it.personal, "items": []}
+        items_por_persona[pid]["items"].append(it)
+
+    # orden amable
+    for pid in items_por_persona:
+        items_por_persona[pid]["items"].sort(key=lambda x: (x.area_id or "", x.subarea_id or ""))
+
+    return render_template(
+        "plantilla_dia_form.html",
+        plantilla=plantilla,
+        dia_index=dia_index,
+        dia_nombre=dia_nombre,
+        personal_list=personal_list,
+        areas_list=areas_list,
+        subareas_list=subareas_list,
+        asignadas_ids=asignadas_ids,
+        items_por_persona=items_por_persona,
+        hide_nav=True,
+    )
+
+
+# =========================
+# AJAX: subáreas por área (SIMPLE, sin fecha/ocupadas)
+# =========================
+@main_bp.route("/subareas_por_area_simple/<area_id>")
+def subareas_por_area_simple(area_id):
+    subareas = (
+        SubArea.query
+        .filter_by(area_id=area_id)
+        .order_by(SubArea.orden_subarea.asc(), SubArea.subarea_nombre.asc())
+        .all()
+    )
+    return jsonify([
+        {"id": s.subarea_id, "nombre": s.subarea_nombre}
+        for s in subareas
+    ])
+
+
+# =========================
+# HELPERS: Crear SOP
+# =========================
+def _strip_prefix(x: str, prefix: str) -> str:
+    return x[len(prefix):] if x and x.startswith(prefix) else x
+
+def nivel_letter(nivel_id: int) -> str:
+    # BD: 1=B, 2=M, 3=P
+    return {1: "B", 2: "M", 3: "P"}.get(int(nivel_id), "B")
+
+def make_sop_id(subarea_id: str) -> str:
+    # subarea_id: "AD-DI-BA-001" -> "SP-AD-DI-BA-001"
+    if not subarea_id:
+        raise ValueError("subarea_id vacío")
+    return subarea_id if subarea_id.startswith("SP-") else f"SP-{subarea_id}"
+
+def make_sf_id(sop_id: str, fraccion_id: str) -> str:
+    # "SP-AD-DI-BA-001" + "FR-SE-001" -> "SF-AD-DI-BA-001-SE-001"
+    sop_core = _strip_prefix(sop_id, "SP-")
+    fr_core = _strip_prefix(fraccion_id, "FR-")
+    return f"SF-{sop_core}-{fr_core}"
+
+def make_sd_id(sop_id: str, fraccion_id: str, nivel_id: int) -> str:
+    # "SP-AD-DI-BA-001" + "FR-SE-001" + 1 -> "SD-AD-DI-BA-001-SE-001-B"
+    sop_core = _strip_prefix(sop_id, "SP-")
+    fr_core = _strip_prefix(fraccion_id, "FR-")
+    return f"SD-{sop_core}-{fr_core}-{nivel_letter(nivel_id)}"
+
+def make_es_id(sop_id: str, fraccion_id: str, nivel_id: int) -> str:
+    # "SP-AD-DI-BA-001" + "FR-TL-001" + 3 -> "ES-AD-DI-BA-001-TL-001-P"
+    sop_core = _strip_prefix(sop_id, "SP-")
+    fr_core = _strip_prefix(fraccion_id, "FR-")
+    return f"ES-{sop_core}-{fr_core}-{nivel_letter(nivel_id)}"
+
+
+# =========================
+# SOP Panel
+# =========================
+from sqlalchemy import and_
+
+@main_bp.route("/sop")
+def sop_panel():
+    area_id = (request.args.get("area_id") or "").strip()
+    subarea_id = (request.args.get("subarea_id") or "").strip()
+
+    # NUEVO: nivel seleccionado
+    nivel = canon_nivel(request.args.get("nivel")) or "basica"
+    nivel_id = nivel_to_id(nivel) or 1
+
+    areas = Area.query.order_by(Area.orden_area.asc(), Area.area_nombre.asc()).all()
+
+    subareas = []
+    if area_id:
+        subareas = (
+            SubArea.query
+            .filter_by(area_id=area_id)
+            .order_by(SubArea.orden_subarea.asc(), SubArea.subarea_nombre.asc())
+            .all()
+        )
+
+    sop = None
+    has_fracciones = False
+    has_nivel = False
+
+    if subarea_id:
+        sop = SOP.query.filter_by(subarea_id=subarea_id).first()
+
+        if sop and sop.sop_fracciones and len(sop.sop_fracciones) > 0:
+            has_fracciones = True
+
+        # ✅ Existe “nivel” si hay al menos un detalle para ese nivel
+        if sop:
+            has_nivel = (
+                db.session.query(SopFraccionDetalle.sop_fraccion_detalle_id)
+                .join(SopFraccion, SopFraccion.sop_fraccion_id == SopFraccionDetalle.sop_fraccion_id)
+                .filter(
+                    and_(
+                        SopFraccion.sop_id == sop.sop_id,
+                        SopFraccionDetalle.nivel_limpieza_id == nivel_id
+                    )
+                )
+                .first()
+                is not None
+            )
+
+    return render_template(
+        "sop_panel.html",
+        areas=areas,
+        subareas=subareas,
+        area_id=area_id,
+        subarea_id=subarea_id,
+        sop=sop,
+        has_fracciones=has_fracciones,
+        has_nivel=has_nivel,          # NUEVO
+        nivel=nivel,                  # NUEVO
+        nivel_id=nivel_id,            # NUEVO
+    )
+
+
+
+# =========================
+# Helpers IDs SOP (formato que me pasaste)
+# =========================
+def _fr_suffix(fraccion_id: str) -> str:
+    # "FR-SE-001" -> "SE-001"
+    if not fraccion_id:
+        return ""
+    return fraccion_id[3:] if fraccion_id.startswith("FR-") else fraccion_id
+
+def sop_id_from_subarea(subarea_id: str) -> str:
+    # "AD-DI-BA-001" -> "SP-AD-DI-BA-001"
+    return f"SP-{subarea_id}"
+
+def sop_fraccion_id_from(sop_id: str, fraccion_id: str) -> str:
+    # "SP-AD-DI-BA-001" + "FR-SE-001" -> "SF-AD-DI-BA-001-SE-001"
+    base = sop_id[3:] if sop_id.startswith("SP-") else sop_id
+    return f"SF-{base}-{_fr_suffix(fraccion_id)}"
+
+def nivel_letter(nivel_limpieza_id: int) -> str:
+    return {1: "B", 2: "M", 3: "P"}.get(int(nivel_limpieza_id), "X")
+
+def sop_fraccion_detalle_id_from(sop_fraccion_id: str, nivel_limpieza_id: int) -> str:
+    # "SF-AD-DI-BA-001-SE-001" + 1 -> "SD-AD-DI-BA-001-SE-001-B"
+    base = sop_fraccion_id[3:] if sop_fraccion_id.startswith("SF-") else sop_fraccion_id
+    return f"SD-{base}-{nivel_letter(nivel_limpieza_id)}"
+
+
+
+# =========================
+# SOP: asiganar detalles
+# =========================
+@main_bp.route("/sop/<sop_id>/detalles", methods=["GET", "POST"])
+def sop_detalles(sop_id):
+    # nivel por query o form
+    nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
+    if nivel not in ("basica", "media", "profundo"):
+        nivel = "media"
+
+    nivel_obj = NivelLimpieza.query.filter_by(nombre=nivel).first()
+    if not nivel_obj:
+        flash("Nivel de limpieza inválido.", "error")
+        return redirect(url_for("main.sop_panel"))
+
+    nivel_id = int(nivel_obj.nivel_limpieza_id)
+
+    sop = SOP.query.filter_by(sop_id=sop_id).first_or_404()
+    subarea = sop.subarea
+
+    # ✅ lista de fracciones del SOP (sidebar)
+    sop_fracciones = (
+        SopFraccion.query
+        .filter_by(sop_id=sop_id)
+        .order_by(SopFraccion.orden.asc())
+        .all()
+    )
+
+    if not sop_fracciones:
+        flash("Este SOP no tiene fracciones todavía.", "warning")
+        return redirect(url_for("main.sop_panel", area_id=subarea.area_id, subarea_id=subarea.subarea_id))
+
+    # ✅ fracción seleccionada (o la primera)
+    sop_fraccion_id = (request.args.get("sop_fraccion_id") or request.form.get("sop_fraccion_id") or "").strip()
+    sf_actual = next((x for x in sop_fracciones if x.sop_fraccion_id == sop_fraccion_id), sop_fracciones[0])
+    fr = sf_actual.fraccion
+
+    # ✅ recetas/consumos
+    recetas = Receta.query.order_by(Receta.nombre.asc()).all()
+    consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
+
+    # ✅ detalle del nivel (si falta lo crea)
+    detalle = (
+        SopFraccionDetalle.query
+        .filter_by(sop_fraccion_id=sf_actual.sop_fraccion_id, nivel_limpieza_id=nivel_id)
+        .first()
+    )
+    if not detalle:
+        detalle = SopFraccionDetalle(
+            sop_fraccion_detalle_id=make_sd_id(sop.sop_id, fr.fraccion_id, nivel_id),
+            sop_fraccion_id=sf_actual.sop_fraccion_id,
+            nivel_limpieza_id=nivel_id,
+        )
+        db.session.add(detalle)
+        db.session.flush()
+
+    # ✅ metodología base y pasos
+    metodologia_base = None
+    met = Metodologia.query.filter_by(fraccion_id=fr.fraccion_id, nivel_limpieza_id=nivel_id).first()
+    if met and met.metodologia_base:
+        metodologia_base = met.metodologia_base
+
+    # ✅ elemento_sets disponibles para ESTE (subarea + fracción + nivel)
+    elemento_sets = (
+        ElementoSet.query
+        .filter_by(
+            subarea_id=subarea.subarea_id,
+            fraccion_id=fr.fraccion_id,
+            nivel_limpieza_id=nivel_id,
+        )
+        .order_by(ElementoSet.elemento_set_id.asc())
+        .all()
+    )
+
+    # ✅ elemento_detalles si hay elemento_set seleccionado
+    elemento_detalles = []
+    if detalle.elemento_set_id:
+        elemento_detalles = (
+            ElementoDetalle.query
+            .filter_by(elemento_set_id=detalle.elemento_set_id)
+            .order_by(ElementoDetalle.orden.asc())
+            .all()
+        )
+
+    # ✅ kits posibles (por fracción, nivel NULL o igual al nivel)
+    kits = (
+        Kit.query
+        .filter(
+            Kit.fraccion_id == fr.fraccion_id,
+            or_(Kit.nivel_limpieza_id == None, Kit.nivel_limpieza_id == nivel_id)
+        )
+        .order_by(Kit.nombre.asc())
+        .all()
+    )
+
+    # =========================
+    # POST: guardar SOLO la fracción seleccionada
+    # =========================
+    if request.method == "POST":
+        mode = (request.form.get("mode") or "directo").strip().lower()
+        tiempo = (request.form.get("tiempo_unitario_min") or "").strip()
+
+        # tiempo
+        try:
+            detalle.tiempo_unitario_min = float(tiempo) if tiempo != "" else None
+        except Exception:
+            detalle.tiempo_unitario_min = None
+
+        if mode == "elementos":
+            # usuario puede seleccionar uno o dejar vacío (si vacío creamos uno)
+            es_id_sel = (request.form.get("elemento_set_id") or "").strip() or None
+
+            if es_id_sel:
+                detalle.elemento_set_id = es_id_sel
+            else:
+                # crea ElementoSet por default si no existe ninguno
+                es = ElementoSet.query.filter_by(
+                    subarea_id=subarea.subarea_id,
+                    fraccion_id=fr.fraccion_id,
+                    nivel_limpieza_id=nivel_id,
+                ).first()
+
+                if not es:
+                    es_id_new = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
+                    es = ElementoSet(
+                        elemento_set_id=es_id_new,
+                        subarea_id=subarea.subarea_id,
+                        fraccion_id=fr.fraccion_id,
+                        nivel_limpieza_id=nivel_id,
+                        nombre=f"{subarea.subarea_nombre} · {fr.fraccion_nombre} ({nivel})"
+                    )
+                    db.session.add(es)
+                    db.session.flush()
+
+                detalle.elemento_set_id = es.elemento_set_id
+
+            # regla: si hay elemento_set → kit/receta NULL
+            detalle.kit_id = None
+            detalle.receta_id = None
+            detalle.consumo_id = None
+
+        else:
+            kit_id = (request.form.get("kit_id") or "").strip() or None
+            receta_id = (request.form.get("receta_id") or "").strip() or None
+            consumo_id = (request.form.get("consumo_id") or "").strip() or None
+
+            detalle.elemento_set_id = None
+            detalle.kit_id = kit_id
+            detalle.receta_id = receta_id
+            detalle.consumo_id = consumo_id
+
+        db.session.commit()
+        flash("Detalle guardado correctamente.", "success")
+        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+
+    return render_template(
+        "sop_detalles.html",
+        sop=sop,
+        subarea=subarea,
+        nivel=nivel,
+        nivel_id=nivel_id,
+        nivel_obj=nivel_obj,
+        sop_fracciones=sop_fracciones,
+        sf_actual=sf_actual,
+        detalle=detalle,
+        kits=kits,
+        recetas=recetas,
+        consumos=consumos,
+        elemento_sets=elemento_sets,
+        elemento_detalles=elemento_detalles,
+        metodologia_base=metodologia_base,
+        hide_nav=True,
+    )
+
+
+
+@main_bp.route("/sop/<sop_id>/fracciones")
+def sop_fracciones_edit(sop_id):
+    # nivel como query param: ?nivel=media
+    nivel = (request.args.get("nivel") or "media").strip().lower()
+
+    sop = SOP.query.filter_by(sop_id=sop_id).first()
+    if not sop:
+        flash("SOP no encontrado.", "error")
+        return redirect(url_for("main.sop_panel"))
+
+    # si ya tiene fracciones, manda a la primera (detalles)
+    first_sf = (
+        SopFraccion.query
+        .filter_by(sop_id=sop_id)
+        .order_by(SopFraccion.orden.asc())
+        .first()
+    )
+
+    if first_sf:
+        return redirect(url_for(
+            "main.sop_detalles",
+            sop_id=sop_id,
+            nivel=nivel,
+            sop_fraccion_id=first_sf.sop_fraccion_id
+        ))
+
+    # si aún no hay fracciones, regresa al panel con subárea seleccionada
+    return redirect(url_for(
+        "main.sop_panel",
+        area_id=sop.subarea.area_id,
+        subarea_id=sop.subarea_id
+    ))
+
+
+# =========================
+# SOP: crear (seleccionar fracciones por nivel)
+# =========================
+@main_bp.route("/sop/crear/<subarea_id>", methods=["GET", "POST"])
+def sop_crear(subarea_id):
+    # nivel viene del panel
+    nivel = canon_nivel(request.args.get("nivel")) or canon_nivel(request.form.get("nivel")) or "basica"
+    nivel_id = nivel_to_id(nivel) or 1
+
+    subarea = SubArea.query.options(joinedload(SubArea.area)).filter_by(subarea_id=subarea_id).first_or_404()
+    sop_id = make_sop_id(subarea_id)
+
+    # SOP existente (si ya está creado)
+    sop = SOP.query.filter_by(subarea_id=subarea_id).first()
+
+    # ✅ Recordatorio: Solo fracciones con Metodologia para este nivel
+    fracciones = (
+        Fraccion.query
+        .join(Metodologia, Metodologia.fraccion_id == Fraccion.fraccion_id)
+        .filter(Metodologia.nivel_limpieza_id == nivel_id)
+        .order_by(Fraccion.fraccion_id.asc())
+        .all()
+    )
+    candidate_ids = {f.fraccion_id for f in fracciones}
+
+    # ✅ Precarga: fracciones ya existentes en el SOP (para marcarlas y traer su orden)
+    selected_ids = set()
+    orden_map = {}
+    if sop:
+        existing = (
+            SopFraccion.query
+            .filter_by(sop_id=sop.sop_id)
+            .all()
+        )
+        for sf in existing:
+            selected_ids.add(sf.fraccion_id)
+            orden_map[sf.fraccion_id] = sf.orden
+
+    if request.method == "POST":
+        selected = request.form.getlist("fraccion_id")
+        if not selected:
+            flash("Selecciona al menos 1 fracción.", "warning")
+            return redirect(url_for("main.sop_crear", subarea_id=subarea_id, nivel=nivel))
+
+        selected_set = set(selected)
+
+        # 1) Crear SOP si no existe
+        if not sop:
+            sop = SOP(sop_id=sop_id, subarea_id=subarea_id)
+            db.session.add(sop)
+            db.session.flush()  # ya tenemos sop.sop_id
+
+        # 2) Upsert SopFraccion + asegurar SopFraccionDetalle (para ESTE nivel)
+        for fr_id in selected:
+            orden_raw = (request.form.get(f"orden_{fr_id}") or "").strip()
+            orden = int(orden_raw) if orden_raw.isdigit() else 1000
+
+            sf = SopFraccion.query.filter_by(sop_id=sop.sop_id, fraccion_id=fr_id).first()
+            if not sf:
+                sf = SopFraccion(
+                    sop_fraccion_id=make_sf_id(sop.sop_id, fr_id),
+                    sop_id=sop.sop_id,
+                    fraccion_id=fr_id,
+                    orden=orden
+                )
+                db.session.add(sf)
+                db.session.flush()
+            else:
+                sf.orden = orden
+
+            sd = SopFraccionDetalle.query.filter_by(
+                sop_fraccion_id=sf.sop_fraccion_id,
+                nivel_limpieza_id=nivel_id
+            ).first()
+
+            if not sd:
+                sd = SopFraccionDetalle(
+                    sop_fraccion_detalle_id=make_sd_id(sop.sop_id, fr_id, nivel_id),
+                    sop_fraccion_id=sf.sop_fraccion_id,
+                    nivel_limpieza_id=nivel_id,
+                    tiempo_unitario_min=None,  # el tiempo se captura en /detalles
+                )
+                db.session.add(sd)
+
+        # 3) ✅ BORRAR fracciones desmarcadas (solo dentro del set permitido por nivel)
+        # IMPORTANTÍSIMO: NO usar bulk delete porque rompe cascadas/orphans.
+        to_remove_ids = (candidate_ids - selected_set)
+
+        if to_remove_ids:
+            sfs_to_remove = (
+                SopFraccion.query
+                .filter(
+                    SopFraccion.sop_id == sop.sop_id,
+                    SopFraccion.fraccion_id.in_(list(to_remove_ids))
+                )
+                .all()
+            )
+            for sf in sfs_to_remove:
+                db.session.delete(sf)  # ✅ cascada borra detalles
+
+        db.session.commit()
+        flash(f"✅ Fracciones guardadas para nivel {nivel}.", "success")
+
+        # siguiente paso: editor de fracciones/detalles
+        return redirect(url_for("main.sop_fracciones_edit", sop_id=sop.sop_id, nivel=nivel))
+
+    return render_template(
+        "sop_crear.html",
+        subarea=subarea,
+        sop=sop,
+        sop_id=sop_id,
+        nivel=nivel,
+        nivel_id=nivel_id,
+        fracciones=fracciones,
+        selected_ids=selected_ids,   # ✅ NUEVO
+        orden_map=orden_map,         # ✅ NUEVO
+    )

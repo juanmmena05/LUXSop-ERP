@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP · Detalles</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
+      --blue:#0d6efd; --green:#198754; --card:#fff; --red:#dc3545;
+      --h:44px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin:0;
+      padding:2rem;
+      max-width:1200px;
+      margin-inline:auto;
+    }
+
+    .head{
+      display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
+      border-bottom:1px solid var(--line); padding-bottom:.75rem; margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+    h1{ margin:0; font-size:1.25rem; }
+    .sub{ color:var(--muted); font-size:.9rem; margin-top:.25rem; }
+
+    .btn{
+      border:none; border-radius:12px; height:var(--h);
+      padding:.55rem .95rem; font-size:.95rem; cursor:pointer;
+      text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      white-space:nowrap;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-green{ background: var(--green); color:#fff; }
+    .btn:hover{ filter: brightness(.95); }
+
+    .btn-disabled{
+      background:#e9ecef; color:#6c757d;
+      cursor:not-allowed;
+      pointer-events:none;
+      border-radius:12px;
+      height:var(--h);
+      padding:.55rem .95rem;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      border:1px solid #e3e6ea;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 320px 1fr;
+      gap:14px;
+      align-items:start;
+    }
+    @media (max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding:14px;
+    }
+
+    .pill{
+      display:inline-flex; align-items:center;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:.25rem .65rem;
+      font-size:.85rem;
+      gap:8px;
+    }
+
+    /* sidebar fracciones */
+    .sf-list{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+    .sf-link{
+      text-decoration:none; color:var(--fg);
+      border:1px solid #eee;
+      background:#fff;
+      border-radius:14px;
+      padding:10px 12px;
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .sf-link:hover{ background:#f6f6f6; }
+    .sf-link.is-active{ border-color:#cfe2ff; background:#eef5ff; }
+    .sf-link small{ color:var(--muted); }
+
+    /* ✅ Botón Editar Fracciones como “caja” (mismo ancho y compacta) */
+    .sf-action{
+    margin-top:10px;            /* separación igual que la lista */
+    }
+    .sf-action-link{
+    width:100%;
+    border-radius:14px;
+    padding:10px 12px;          /* similar a .sf-link */
+    height:auto;                /* ✅ menos alto que --h */
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+
+    background: var(--blue);
+    color:#fff;
+    border:1px solid var(--blue);
+    text-decoration:none;
+    font-size:.92rem;
+    font-weight:600;
+    }
+    .sf-action-link:hover{
+    filter: brightness(.95);
+    }
+    /* form */
+    label{ display:block; margin-top:12px; font-size:.85rem; font-weight:600; color:#333; }
+    input[type="number"], select{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:.5rem .65rem;
+      height:var(--h);
+      font-size:.95rem;
+      background:#fff;
+    }
+
+    .row{ display:flex; gap:10px; align-items:end; flex-wrap:wrap; }
+    .row > *{ flex: 1 1 220px; }
+    .row .grow{ flex: 2 1 320px; }
+
+    .hint{ color:var(--muted); font-size:.9rem; margin-top:8px; }
+
+    /* ===== selector bonito (2 subcajas) ===== */
+    .mode-wrap{
+      margin-top:8px;
+      border:1px dashed #ddd;
+      border-radius:14px;
+      background:#fafafa;
+      padding:6px 8px;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+    }
+    .mode-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      width:min(760px, 100%);
+      align-items:stretch;
+    }
+    .mode-opt{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      border:1px solid #d8d8d8;
+      background:#fff;
+      border-radius:14px;
+      padding:8px 12px;
+      cursor:pointer;
+      user-select:none;
+      text-align:center;
+      min-height:42px;
+    }
+    .mode-opt strong{
+      font-weight:500;
+      font-size:.95rem;
+    }
+    .mode-opt input{
+      position:absolute;
+      opacity:0;
+      pointer-events:none;
+    }
+    .mode-opt.is-active{
+      border-color:#b9d3ff;
+      background:#eef5ff;
+      box-shadow:0 1px 0 rgba(13,110,253,.10) inset;
+    }
+
+    /* ===== Flash message ===== */
+    .flash-success{
+      margin-top:14px;
+      padding:12px 16px;
+      border-radius:14px;
+      background:#eef9f0;
+      border:1px solid #cde8d5;
+      color:#226b3d;
+      font-weight:600;
+      opacity:1;
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .flash-success.fade-out{
+      opacity:0;
+      transform: translateY(-6px);
+    }
+
+    /* ===== menú lateral (solo si NO hide_nav) ===== */
+    .burger {
+      position: fixed;
+      top: 16px; left: 16px;
+      z-index: 1101;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .nav-overlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.35);
+      z-index:1100;
+      opacity:0; pointer-events:none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open{ opacity:1; pointer-events:auto; }
+    .side-nav{
+      position:fixed; top:0; left:0;
+      height:100vh; width:300px; max-width:84vw;
+      background: var(--card);
+      border-right:1px solid var(--line);
+      box-shadow:0 8px 30px rgba(0,0,0,.14);
+      z-index:1102;
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .side-nav.is-open{ transform: translateX(0); }
+    .side-nav__head{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding-bottom:10px; border-bottom:1px solid var(--line);
+      margin-bottom:6px;
+    }
+    .side-nav__brand{ display:grid; line-height:1.1; }
+    .side-nav__brand strong{ font-size:1rem; }
+    .side-nav__brand span{ font-size:.78rem; color:var(--muted); }
+    .side-nav__close{
+      width:36px; height:36px; border-radius:10px;
+      border:1px solid var(--line); background:#fff; cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    .side-nav__link{
+      text-decoration:none; color:var(--fg);
+      padding:10px 12px; border-radius:12px;
+      display:flex; align-items:center; gap:10px;
+      font-size:.92rem;
+    }
+    .side-nav__link:hover{ background:#f3f3f3; }
+  </style>
+</head>
+
+<body>
+
+{% if not hide_nav %}
+<!-- Menú lateral -->
+<button class="burger" id="navToggle" aria-label="Abrir menú" aria-controls="sideNav" aria-expanded="false">☰</button>
+<div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+<nav class="side-nav" id="sideNav" aria-label="Menú principal">
+  <div class="side-nav__head">
+    <div class="side-nav__brand">
+      <strong>LuxSOP</strong>
+      <span>ERP · Limpieza</span>
+    </div>
+    <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+  </div>
+
+  <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+  <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+  <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+</nav>
+{% endif %}
+
+<div class="head">
+  <div>
+    <h1>SOP · Detalles</h1>
+    <div class="sub">
+      Área: <strong>{{ subarea.area.area_nombre if subarea and subarea.area else (subarea.area_id if subarea else '') }}</strong> ·
+      Subárea: <strong>{{ subarea.subarea_nombre if subarea else '' }}</strong>
+    </div>
+    <div class="sub">
+      SOP: <strong>{{ sop.sop_id if sop else '' }}</strong> · Nivel: <strong>{{ nivel }}</strong>
+    </div>
+  </div>
+
+  <div class="row" style="justify-content:flex-end;">
+    <a class="btn btn-blue"
+       href="{{ url_for('main.sop_panel', area_id=(subarea.area_id if subarea else None), subarea_id=(subarea.subarea_id if subarea else None), nivel=nivel) }}">
+      ← Volver
+    </a>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Sidebar -->
+  <aside class="card">
+    <div class="pill">Fracciones del SOP</div>
+
+    <div class="sf-list">
+      {% for sf in sop_fracciones %}
+        <a class="sf-link {% if sf_actual and sf.sop_fraccion_id == sf_actual.sop_fraccion_id %}is-active{% endif %}"
+           href="{{ url_for('main.sop_detalles', sop_id=sop.sop_id, nivel=nivel, sop_fraccion_id=sf.sop_fraccion_id) }}">
+          <div><strong>{{ sf.fraccion.fraccion_id if sf.fraccion else sf.fraccion_id }}</strong> — {{ sf.fraccion.fraccion_nombre if sf.fraccion else '' }}</div>
+          <small>Orden: {{ sf.orden }}</small>
+        </a>
+      {% endfor %}
+    </div>
+
+    <!-- ✅ NUEVO: Editar fracciones -->
+    <div class="sf-action">
+        <a class="sf-action-link"
+            href="{{ url_for('main.sop_crear', subarea_id=subarea.subarea_id, nivel=nivel) }}">
+            Editar Fracciones
+        </a>
+    </div>
+
+
+    <div class="hint" style="margin-top:12px;">
+      Tip: elige una fracción para asignar su Kit/Receta/Consumo o Elementos.
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="card">
+    {% if not sf_actual %}
+      <div class="pill">Selecciona una fracción</div>
+      <div class="hint">Da click a una fracción en la izquierda.</div>
+    {% else %}
+      <div class="pill">
+        Editando:
+        <strong style="margin-left:6px;">
+          {{ sf_actual.fraccion.fraccion_id if sf_actual.fraccion else sf_actual.fraccion_id }}
+        </strong>
+      </div>
+
+      <!-- Flash -->
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div id="flash-success" class="flash-success">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="hint" style="margin-top:10px;">
+        Regla: si usas <strong>Elemento Set</strong>, entonces <strong>Kit/Receta/Consumo deben ir vacíos</strong> (y viceversa).
+      </div>
+
+      <!-- Estado -->
+      <script id="detail-state" type="application/json">
+        { "mode": "{{ 'elementos' if detalle and detalle.elemento_set_id else 'directo' }}" }
+      </script>
+
+      <form method="POST" style="margin-top:12px;">
+        <input type="hidden" name="nivel" value="{{ nivel }}">
+        <input type="hidden" name="sop_fraccion_id" value="{{ sf_actual.sop_fraccion_id }}">
+
+        <!-- selector bonito -->
+        <div class="mode-wrap">
+          <div class="mode-grid" id="modeGrid">
+            <label class="mode-opt" id="optDirecto">
+              <input type="radio" name="mode" value="directo" id="modeDirecto">
+              <strong>Sin elementos (Kit/Receta/Consumo)</strong>
+            </label>
+
+            <label class="mode-opt" id="optElementos">
+              <input type="radio" name="mode" value="elementos" id="modeElementos">
+              <strong>Con elementos (Elemento Set)</strong>
+            </label>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Tiempo unitario (min)</label>
+            <input type="number" min="0" step="0.1" name="tiempo_unitario_min"
+                   value="{{ detalle.tiempo_unitario_min if detalle and detalle.tiempo_unitario_min is not none else '' }}">
+          </div>
+        </div>
+
+        <!-- Directo -->
+        <div id="directoBox" style="margin-top:10px;">
+          <div class="row">
+            <div>
+              <label>Kit</label>
+              <select name="kit_id" id="kitSelect">
+                <option value="">—</option>
+                {% for k in kits %}
+                  <option value="{{ k.kit_id }}" {% if detalle and detalle.kit_id == k.kit_id %}selected{% endif %}>
+                    {{ k.kit_id }} — {{ k.nombre }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <label>Receta</label>
+              <select name="receta_id" id="recetaSelect">
+                <option value="">—</option>
+                {% for r in recetas %}
+                  <option value="{{ r.receta_id }}" {% if detalle and detalle.receta_id == r.receta_id %}selected{% endif %}>
+                    {{ r.receta_id }} — {{ r.nombre }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <label>Consumo</label>
+              <select name="consumo_id" id="consumoSelect">
+                <option value="">—</option>
+                {% for c in consumos %}
+                  <option value="{{ c.consumo_id }}" {% if detalle and detalle.consumo_id == c.consumo_id %}selected{% endif %}>
+                    {{ c.consumo_id }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Elementos -->
+        <div id="elementosBox" style="margin-top:10px;">
+          <label>Elemento Set</label>
+          <select name="elemento_set_id" id="elementoSetSelect">
+            <option value="">— (crear/usar default) —</option>
+            {% for es in elemento_sets %}
+              <option value="{{ es.elemento_set_id }}" {% if detalle and detalle.elemento_set_id == es.elemento_set_id %}selected{% endif %}>
+                {{ es.elemento_set_id }} — {{ es.nombre }}
+              </option>
+            {% endfor %}
+          </select>
+
+          <!-- ✅ FIX: SIEMPRE habilitado, endpoint crea/amarra el set -->
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+            <a class="btn btn-blue"
+               href="{{ url_for('main.sop_elementoset_edit', sop_id=sop.sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id) }}">
+              Editar Elementos
+            </a>
+          </div>
+
+          {% if elemento_detalles and (elemento_detalles|length) > 0 %}
+            <div class="hint" style="margin-top:10px;">
+              Elementos del set seleccionado (solo lectura aquí):
+            </div>
+            <table style="width:100%; margin-top:8px; border-collapse:separate; border-spacing:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff;">
+              <thead>
+                <tr style="background:#fafafa;">
+                  <th style="text-align:left; padding:.6rem .7rem; border-bottom:1px solid #eee;">Elemento</th>
+                  <th style="text-align:left; padding:.6rem .7rem; border-bottom:1px solid #eee;">Kit</th>
+                  <th style="text-align:left; padding:.6rem .7rem; border-bottom:1px solid #eee;">Receta</th>
+                  <th style="text-align:left; padding:.6rem .7rem; border-bottom:1px solid #eee;">Consumo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ed in elemento_detalles %}
+                  <tr>
+                    <td style="padding:.6rem .7rem; border-bottom:1px solid #eee;">
+                      <strong>{{ ed.elemento_id }}</strong>
+                      <div class="sub" style="margin:0; font-size:.85rem;">
+                        {{ (ed.elemento.descripcion if ed.elemento and ed.elemento.descripcion else (ed.elemento.nombre if ed.elemento else '')) }}
+                      </div>
+                    </td>
+                    <td style="padding:.6rem .7rem; border-bottom:1px solid #eee;">{{ ed.kit_id or '—' }}</td>
+                    <td style="padding:.6rem .7rem; border-bottom:1px solid #eee;">{{ ed.receta_id or '—' }}</td>
+                    <td style="padding:.6rem .7rem; border-bottom:1px solid #eee;">{{ ed.consumo_id or '—' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+
+        <div class="row" style="margin-top:14px; justify-content:flex-end;">
+          <button class="btn btn-green" type="submit">Guardar detalle</button>
+        </div>
+      </form>
+
+      {% if metodologia_base %}
+        <div class="card" style="margin-top:14px;">
+          <div class="pill">Metodología</div>
+          <div class="hint" style="margin-top:8px;">
+            {{ metodologia_base.nombre if metodologia_base.nombre else '' }}
+          </div>
+          {% if metodologia_base.pasos and (metodologia_base.pasos|length) > 0 %}
+            <ol style="margin-top:10px;">
+              {% for p in metodologia_base.pasos %}
+                <li style="margin-bottom:6px;">{{ p.instruccion }}</li>
+              {% endfor %}
+            </ol>
+          {% else %}
+            <div class="hint" style="margin-top:10px;">Sin pasos registrados.</div>
+          {% endif %}
+        </div>
+      {% endif %}
+    {% endif %}
+  </main>
+</div>
+
+<script>
+  // menú lateral (solo si existe)
+  (function(){
+    const nav = document.getElementById('sideNav');
+    const btn = document.getElementById('navToggle');
+    const closeBtn = document.getElementById('navClose');
+    const overlay = document.getElementById('navOverlay');
+    if(!nav || !btn || !overlay) return;
+
+    function openNav(){
+      nav.classList.add('is-open');
+      overlay.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNav(){
+      nav.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      document.body.style.overflow = '';
+    }
+
+    btn.addEventListener('click', openNav);
+    overlay.addEventListener('click', closeNav);
+    closeBtn && closeBtn.addEventListener('click', closeNav);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeNav(); });
+    nav.addEventListener('click', (e)=>{ if(e.target.closest('a')) closeNav(); });
+  })();
+
+  // auto-dismiss flash (1.5s)
+  (function(){
+    const flash = document.getElementById('flash-success');
+    if(!flash) return;
+
+    setTimeout(()=>{
+      flash.classList.add('fade-out');
+      setTimeout(()=>{ flash.remove(); }, 350);
+    }, 1500);
+  })();
+
+  // toggles modo
+  (function(){
+    const stateEl = document.getElementById('detail-state');
+    let state = { mode: "directo" };
+    try { state = JSON.parse(stateEl ? stateEl.textContent : "{}"); } catch(e){}
+
+    const directRadio = document.getElementById('modeDirecto');
+    const elemRadio = document.getElementById('modeElementos');
+
+    const optDirecto = document.getElementById('optDirecto');
+    const optElementos = document.getElementById('optElementos');
+
+    const directBox = document.getElementById('directoBox');
+    const elemBox = document.getElementById('elementosBox');
+
+    const kit = document.getElementById('kitSelect');
+    const receta = document.getElementById('recetaSelect');
+    const consumo = document.getElementById('consumoSelect');
+    const esSel = document.getElementById('elementoSetSelect');
+
+    function setActiveClasses(isElem){
+      if(optDirecto) optDirecto.classList.toggle('is-active', !isElem);
+      if(optElementos) optElementos.classList.toggle('is-active', isElem);
+    }
+
+    function applyMode(mode){
+      const isElem = (mode === "elementos");
+
+      if(directRadio) directRadio.checked = !isElem;
+      if(elemRadio) elemRadio.checked = isElem;
+
+      if(directBox) directBox.style.display = isElem ? "none" : "";
+      if(elemBox) elemBox.style.display = isElem ? "" : "none";
+
+      if(kit) kit.disabled = isElem;
+      if(receta) receta.disabled = isElem;
+      if(consumo) consumo.disabled = isElem;
+      if(esSel) esSel.disabled = !isElem;
+
+      setActiveClasses(isElem);
+    }
+
+    applyMode(state.mode || "directo");
+
+    if(directRadio){
+      directRadio.addEventListener('change', ()=> applyMode("directo"));
+    }
+    if(elemRadio){
+      elemRadio.addEventListener('change', ()=> applyMode("elementos"));
+    }
+
+    // click en cajas
+    if(optDirecto){
+      optDirecto.addEventListener('click', ()=> applyMode("directo"));
+    }
+    if(optElementos){
+      optElementos.addEventListener('click', ()=> applyMode("elementos"));
+    }
+  })();
+</script>
+
+</body>
+</html>

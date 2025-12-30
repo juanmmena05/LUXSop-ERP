@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP · Elementos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
+      --blue:#0d6efd; --green:#198754; --card:#fff;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin:0;
+      padding:2rem;
+      max-width:1200px;
+      margin-inline:auto;
+    }
+    .head{
+      display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
+      border-bottom:1px solid var(--line); padding-bottom:.75rem; margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+    h1{ margin:0; font-size:1.25rem; }
+    .sub{ color:var(--muted); font-size:.9rem; margin-top:.25rem; }
+
+    .btn{
+      border:none; border-radius:10px; height:38px;
+      padding:.55rem .85rem; font-size:.9rem; cursor:pointer;
+      text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-green{ background: var(--green); color:#fff; }
+    .btn:hover{ filter: brightness(.95); }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:12px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding:14px;
+      margin-top: 14px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      margin-top:12px;
+    }
+    th, td{
+      padding:.65rem .7rem;
+      border-bottom:1px solid #eee;
+      font-size:.92rem;
+      vertical-align:middle;
+    }
+    th{ text-align:left; background:#fafafa; }
+    tr:last-child td{ border-bottom:none; }
+
+    input[type="number"], select{
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:.35rem .45rem;
+      height:34px;
+      font-size:.92rem;
+      background:#fff;
+    }
+    input[type="number"]{ width: 50px; }
+    select{ width: 100%; min-width: 170px; }
+
+    .muted{ color:var(--muted); font-size:.85rem; }
+    .pill{
+      display:inline-flex; align-items:center;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:.25rem .6rem;
+      font-size:.85rem;
+      gap:8px;
+    }
+
+    .flash-wrap { margin: .75rem 0 0; }
+    .flash{
+      background:#eef9f0;
+      border:1px solid #cde8d5;
+      color:#226b3d;
+      padding:.45rem .6rem;
+      border-radius:10px;
+      font-size:.85rem;
+      opacity:1;
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .flash.fade-out{
+      opacity:0;
+      transform: translateY(-6px);
+    }
+  </style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>Elemento Set · Editor</h1>
+    <div class="sub">
+      Área: <strong>{{ subarea.area.area_nombre if subarea and subarea.area else subarea.area_id }}</strong> ·
+      Subárea: <strong>{{ subarea.subarea_nombre }}</strong>
+    </div>
+    <div class="sub">
+      SOP: <strong>{{ sop.sop_id }}</strong> · Nivel: <strong>{{ nivel }}</strong>
+    </div>
+    <div class="sub">
+      Fracción: <strong>{{ fr.fraccion_id }}</strong> — {{ fr.fraccion_nombre }}
+    </div>
+    <div class="sub">
+      Elemento Set: <strong>{{ es.elemento_set_id }}</strong>
+      <span class="muted">· (Único por subárea + fracción + nivel)</span>
+    </div>
+  </div>
+
+  <div>
+    <a class="btn btn-blue"
+       href="{{ url_for('main.sop_detalles', sop_id=sop.sop_id, nivel=nivel, sop_fraccion_id=sf.sop_fraccion_id) }}">
+      ← Volver a Detalles
+    </a>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-wrap" role="status" aria-live="polite">
+      {% for category, msg in messages %}
+        <div class="flash" {% if loop.first %}id="flash-success"{% endif %}>{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="card">
+  <div class="pill">Selecciona elementos y asigna Kit/Receta/Consumo</div>
+  <div class="muted" style="margin-top:8px;">
+    Tip: marca el elemento para habilitar sus campos. El orden es manual (y solo aplica a los marcados).
+  </div>
+
+  <form method="POST" action="{{ url_for('main.sop_elementoset_edit', sop_id=sop.sop_id) }}">
+    <input type="hidden" name="nivel" value="{{ nivel }}">
+    <input type="hidden" name="sop_fraccion_id" value="{{ sf.sop_fraccion_id }}">
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:70px;">Usar</th>
+          <th>Elemento</th>
+          <th style="width:70px;">Orden</th>
+          <th>Kit</th>
+          <th>Receta</th>
+          <th>Consumo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for el in elementos %}
+          {% set el_key = (el.elemento_id|string) %}
+          {% set d = det_by_el.get(el_key) or det_by_el.get(el.elemento_id) %}
+          <tr>
+            <td>
+              <input type="checkbox"
+                     name="elemento_id"
+                     value="{{ el.elemento_id }}"
+                     class="chk-el"
+                     {% if d %}checked{% endif %}>
+            </td>
+
+            <td>
+              <div>
+                <strong>{{ el.elemento_id }}</strong> —
+                {{ el.nombre if el.nombre else (el.descripcion if el.descripcion else '') }}
+              </div>
+              {% if el.descripcion and (not el.nombre) %}
+                <div class="muted">{{ el.descripcion }}</div>
+              {% endif %}
+            </td>
+
+            <td>
+              <input type="number" min="1" step="1"
+                     name="orden_{{ el.elemento_id }}"
+                     class="inp-orden"
+                     value="{{ d.orden if d else '' }}"
+                     {% if not d %}disabled{% endif %}>
+            </td>
+
+            <td>
+              <select name="kit_{{ el.elemento_id }}" class="sel-kit" {% if not d %}disabled{% endif %}>
+                <option value="">—</option>
+                {% for k in kits %}
+                  <option value="{{ k.kit_id }}" {% if d and d.kit_id == k.kit_id %}selected{% endif %}>
+                    {{ k.kit_id }} — {{ k.nombre }}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+
+            <td>
+              <select name="receta_{{ el.elemento_id }}" class="sel-receta" {% if not d %}disabled{% endif %}>
+                <option value="">—</option>
+                {% for r in recetas %}
+                  <option value="{{ r.receta_id }}" {% if d and d.receta_id == r.receta_id %}selected{% endif %}>
+                    {{ r.receta_id }} — {{ r.nombre }}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+
+            <td>
+              <select name="consumo_{{ el.elemento_id }}" class="sel-consumo" {% if not d %}disabled{% endif %}>
+                <option value="">—</option>
+                {% for c in consumos %}
+                  <option value="{{ c.consumo_id }}" {% if d and d.consumo_id == c.consumo_id %}selected{% endif %}>
+                    {{ c.consumo_id }}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+      <button class="btn btn-green" type="submit">Guardar Elementos</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // ✅ Al marcar: habilita campos y asigna orden automático.
+  // ✅ Al desmarcar: limpia campos y re-numera (compacta) 1..N.
+  (function(){
+    const rows = Array.from(document.querySelectorAll('tbody tr'));
+
+    function getCheckedRows(){
+      return rows.filter(tr => tr.querySelector('.chk-el')?.checked);
+    }
+
+    function getOrderValue(tr){
+      const ord = tr.querySelector('.inp-orden');
+      const v = parseInt((ord?.value || "").trim(), 10);
+      return Number.isFinite(v) ? v : 999999;
+    }
+
+    // Renumera los seleccionados a 1..N manteniendo el orden relativo (por orden actual / tabla)
+    function renumber(){
+      const chosen = getCheckedRows();
+
+      chosen.sort((a, b) => {
+        const da = getOrderValue(a);
+        const db = getOrderValue(b);
+        if (da !== db) return da - db;
+        return rows.indexOf(a) - rows.indexOf(b);
+      });
+
+      chosen.forEach((tr, idx) => {
+        const ord = tr.querySelector('.inp-orden');
+        if(ord) ord.value = String(idx + 1);
+      });
+    }
+
+    rows.forEach(tr=>{
+      const chk = tr.querySelector('.chk-el');
+      const ord = tr.querySelector('.inp-orden');
+      const kit = tr.querySelector('.sel-kit');
+      const rec = tr.querySelector('.sel-receta');
+      const con = tr.querySelector('.sel-consumo');
+
+      if(!chk) return;
+
+      chk.addEventListener('change', ()=>{
+        const on = chk.checked;
+
+        // habilita/deshabilita
+        [ord, kit, rec, con].forEach(el=>{
+          if(!el) return;
+          el.disabled = !on;
+          if(!on){
+            if(el.tagName === "INPUT") el.value = "";
+            if(el.tagName === "SELECT") el.value = "";
+          }
+        });
+
+        if(on){
+          // asigna un valor temporal si viene vacío, luego renumber lo compacta
+          if(ord && !ord.value){
+            const current = getCheckedRows().map(getOrderValue);
+            const finite = current.filter(v => v < 999999);
+            const max = finite.length ? Math.max(...finite) : 0;
+            ord.value = String(max + 1);
+          }
+        }
+
+        renumber(); // ✅ compacta siempre (al marcar o desmarcar)
+      });
+    });
+
+    // ✅ Al cargar la página: si ya hay marcados con orden (desde BD), compacta por si hay huecos
+    renumber();
+  })();
+</script>
+
+</body>
+</html>

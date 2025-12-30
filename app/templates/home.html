@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LuxSOP ERP — Semana</title>
   <style>
     :root {
@@ -74,6 +75,9 @@
       height: 32px;
     }
 
+    /* Select muted cuando está en Vaciar semana */
+    .select-sm.is-muted { color: #666; }
+
     .btn-sm {
       border: none;
       border-radius: 8px;
@@ -89,21 +93,27 @@
     .btn-green { background: var(--green); color: #fff; }
     .btn-green:hover { filter: brightness(.95); }
 
-    .btn-trash {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
-      border: 1px solid var(--red-d);
+    .btn-trash{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:28px;
+      height:28px;
+      border-radius:8px;
+      border:1px solid var(--red-d);
       background: var(--red);
-      color: #fff;
-      font-size: 16px;
-      cursor: pointer;
+      color:#fff;
+      font-size:16px;
+      cursor:pointer;
+      line-height: 1;
     }
+    .btn-trash:hover{ background: var(--red-d); }
 
-    .btn-trash:hover { background: var(--red-d); }
+    .btn-trash.is-disabled{
+      opacity: .45;
+      cursor: not-allowed;
+    }
+    .btn-trash.is-disabled:hover{ background: var(--red); }
 
     /* Caja unificada */
     .plantilla-box {
@@ -111,23 +121,23 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-      padding: 10px 12px;
+      padding: 8px 10px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 0;
       min-width: 340px;
     }
 
     .form-line {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       gap: 8px;
     }
 
-    .divider-line {
-      border-top: 1px solid var(--line);
-      margin: 4px 0;
+    .select-sm option.opt-muted{
+      color: var(--muted);
+      font-weight: 500;
     }
 
     /* Flash */
@@ -189,9 +199,7 @@
       color: #000;
     }
 
-    .plan-link {
-      margin-top: auto;
-    }
+    .plan-link { margin-top: auto; }
 
     .plan-link a {
       display: inline-block;
@@ -204,9 +212,7 @@
       margin-right: 6px;
     }
 
-    .plan-link a:hover {
-      filter: brightness(.95);
-    }
+    .plan-link a:hover { filter: brightness(.95); }
 
     footer {
       margin-top: 26px;
@@ -218,21 +224,163 @@
     @media (max-width: 640px) {
       .head-row { flex-direction: column; align-items: flex-start; }
       .week-grid { grid-template-columns: 1fr; }
-      .day-card {
-        padding: 1.2rem;
-        min-height: 160px;
-      }
+      .day-card { padding: 1.2rem; min-height: 160px; }
+    }
+
+    /* ======================================================
+       ✅ MENÚ LATERAL (OFF-CANVAS) + HAMBURGUESA PEGADA IZQ
+       ====================================================== */
+
+    /* Botón hamburguesa fijo pegado a la izquierda */
+    .burger {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1101;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .burger:hover { filter: brightness(.98); }
+    .burger:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    /* Overlay */
+    .nav-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 1100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Sidebar */
+    .side-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 300px;
+      max-width: 84vw;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(0,0,0,.14);
+      z-index: 1102;
+
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .side-nav.is-open { transform: translateX(0); }
+
+    .side-nav__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 6px;
+    }
+    .side-nav__brand {
+      display: grid;
+      line-height: 1.1;
+    }
+    .side-nav__brand strong { font-size: 1rem; }
+    .side-nav__brand span { font-size: .78rem; color: var(--muted); }
+
+    .side-nav__close {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .side-nav__close:hover { filter: brightness(.98); }
+    .side-nav__close:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    .side-nav__link {
+      text-decoration: none;
+      color: var(--fg);
+      padding: 10px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: .92rem;
+    }
+    .side-nav__link:hover { background: #f3f3f3; }
+
+    .side-nav__section {
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .75rem;
     }
   </style>
 </head>
 
 <body>
+  <!-- ✅ Botón hamburguesa pegado a la izquierda -->
+  <button class="burger" id="navToggle"
+          aria-label="Abrir menú"
+          aria-controls="sideNav"
+          aria-expanded="false">☰</button>
+
+  <!-- ✅ Overlay -->
+  <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+  <!-- ✅ Menú lateral completo -->
+  <nav class="side-nav" id="sideNav" aria-label="Menú principal">
+    <div class="side-nav__head">
+      <div class="side-nav__brand">
+        <strong>LuxSOP</strong>
+        <span>ERP · Limpieza</span>
+      </div>
+      <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+    </div>
+
+    <!-- Ajusta/borra links según tus endpoints reales -->
+    <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+    <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+    <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+  </nav>
+
   <header>
     <div class="head-row">
       <div class="title">
         <h1>LuxSOP · Semana {{ semana_num }}</h1>
         <div class="sub">
-          Del {{ lunes.strftime('%Y-%m-%d') }} al {{ sabado.strftime('%Y-%m-%d') }} · Planeación por persona, subárea y nivel
+          Del {{ lunes.strftime('%Y-%m-%d') }} al {{ sabado.strftime('%Y-%m-%d') }}
         </div>
         <div class="sub" style="margin-top:.15rem;">
           Plantilla activa:
@@ -246,15 +394,20 @@
         </div>
       </div>
 
-      <!-- 🔹 Caja unificada de Plantilla -->
+      <!-- Caja Plantilla (Programación) -->
       <div class="plantilla-box">
-        <!-- Aplicar -->
         <form action="{{ url_for('main.aplicar_plantilla_guardada_simple') }}" method="POST"
               id="form-aplicar-plantilla" class="form-line">
           <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">
           <span class="label">Plantilla</span>
-          <select id="plantilla_id" name="plantilla_id" class="select-sm" style="min-width:170px;">
-            <option value="none" {% if not plantilla_activa or not plantilla_activa.plantilla %}selected{% endif %}>Ninguna</option>
+
+          <select id="plantilla_id" name="plantilla_id" class="select-sm" style="min-width:160px;">
+            <option value="none"
+              class="opt-muted"
+              {% if not plantilla_activa or not plantilla_activa.plantilla %}selected{% endif %}>
+              Vaciar Semana
+            </option>
+
             {% for p in plantillas %}
               <option value="{{ p.plantilla_id }}"
                 {% if plantilla_activa and plantilla_activa.plantilla and p.plantilla_id == plantilla_activa.plantilla.plantilla_id %}selected{% endif %}>
@@ -262,42 +415,26 @@
               </option>
             {% endfor %}
           </select>
-          <button id="delete-template-btn" type="button" title="Borrar plantilla" class="btn-trash" style="display:none;">✖</button>
+
           <button type="submit" class="btn-sm btn-blue">Aplicar</button>
-        </form>
 
-        <div class="divider-line"></div>
-
-        <!-- Guardar -->
-        <form action="{{ url_for('main.guardar_semana_como_plantilla_simple') }}" method="POST"
-              class="form-line">
-          <input type="hidden" name="lunes_ref" value="{{ lunes.strftime('%Y-%m-%d') }}">
-          <span class="label">Guardar como</span>
-          <input type="text" id="nombre" name="nombre" class="input-sm"
-                placeholder="Ej. Carga alta" style="min-width:180px;">
-          <label class="label" style="display:flex; align-items:center; gap:6px; margin-left:6px;">
-            <input type="checkbox" id="overwrite_template" name="overwrite_template">
-            Sobrescribir
-          </label>
-          <select id="plantilla_id_to_overwrite" name="plantilla_id_to_overwrite"
-                  class="select-sm" style="display:none; min-width:180px;">
-            <option value="">Selecciona plantilla…</option>
-            {% for p in plantillas %}
-              <option value="{{ p.plantilla_id }}">{{ p.nombre }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit" class="btn-sm btn-green">Guardar</button>
+          <button
+            id="btn-remover-plantilla"
+            type="submit"
+            class="btn-trash"
+            aria-label="Remover plantilla (no borra tareas)"
+            title="Remover plantilla (no borra tareas)"
+            formaction="{{ url_for('main.remover_plantilla_semana') }}"
+            formmethod="post"
+          >✖</button>
         </form>
       </div>
     </div>
   </header>
 
-  <!-- Formulario oculto para borrar -->
-  <form id="delete-template-form" method="POST" style="display:none;"></form>
-
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="flash-wrap">
+      <div class="flash-wrap" role="status" aria-live="polite">
         {% for category, msg in messages %}
           <div class="flash">{{ msg }}</div>
         {% endfor %}
@@ -331,34 +468,41 @@
     LuxSOP ERP · Planeación semanal de limpieza.
   </footer>
 
-  <!-- ✅ Scripts -->
   <script>
-  // Borrar plantilla
-  (function () {
-    const select = document.getElementById('plantilla_id');
-    const deleteBtn = document.getElementById('delete-template-btn');
-    const deleteForm = document.getElementById('delete-template-form');
+  // ✅ Sidebar: abrir/cerrar + overlay + ESC + cerrar al navegar
+  (function(){
+    const nav = document.getElementById('sideNav');
+    const btn = document.getElementById('navToggle');
+    const closeBtn = document.getElementById('navClose');
+    const overlay = document.getElementById('navOverlay');
+    if(!nav || !btn || !overlay) return;
 
-    function update() {
-      if (!select) return;
-      deleteBtn.style.display = (select.value && select.value !== 'none') ? 'flex' : 'none';
+    function openNav(){
+      nav.classList.add('is-open');
+      overlay.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNav(){
+      nav.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      document.body.style.overflow = '';
     }
 
-    deleteBtn && deleteBtn.addEventListener('click', () => {
-      const id = select.value;
-      if (!id || id === 'none' || isNaN(parseInt(id))) {
-        alert('Selecciona una plantilla válida para borrar.');
-        return;
-      }
-      if (confirm('¿Borrar esta plantilla definitivamente?')) {
-        deleteForm.method = 'POST';
-        deleteForm.action = `/plantillas/borrar/${parseInt(id)}`;
-        deleteForm.submit();
-      }
+    btn.addEventListener('click', openNav);
+    overlay.addEventListener('click', closeNav);
+    closeBtn && closeBtn.addEventListener('click', closeNav);
+
+    document.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape') closeNav();
     });
 
-    select && select.addEventListener('change', update);
-    update();
+    // cerrar al hacer click en un link del menú
+    nav.addEventListener('click', (e) => {
+      const a = e.target.closest('a');
+      if(a) closeNav();
+    });
   })();
 
   // Fade-out mensajes flash
@@ -371,31 +515,27 @@
         flash.style.opacity = '0';
         setTimeout(() => flash.remove(), 1000);
       });
-    }, 3500);
+    }, 1500);
   })();
 
-  // Toggle "Sobrescribir"
-  (function () {
-    const chk = document.getElementById('overwrite_template');
-    const nameInput = document.getElementById('nombre');
-    const sel = document.getElementById('plantilla_id_to_overwrite');
+  // ✅ Deshabilita la tacha cuando el select está en "Vaciar semana"
+  // ✅ Y pone el select en modo "muted" cuando está en none
+  (function(){
+    const select = document.getElementById('plantilla_id');
+    const btn = document.getElementById('btn-remover-plantilla');
 
-    function syncUI() {
-      if (!chk || !nameInput || !sel) return;
-      if (chk.checked) {
-        nameInput.style.display = 'none';
-        sel.style.display = '';
-        sel.focus();
-      } else {
-        nameInput.style.display = '';
-        sel.style.display = 'none';
-        sel.value = '';
-        nameInput.focus();
-      }
+    function sync(){
+      if(!select || !btn) return;
+      const isNone = (select.value === 'none');
+
+      btn.disabled = isNone;
+      btn.classList.toggle('is-disabled', isNone);
+
+      select.classList.toggle('is-muted', isNone);
     }
 
-    chk && chk.addEventListener('change', syncUI);
-    syncUI();
+    select && select.addEventListener('change', sync);
+    sync();
   })();
   </script>
 </body>

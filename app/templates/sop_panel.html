@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>SOP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
+      --blue:#0d6efd; --green:#198754; --card:#fff;
+      --h:46px; /* altura unificada para inputs y “pills” */
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin:0;
+      padding:2rem;
+      max-width:1200px;
+      margin-inline:auto;
+    }
+
+    .head{
+      border-bottom:1px solid var(--line);
+      padding-bottom:.85rem;
+      margin-bottom:14px;
+    }
+    h1{ margin:0; font-size:1.55rem; }
+    .sub{ color:var(--muted); font-size:.95rem; margin-top:.35rem; }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding:16px;
+    }
+    .stack{ display:flex; flex-direction:column; gap:14px; }
+
+    label{
+      display:block;
+      font-size:.85rem;
+      font-weight:600;      /* ✅ antes 700 */
+      color:#333;
+      margin-bottom:6px;
+    }
+    select{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:.55rem .8rem;
+      height:var(--h);
+      font-size:1rem;
+      background:#fff;
+    }
+
+    .btn{
+      border:none;
+      border-radius:16px;
+      height:var(--h);
+      padding:.55rem 1.1rem;
+      font-size:1rem;
+      font-weight:600;      /* ✅ para que no se vea tan bold */
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      white-space:nowrap;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-green{ background: var(--green); color:#fff; }
+    .btn:hover{ filter: brightness(.95); }
+
+    /* ====== Card 1: selección ====== */
+    .control-grid{
+      display:grid;
+      grid-template-columns: 1.1fr 1.1fr 1fr auto;
+      gap:14px;
+      align-items:end;
+    }
+    .field{ display:flex; flex-direction:column; }
+
+    @media (max-width: 980px){
+      .control-grid{ grid-template-columns: 1fr; }
+      .control-grid .btn{ width:100%; }
+    }
+
+    /* ====== Card 2: resultados ====== */
+    .result-row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .stats{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      height:var(--h);
+      padding:0 .9rem;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      font-size:.98rem;
+      font-weight:600;      /* ✅ antes “se veía bold” */
+      line-height:1;
+      white-space:nowrap;
+    }
+    .pill strong{ font-weight:700; } /* ✅ antes 800 */
+    .pill-ok{ border-color:#cde8d5; background:#eef9f0; color:#226b3d; }
+    .pill-warn{ border-color:#ffe8a1; background:#fff8e1; color:#7a5b00; }
+
+    .right-actions{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-left:auto;
+    }
+    @media (max-width: 980px){
+      .result-row{ flex-direction:column; align-items:stretch; }
+      .right-actions{ width:100%; }
+      .right-actions .btn{ width:100%; }
+    }
+
+    /* ===== menú lateral ===== */
+    .burger {
+      position: fixed;
+      top: 16px; left: 16px;
+      z-index: 1101;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .nav-overlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.35);
+      z-index:1100;
+      opacity:0; pointer-events:none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open{ opacity:1; pointer-events:auto; }
+    .side-nav{
+      position:fixed; top:0; left:0;
+      height:100vh; width:300px; max-width:84vw;
+      background: var(--card);
+      border-right:1px solid var(--line);
+      box-shadow:0 8px 30px rgba(0,0,0,.14);
+      z-index:1102;
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .side-nav.is-open{ transform: translateX(0); }
+    .side-nav__head{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding-bottom:10px; border-bottom:1px solid var(--line);
+      margin-bottom:6px;
+    }
+    .side-nav__brand{ display:grid; line-height:1.1; }
+    .side-nav__brand strong{ font-size:1rem; }
+    .side-nav__brand span{ font-size:.78rem; color:var(--muted); }
+    .side-nav__close{
+      width:36px; height:36px; border-radius:10px;
+      border:1px solid var(--line); background:#fff; cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    .side-nav__link{
+      text-decoration:none; color:var(--fg);
+      padding:10px 12px; border-radius:12px;
+      display:flex; align-items:center; gap:10px;
+      font-size:.92rem;
+      font-weight:500;
+    }
+    .side-nav__link:hover{ background:#f3f3f3; }
+  </style>
+</head>
+
+<body>
+
+<!-- Menú lateral -->
+<button class="burger" id="navToggle" aria-label="Abrir menú" aria-controls="sideNav" aria-expanded="false">☰</button>
+<div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+<nav class="side-nav" id="sideNav" aria-label="Menú principal">
+  <div class="side-nav__head">
+    <div class="side-nav__brand">
+      <strong>LuxSOP</strong>
+      <span>ERP · Limpieza</span>
+    </div>
+    <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+  </div>
+  <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+  <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+  <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+</nav>
+
+<div class="head">
+  <h1>SOP</h1>
+  <div class="sub">
+    Selecciona Área/Subárea y Nivel. Luego carga para ver/crear/modificar el SOP.
+  </div>
+</div>
+
+<div class="stack">
+
+  <!-- ===== Card 1: Selección ===== -->
+  <div class="card">
+    <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopFilterForm">
+      <div class="control-grid">
+        <div class="field">
+          <label for="area_id">Área</label>
+          <select name="area_id" id="area_id">
+            <option value="">— Selecciona —</option>
+            {% for a in areas %}
+              <option value="{{ a.area_id }}" {% if area_id == a.area_id %}selected{% endif %}>
+                {{ a.area_nombre }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="subarea_id">Subárea</label>
+          <select name="subarea_id" id="subarea_id" {% if not area_id %}disabled{% endif %}>
+            <option value="">— Selecciona —</option>
+            {% for s in subareas %}
+              <option value="{{ s.subarea_id }}" {% if subarea_id == s.subarea_id %}selected{% endif %}>
+                {{ s.subarea_nombre }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="nivel">Nivel</label>
+          <select name="nivel" id="nivel">
+            <option value="basica"   {% if nivel == 'basica' %}selected{% endif %}>Básica</option>
+            <option value="media"    {% if nivel == 'media' %}selected{% endif %}>Media</option>
+            <option value="profundo" {% if nivel == 'profundo' %}selected{% endif %}>Profundo</option>
+          </select>
+        </div>
+
+        <button class="btn btn-blue" type="submit">Cargar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===== Card 2: Resultado ===== -->
+    {% if subarea_id %}
+    <div class="card">
+        <div class="result-row">
+        <div class="stats">
+
+            {% if sop %}
+            <div class="pill">SOP: <strong>{{ sop.sop_id }}</strong></div>
+            {% else %}
+            <div class="pill pill-warn">SOP: <strong>No creado</strong></div>
+            {% endif %}
+
+            <div class="pill">Nivel: <strong>{{ nivel }}</strong></div>
+
+            {% if sop and has_nivel %}
+            <div class="pill pill-ok">Estado nivel: <strong>Creado</strong></div>
+            {% else %}
+            <div class="pill pill-warn">Estado nivel: <strong>Sin detalles</strong></div>
+            {% endif %}
+        </div>
+
+        <div class="right-actions">
+            {% if sop and has_fracciones %}
+            <a class="btn btn-green"
+                href="{{ url_for('main.sop_fracciones_edit', sop_id=sop.sop_id, nivel=nivel) }}">
+                Modificar SOP
+            </a>
+            {% else %}
+            <a class="btn btn-green"
+                href="{{ url_for('main.sop_crear', subarea_id=subarea_id, nivel=nivel) }}">
+                Crear SOP
+            </a>
+            {% endif %}
+        </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+  // menú lateral
+  (function(){
+    const nav = document.getElementById('sideNav');
+    const btn = document.getElementById('navToggle');
+    const closeBtn = document.getElementById('navClose');
+    const overlay = document.getElementById('navOverlay');
+    if(!nav || !btn || !overlay) return;
+
+    function openNav(){
+      nav.classList.add('is-open');
+      overlay.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNav(){
+      nav.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      document.body.style.overflow = '';
+    }
+
+    btn.addEventListener('click', openNav);
+    overlay.addEventListener('click', closeNav);
+    closeBtn && closeBtn.addEventListener('click', closeNav);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeNav(); });
+    nav.addEventListener('click', (e)=>{ if(e.target.closest('a')) closeNav(); });
+  })();
+
+  // UX: recargar al cambiar Área/Nivel
+  (function(){
+    const form = document.getElementById('sopFilterForm');
+    const area = document.getElementById('area_id');
+    const sub = document.getElementById('subarea_id');
+    const nivel = document.getElementById('nivel');
+
+    if(!form || !area || !nivel) return;
+
+    area.addEventListener('change', ()=>{
+      if(sub) sub.value = "";
+      form.submit();
+    });
+
+    nivel.addEventListener('change', ()=>{
+      form.submit();
+    });
+  })();
+</script>
+
+</body>
+</html>

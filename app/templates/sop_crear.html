@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Crear SOP · Fracciones</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
+      --blue:#0d6efd; --green:#198754; --card:#fff; --red:#dc3545;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin:0;
+      padding:2rem;
+      max-width:1200px;
+      margin-inline:auto;
+    }
+    .head{
+      display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
+      border-bottom:1px solid var(--line); padding-bottom:.75rem; margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+    h1{ margin:0; font-size:1.25rem; }
+    .sub{ color:var(--muted); font-size:.9rem; margin-top:.25rem; }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:12px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding:14px;
+      margin-top: 14px;
+    }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btn{
+      border:none;
+      border-radius:10px;
+      height:38px;
+      padding:.55rem .85rem;
+      font-size:.9rem;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-green{ background: var(--green); color:#fff; }
+    .btn:hover{ filter: brightness(.95); }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+    }
+    th, td{
+      padding:.65rem .7rem;
+      border-bottom:1px solid #eee;
+      font-size:.92rem;
+      vertical-align:middle;
+    }
+    th{ text-align:left; background:#fafafa; }
+    tr:last-child td{ border-bottom:none; }
+
+    /* ✅ Orden más angosto */
+    input[type="number"]{
+      width: 60px;              /* antes 110px */
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:.35rem .45rem;
+      height:34px;
+      font-size:.92rem;
+    }
+
+    .muted{ color:var(--muted); font-size:.85rem; }
+    .pill{
+      display:inline-flex; align-items:center;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:.25rem .6rem;
+      font-size:.85rem;
+      gap:8px;
+    }
+    .warn{
+      background:#fff3cd;
+      border:1px solid #ffe69c;
+      color:#664d03;
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:.9rem;
+      margin-top:10px;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>Crear SOP · Fracciones</h1>
+    <div class="sub">
+      Área: <strong>{{ subarea.area.area_nombre if subarea.area else subarea.area_id }}</strong> ·
+      Subárea: <strong>{{ subarea.subarea_nombre }}</strong>
+    </div>
+    <div class="sub">
+      SOP: <strong>{{ sop_id }}</strong> · Nivel: <strong>{{ nivel }}</strong>
+    </div>
+  </div>
+
+  <div class="row">
+    <a class="btn btn-blue"
+       href="{{ url_for('main.sop_panel', area_id=subarea.area_id, subarea_id=subarea.subarea_id, nivel=nivel) }}">
+      ← Volver
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;">
+    <div>
+      <div class="pill">Solo aparecen fracciones con <strong>metodología</strong> para este nivel.</div>
+      <div class="muted" style="margin-top:6px;">Marca fracciones y define su <strong>orden</strong>. (El tiempo se captura en Detalles.)</div>
+      <div id="warnBox" class="warn"></div>
+    </div>
+  </div>
+
+  <form id="frm" method="POST" action="{{ url_for('main.sop_crear', subarea_id=subarea.subarea_id, nivel=nivel) }}">
+    <input type="hidden" name="nivel" value="{{ nivel }}">
+
+    <table style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="width:70px;">Usar</th>
+          <th>Fracción</th>
+          <th style="width:90px;">Orden</th> <!-- ✅ más angosto -->
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fracciones %}
+          {% set is_on = (selected_ids and (f.fraccion_id in selected_ids)) %}
+          <tr>
+            <td>
+              <input type="checkbox"
+                     name="fraccion_id"
+                     value="{{ f.fraccion_id }}"
+                     class="chk-fr"
+                     {% if is_on %}checked{% endif %}>
+            </td>
+            <td>
+              <div><strong>{{ f.fraccion_id }}</strong> — {{ f.fraccion_nombre }}</div>
+              <!-- ✅ Nota técnica removida -->
+            </td>
+            <td>
+              <input type="number" min="1" step="1"
+                     name="orden_{{ f.fraccion_id }}"
+                     class="inp-orden"
+                     value="{{ orden_map.get(f.fraccion_id, '') if orden_map else '' }}"
+                     {% if not is_on %}disabled{% endif %}>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="row" style="margin-top:12px; justify-content:flex-end;">
+      <button class="btn btn-green" type="submit">Guardar fracciones</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // ✅ Auto-orden + renumerado: si quitas la #1, las demás bajan (2->1, 3->2, etc.)
+  (function(){
+    const frm = document.getElementById('frm');
+    const warn = document.getElementById('warnBox');
+    const rows = Array.from(document.querySelectorAll('tbody tr'));
+
+    function showWarn(msg){
+      if(!warn) return;
+      warn.textContent = msg || "";
+      warn.style.display = msg ? 'block' : 'none';
+    }
+
+    function getCheckedRows(){
+      return rows.filter(tr => tr.querySelector('.chk-fr')?.checked);
+    }
+
+    function getOrderValue(tr){
+      const ord = tr.querySelector('.inp-orden');
+      const v = parseInt((ord?.value || "").trim(), 10);
+      return Number.isFinite(v) ? v : 999999;
+    }
+
+    function renumber(){
+      const chosen = getCheckedRows();
+
+      chosen.sort((a, b) => {
+        const da = getOrderValue(a);
+        const db = getOrderValue(b);
+        if (da !== db) return da - db;
+        return rows.indexOf(a) - rows.indexOf(b);
+      });
+
+      chosen.forEach((tr, idx) => {
+        const ord = tr.querySelector('.inp-orden');
+        if(ord) ord.value = String(idx + 1);
+      });
+    }
+
+    rows.forEach(tr => {
+      const chk = tr.querySelector('.chk-fr');
+      const ord = tr.querySelector('.inp-orden');
+      if(!chk || !ord) return;
+
+      chk.addEventListener('change', () => {
+        const on = chk.checked;
+        ord.disabled = !on;
+
+        if(!on){
+          ord.value = "";
+          renumber();
+          showWarn("");
+          return;
+        }
+
+        // si no tiene orden, ponle uno temporal y luego renumber lo compacta
+        if(!ord.value){
+          const current = getCheckedRows().map(getOrderValue);
+          const finite = current.filter(v => v < 999999);
+          const max = finite.length ? Math.max(...finite) : 0;
+          ord.value = String(max + 1);
+        }
+
+        renumber();
+        showWarn("");
+      });
+    });
+
+    // ✅ Al cargar: si había huecos por datos previos, compacta visualmente
+    renumber();
+
+    frm && frm.addEventListener('submit', (e) => {
+      const chosen = getCheckedRows();
+      if(chosen.length === 0){
+        e.preventDefault();
+        showWarn("Selecciona al menos una fracción.");
+        return;
+      }
+
+      for(const tr of chosen){
+        const ord = tr.querySelector('.inp-orden');
+        const v = parseInt((ord?.value || "").trim(), 10);
+        if(!Number.isFinite(v) || v <= 0){
+          e.preventDefault();
+          showWarn("Todas las fracciones seleccionadas deben tener un orden válido (>= 1).");
+          return;
+        }
+      }
+
+      showWarn("");
+    });
+  })();
+</script>
+
+</body>
+</html>

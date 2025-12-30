@@ -38,17 +38,61 @@
     .asig-meta { font-size: .85rem; }
     .asig-item form { margin: 0; }
     .btn-delete { background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 1rem; padding: .25rem .5rem; }
+
     /* subáreas ocupadas en el select */
     #subarea-select option.ocupada { background-color: #f1f1f1; color: #888; }
     #subarea-select option.ocupada:disabled { opacity: 0.8; }
+
     /* badges de nivel */
     .nivel-badge { padding: 2px 6px; border-radius: 4px; font-size: .7rem; color: white; margin-left: 8px; }
     .nivel-basica { background: #adb5bd; }
     .nivel-media { background: #6c757d; }
     .nivel-profundo { background: #343a40; }
+
+    /* ===== Drawer (☰) ===== */
+    .burger{
+      position:fixed; left:14px; top:14px; z-index:1001;
+      width:40px; height:40px; border-radius:12px;
+      border:1px solid var(--line); background:#fff; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:0 2px 10px rgba(0,0,0,.06);
+      font-size:18px; line-height:1;
+    }
+    .drawer-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.25); display:none; z-index:1000; }
+    .drawer{
+      position:fixed; left:0; top:0; bottom:0; width:280px;
+      background:#fff; border-right:1px solid var(--line);
+      transform:translateX(-105%); transition:transform .2s ease;
+      z-index:1002; padding:14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.08);
+      overflow:auto;
+    }
+    .drawer.open{ transform:translateX(0); }
+    .drawer-backdrop.open{ display:block; }
+    .drawer h3{ margin:6px 0 10px; font-size:1rem; }
+    .drawer a{
+      display:flex; align-items:center; gap:10px;
+      padding:.55rem .7rem; border-radius:10px;
+      text-decoration:none; color:var(--fg);
+      border:1px solid transparent;
+    }
+    .drawer a:hover{ background:#f6f6f6; border-color:#eee; }
+    .drawer .muted{ color:var(--muted); font-size:.8rem; margin-top:6px; }
   </style>
 </head>
 <body>
+
+{% if not hide_nav %}
+  <button class="burger" id="burger" aria-label="Abrir menú">☰</button>
+  <div class="drawer-backdrop" id="backdrop"></div>
+  <aside class="drawer" id="drawer" aria-label="Menú">
+    <h3>LuxSOP</h3>
+    <a href="{{ url_for('main.home') }}">📅 Programación</a>
+    <a href="{{ url_for('main.plantillas_panel') }}">🗂️ Plantillas</a>
+    <div class="muted">Atajos de navegación.</div>
+  </aside>
+{% endif %}
+
 <div class="wrap">
   <div class="sidebar">
     <h1>Agregar Tarea</h1>
@@ -86,7 +130,7 @@
         <option value="" disabled selected>Seleccionar nivel</option>
         <option value="basica">Básica</option>
         <option value="media">Media</option>
-        <option value="profundo">Profundo</option> <!-- <- canónico -->
+        <option value="profundo">Profundo</option>
       </select>
 
       <button type="submit">Agregar tarea</button>
@@ -169,5 +213,21 @@
     setTimeout(() => form.reset(), 100);
   });
 </script>
+
+{% if not hide_nav %}
+<script>
+  (function(){
+    const burger=document.getElementById('burger');
+    const drawer=document.getElementById('drawer');
+    const backdrop=document.getElementById('backdrop');
+    function open(){ drawer.classList.add('open'); backdrop.classList.add('open'); }
+    function close(){ drawer.classList.remove('open'); backdrop.classList.remove('open'); }
+    burger && burger.addEventListener('click', open);
+    backdrop && backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
+  })();
+</script>
+{% endif %}
+
 </body>
 </html>

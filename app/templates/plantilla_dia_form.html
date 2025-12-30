@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Plantilla · {{ plantilla.nombre }} · {{ dia_nombre }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f9f9f9;
+      --fg: #222;
+      --muted: #666;
+      --line: #ddd;
+      --accent: #0d6efd;
+      --ok: #198754;
+      --card: #fff;
+      --red: #dc3545;
+      --red-d: #b02a37;
+    }
+    *{ box-sizing:border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+
+    .wrap { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 300px;
+      background: var(--card);
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .content { flex: 1; padding: 24px; }
+
+    h1 { font-size: 1.15rem; margin: 0 0 .75rem; }
+    .sub { color: var(--muted); font-size: .85rem; margin: .15rem 0 0; }
+
+    label { display: block; margin-top: 12px; font-size: .85rem; font-weight: 600; color:#333; }
+    select, button {
+      width: 100%;
+      padding: .55rem .6rem;
+      margin-top: .35rem;
+      font-size: .92rem;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    button.btn-ok { background: var(--ok); color: white; border: none; cursor: pointer; margin-top: 1rem; }
+    button.btn-ok:hover { filter: brightness(.95); }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 1rem;
+      padding-bottom: .8rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .top-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .top-actions a {
+      background: var(--accent);
+      color: #fff;
+      padding: .5rem .75rem;
+      text-decoration: none;
+      border-radius: 10px;
+      font-size: .85rem;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .top-actions a:hover { filter: brightness(.95); }
+
+    .filter-bar {
+      margin: 0 0 1rem;
+      display: flex;
+      gap: .75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-bar label { margin: 0; }
+
+    .card {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    .card h2 {
+      margin: 0 0 .65rem;
+      font-size: 1rem;
+      border-bottom: 1px solid #eee;
+      padding-bottom: .5rem;
+    }
+
+    .asig-item {
+      padding: .65rem .8rem;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      background: #fefefe;
+      margin-bottom: .6rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .asig-meta { font-size: .9rem; }
+    .asig-meta small { font-size: .82rem; color: var(--muted); display:block; margin-top:2px; }
+    .asig-item form { margin: 0; }
+
+    .btn-delete {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1px solid var(--red-d);
+      background: var(--red);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-size: 16px;
+      flex: 0 0 auto;
+    }
+    .btn-delete:hover { background: var(--red-d); }
+
+    /* subáreas ocupadas en el select */
+    #subarea-select option.ocupada { background-color: #f1f1f1; color: #888; }
+    #subarea-select option.ocupada:disabled { opacity: 0.9; }
+
+    /* Flash */
+    .flash-wrap { margin: .75rem 0 1rem; }
+    .flash {
+      background: #eef9f0;
+      border: 1px solid #cde8d5;
+      color: #226b3d;
+      padding: .45rem .6rem;
+      border-radius: 10px;
+      font-size: .85rem;
+      transition: opacity 0.5s ease;
+    }
+
+    /* ======================================================
+       ✅ MENÚ LATERAL (solo si hide_nav NO está activo)
+       ====================================================== */
+    .burger {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1101;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .burger:hover { filter: brightness(.98); }
+
+    .nav-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 1100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .side-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 300px;
+      max-width: 84vw;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(0,0,0,.14);
+      z-index: 1102;
+
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .side-nav.is-open { transform: translateX(0); }
+
+    .side-nav__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 6px;
+    }
+    .side-nav__brand { display: grid; line-height: 1.1; }
+    .side-nav__brand strong { font-size: 1rem; }
+    .side-nav__brand span { font-size: .78rem; color: var(--muted); }
+
+    .side-nav__close {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .side-nav__link {
+      text-decoration: none;
+      color: var(--fg);
+      padding: 10px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: .92rem;
+    }
+    .side-nav__link:hover { background: #f3f3f3; }
+
+    @media (max-width: 900px){
+      .wrap { display:block; }
+      .sidebar { width:auto; height:auto; position: static; border-right:0; border-bottom:1px solid var(--line); }
+      .content { padding: 16px; }
+    }
+  </style>
+</head>
+
+<body>
+
+  {% if not hide_nav %}
+    <!-- ✅ Menú lateral -->
+    <button class="burger" id="navToggle"
+            aria-label="Abrir menú"
+            aria-controls="sideNav"
+            aria-expanded="false">☰</button>
+
+    <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+    <nav class="side-nav" id="sideNav" aria-label="Menú principal">
+      <div class="side-nav__head">
+        <div class="side-nav__brand">
+          <strong>LuxSOP</strong>
+          <span>ERP · Limpieza</span>
+        </div>
+        <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+      </div>
+
+      <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+      <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+    </nav>
+  {% endif %}
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap" role="status" aria-live="polite" style="max-width:1200px;margin:0 auto;padding: 0 24px;">
+        {% for category, msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="wrap">
+    <!-- Sidebar: Agregar actividad -->
+    <div class="sidebar">
+      <h1>Agregar actividad</h1>
+      <div class="sub">
+        <strong>{{ plantilla.nombre }}</strong><br>
+        Día: <strong>{{ dia_nombre }}</strong>
+      </div>
+
+      <form method="post" action="{{ url_for('main.plantilla_item_add', plantilla_id=plantilla.plantilla_id) }}">
+        <input type="hidden" name="dia_index" value="{{ dia_index }}">
+
+        <label>Personal</label>
+        <select name="personal_id" id="personal-select" required>
+          <option value="" disabled selected>Seleccionar personal</option>
+          {% for p in personal_list %}
+            <option value="{{ p.personal_id }}">{{ p.nombre }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Área</label>
+        <select name="area_id" id="area-select" required>
+          <option value="" disabled selected>Seleccionar área</option>
+          {% for a in areas_list %}
+            <option value="{{ a.area_id }}">{{ a.area_nombre }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Subárea</label>
+        <select name="subarea_id" id="subarea-select" required>
+          <option value="" disabled selected>Seleccionar subárea</option>
+          {% for s in subareas_list %}
+            {% if s.subarea_id in asignadas_ids %}
+              <option value="{{ s.subarea_id }}" disabled class="ocupada">{{ s.subarea_nombre }}</option>
+            {% else %}
+              <option value="{{ s.subarea_id }}">{{ s.subarea_nombre }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+
+        <label>Nivel de limpieza</label>
+        <select name="nivel_limpieza_asignado" required>
+          <option value="" disabled selected>Seleccionar nivel</option>
+          <option value="basica">Básica</option>
+          <option value="media">Media</option>
+          <option value="profundo">Profundo</option>
+        </select>
+
+        <button type="submit" class="btn-ok">Agregar</button>
+      </form>
+
+      <div class="sub" style="margin-top:12px;">
+        Tip: Subáreas ya usadas en este día se deshabilitan.
+      </div>
+    </div>
+
+    <!-- Contenido -->
+    <div class="content">
+      <div class="top-bar">
+        <div>
+          <h1 style="margin:0;">{{ dia_nombre }} · {{ plantilla.nombre }}</h1>
+          <div class="sub">Editor del día de la plantilla (sin fecha).</div>
+        </div>
+        <div class="top-actions">
+          <a href="{{ url_for('main.plantillas_panel', plantilla_id=plantilla.plantilla_id) }}">Volver a Plantillas</a>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <label for="filtro-persona">Filtrar por persona:</label>
+        <select id="filtro-persona" style="width: 260px; max-width: 100%;">
+          <option value="all">Mostrar todos</option>
+          {% for persona_id, grupo in items_por_persona.items() %}
+            <option value="persona-{{ persona_id }}">
+              {{ grupo['persona'].nombre if grupo['persona'] else persona_id }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if not items_por_persona or (items_por_persona|length) == 0 %}
+        <div class="card">
+          <div class="sub">Aún no hay actividades en este día.</div>
+        </div>
+      {% endif %}
+
+      {% for persona_id, grupo in items_por_persona.items() %}
+        <div class="card persona-card" data-persona="persona-{{ persona_id }}">
+          <h2>{{ grupo['persona'].nombre if grupo['persona'] else persona_id }}</h2>
+
+          {% for it in grupo['items'] %}
+            <div class="asig-item">
+              <div class="asig-meta">
+                <strong>{{ it.area.area_nombre if it.area else it.area_id }}</strong>
+                — {{ it.subarea.subarea_nombre if it.subarea else it.subarea_id }}
+                <small>Nivel: {{ it.nivel_limpieza_asignado }}</small>
+              </div>
+
+              <form method="post" action="{{ url_for('main.plantilla_item_delete', item_id=it.item_id) }}">
+                <button class="btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar esta actividad del día?');">✖</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ✅ Pasamos datos Jinja a JSON sin romper el linter -->
+  <script id="ocupadas-data" type="application/json">
+    {{ asignadas_ids|list|tojson }}
+  </script>
+
+  {% if not hide_nav %}
+  <script>
+    // ✅ Sidebar lateral (hamburguesa)
+    (function(){
+      const nav = document.getElementById('sideNav');
+      const btn = document.getElementById('navToggle');
+      const closeBtn = document.getElementById('navClose');
+      const overlay = document.getElementById('navOverlay');
+      if(!nav || !btn || !overlay) return;
+
+      function openNav(){
+        nav.classList.add('is-open');
+        overlay.classList.add('is-open');
+        btn.setAttribute('aria-expanded','true');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeNav(){
+        nav.classList.remove('is-open');
+        overlay.classList.remove('is-open');
+        btn.setAttribute('aria-expanded','false');
+        document.body.style.overflow = '';
+      }
+
+      btn.addEventListener('click', openNav);
+      overlay.addEventListener('click', closeNav);
+      closeBtn && closeBtn.addEventListener('click', closeNav);
+
+      document.addEventListener('keydown', (e) => {
+        if(e.key === 'Escape') closeNav();
+      });
+
+      nav.addEventListener('click', (e) => {
+        const a = e.target.closest('a');
+        if(a) closeNav();
+      });
+    })();
+  </script>
+  {% endif %}
+
+  <script>
+    // ✅ Fade-out flash
+    (function() {
+      const flashes = document.querySelectorAll('.flash');
+      if (!flashes.length) return;
+      setTimeout(() => {
+        flashes.forEach(flash => {
+          flash.style.transition = 'opacity 0.8s ease';
+          flash.style.opacity = '0';
+          setTimeout(() => flash.remove(), 1000);
+        });
+      }, 1500);
+    })();
+
+    // ✅ Filtrar por persona
+    (function(){
+      const sel = document.getElementById('filtro-persona');
+      if(!sel) return;
+      sel.addEventListener('change', function(){
+        const selected = this.value;
+        document.querySelectorAll('.persona-card').forEach(card => {
+          card.style.display = (selected === 'all' || card.dataset.persona === selected) ? '' : 'none';
+        });
+      });
+    })();
+
+    // ✅ Subáreas por área (simple) + deshabilitar ocupadas en el día
+    (function(){
+      const areaSel = document.getElementById('area-select');
+      const subSel = document.getElementById('subarea-select');
+      if(!areaSel || !subSel) return;
+
+      const ocupadasEl = document.getElementById('ocupadas-data');
+      const ocupadasArr = JSON.parse(ocupadasEl?.textContent || "[]");
+      const ocupadas = new Set(ocupadasArr);
+
+      areaSel.addEventListener('change', function(){
+        const areaId = this.value;
+        const url = '{{ url_for("main.subareas_por_area_simple", area_id="__ID__") }}'.replace('__ID__', areaId);
+
+        fetch(url)
+          .then(r => r.json())
+          .then(data => {
+            subSel.innerHTML = '<option value="" disabled selected>Seleccionar subárea</option>';
+
+            data.forEach(sub => {
+              const opt = document.createElement('option');
+              opt.value = sub.id;
+              opt.textContent = sub.nombre;
+
+              if (ocupadas.has(sub.id)) {
+                opt.disabled = true;
+                opt.classList.add('ocupada');
+              }
+
+              subSel.appendChild(opt);
+            });
+          })
+          .catch(() => {});
+      });
+    })();
+
+    // (Opcional) reset form visual después de submit
+    (function(){
+      const form = document.querySelector('.sidebar form');
+      if(!form) return;
+      form.addEventListener('submit', function(){
+        setTimeout(() => form.reset(), 150);
+      });
+    })();
+  </script>
+</body>
+</html>
