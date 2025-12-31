@@ -346,6 +346,15 @@
       color: var(--muted);
       font-size: .75rem;
     }
+
+    .side-nav__link-btn{
+      width: 100%;
+      background: transparent;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+    }
+
   </style>
 </head>
 
@@ -373,6 +382,16 @@
     <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
     <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
     <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+
+
+    <div class="side-nav__section" style="border-top:1px solid rgba(0,0,0,.08);">
+      Sesión
+    </div>
+
+    <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+      <button type="submit" class="side-nav__link side-nav__link-btn">🚪 Salir</button>
+    </form>
+
   </nav>
 
   <header>

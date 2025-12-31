@@ -250,6 +250,22 @@
       font-size: .92rem;
     }
     .side-nav__link:hover { background: #f3f3f3; }
+
+    .side-nav__link-btn{
+      width: 100%;
+      background: transparent;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+    }
+    .side-nav__section{
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,.08);
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
   </style>
 </head>
 
@@ -263,6 +279,7 @@
   <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
 
   <nav class="side-nav" id="sideNav" aria-label="Menú principal">
+    
     <div class="side-nav__head">
       <div class="side-nav__brand">
         <strong>LuxSOP</strong>
@@ -274,6 +291,12 @@
     <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
     <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
     <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+
+    <div class="side-nav__section">Sesión</div>
+
+    <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+      <button type="submit" class="side-nav__link side-nav__link-btn">🚪 Salir</button>
+    </form>
 
   </nav>
 
