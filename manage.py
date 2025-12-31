@@ -7,4 +7,3 @@ with app.app_context():
     import app.models
     db.create_all()
     print("✅ Tablas creadas")
-

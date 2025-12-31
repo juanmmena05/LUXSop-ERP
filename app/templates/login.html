@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LuxSOP · Iniciar sesión</title>
+  <style>
+    :root{
+      --fg:#222;
+      --muted:#777;
+      --line:#ddd;
+      --bg:#f6f6f6;
+      --card:#fff;
+      --blue:#0d6efd;
+      --red:#dc3545;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family:system-ui,sans-serif;
+      background:var(--bg);
+      margin:0;
+      padding:24px;
+      color:var(--fg);
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:18px;
+      max-width:420px;
+      margin:0 auto;
+      box-shadow:0 1px 6px rgba(0,0,0,.06);
+    }
+    h1{
+      margin:0 0 6px 0;
+      font-size:1.2rem;
+      font-weight:650;
+    }
+    .sub{
+      margin:0 0 14px 0;
+      color:var(--muted);
+      font-size:.9rem;
+    }
+    label{
+      display:block;
+      font-size:.9rem;
+      margin:10px 0 6px;
+    }
+    input{
+      width:100%;
+      padding:.65rem .75rem;
+      border:1px solid var(--line);
+      border-radius:12px;
+      font-size:1rem;
+      outline:none;
+      background:#fff;
+    }
+    input:focus{
+      border-color:var(--blue);
+      box-shadow:0 0 0 3px rgba(13,110,253,.15);
+    }
+    .btn{
+      width:100%;
+      margin-top:14px;
+      padding:.7rem .9rem;
+      border-radius:12px;
+      border:1px solid var(--blue);
+      background:var(--blue);
+      color:#fff;
+      font-size:1rem;
+      cursor:pointer;
+    }
+    .btn:hover{ filter:brightness(.96); }
+    .flash{
+      margin:10px 0 0;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-size:.92rem;
+    }
+    .flash.warning{ border-color:#f2c037; background:#fff8db; }
+    .flash.error{ border-color:var(--red); background:#ffe5e5; }
+    .flash.success{ border-color:#198754; background:#e7fff0; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>LuxSOP</h1>
+    <p class="sub">Inicia sesión para ver tu ruta.</p>
+
+    {# Mensajes flash (Credenciales inválidas, etc.) #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('main.login') }}">
+      <label for="username">Usuario</label>
+      <input id="username" name="username" autocomplete="username" required>
+
+      <label for="password">Contraseña</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+  </div>
+
+</body>
+</html>

@@ -16,9 +16,11 @@ from app.models import (
     Consumo,
     Elemento, ElementoSet, ElementoDetalle,
     SopFraccion, SopFraccionDetalle,
+    User,  # ✅ NUEVO
 )
 
 # ========= 1) Leer SOLO columnas bajo "BD" =========
+# Soporta tu formato: fila 1 (index 0) con celdas combinadas "BD"
 def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
     raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
@@ -55,13 +57,10 @@ def to_int(v):
         s = v.strip()
         if s == "":
             return None
-        # "3.0" -> 3
         if s.endswith(".0") and s[:-2].isdigit():
             return int(s[:-2])
-        # "3" -> 3
         if s.isdigit():
             return int(s)
-        # intenta float
         try:
             f = float(s)
             if float(f).is_integer():
@@ -90,7 +89,6 @@ def to_float(v):
         s = v.strip()
         if s == "":
             return None
-        # por si viene con coma decimal
         s = s.replace(",", ".")
         try:
             return float(s)
@@ -116,6 +114,16 @@ CFG: Dict[str, Dict[str, Any]] = {
         "fields": ["personal_id", "nombre"],
         "casters": {},
     },
+
+    # ✅ NUEVO: USERS (Excel trae password en texto plano; se hashea con set_password)
+    # Archivo: User.xlsx   Hoja: User   (con encabezado BD como los demás)
+    "User": {
+        "file": "User.xlsx", "sheet": "User", "model": User,
+        "pk": ["username"],  # OJO: el PK real es user_id, pero aquí usamos username para upsert especial
+        "fields": ["username", "password", "role", "personal_id"],
+        "casters": {},
+    },
+
     "Area": {
         "file": "Area-SubArea.xlsx", "sheet": "Area", "model": Area,
         "pk": ["area_id"],
@@ -165,7 +173,7 @@ CFG: Dict[str, Dict[str, Any]] = {
         "casters": {},
     },
 
-    # ✅ FIX: Kit debe incluir fraccion_id (NOT NULL). nivel_limpieza_id puede ser NULL (kit general).
+    # ✅ Kit debe incluir fraccion_id (NOT NULL). nivel_limpieza_id puede ser NULL (kit general).
     "Kit": {
         "file": "Herramienta.xlsx", "sheet": "Kit", "model": Kit,
         "pk": ["kit_id"],
@@ -239,6 +247,8 @@ CFG: Dict[str, Dict[str, Any]] = {
 IMPORT_ORDER = [
     "NivelLimpieza",
     "Personal",
+    "User",  # ✅ IMPORTANTE: Users después de Personal
+
     "Area",
     "SubArea",
     "SOP",
@@ -283,6 +293,20 @@ def get_pk_value(pk_cols: List[str], row: Dict[str, Any]):
     return tuple(row.get(c) for c in pk_cols)
 
 
+def _norm_str(x: Any) -> str:
+    return ("" if x is None else str(x)).strip()
+
+
+def _canon_role(x: str) -> str:
+    r = _norm_str(x).lower()
+    # aceptamos variantes por si acaso
+    if r in ("admin",):
+        return "admin"
+    if r in ("operativo", "operador", "op", "oper"):
+        return "operativo"
+    return r
+
+
 def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
     cfg = CFG[table_name]
     Model = cfg["model"]
@@ -300,6 +324,66 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
     df = df[[c for c in fields if c in df.columns]].copy()
     df = df.replace({np.nan: None})
 
+    # ✅ CASO ESPECIAL: USER
+    # - PK real es user_id, pero el Excel trae username
+    # - password se hashea con set_password
+    if table_name == "User":
+        for row in df.to_dict(orient="records"):
+            username = _norm_str(row.get("username"))
+            password = _norm_str(row.get("password"))
+            role = _canon_role(row.get("role"))
+            personal_id = _norm_str(row.get("personal_id")) or None
+
+            if not username:
+                continue
+
+            if role not in ("admin", "operativo"):
+                raise ValueError(f"User '{username}': role inválido '{role}' (usa admin u operativo)")
+
+            if role == "admin":
+                personal_id = None
+
+            if role == "operativo":
+                if not personal_id:
+                    raise ValueError(f"User '{username}': operativo requiere personal_id")
+
+                p = Personal.query.filter_by(personal_id=personal_id).first()
+                if not p:
+                    raise ValueError(f"User '{username}': no existe Personal '{personal_id}'")
+
+                # unique=True personal_id en User
+                existing_link = User.query.filter(User.personal_id == personal_id, User.username != username).first()
+                if existing_link:
+                    raise ValueError(
+                        f"User '{username}': personal_id '{personal_id}' ya ligado a '{existing_link.username}'"
+                    )
+
+            with db.session.no_autoflush:
+                u = User.query.filter_by(username=username).first()
+
+            is_new = u is None
+            if is_new:
+                # password_hash es NOT NULL -> para nuevos, password obligatorio
+                if not password:
+                    raise ValueError(f"User nuevo '{username}': password requerido (password_hash NOT NULL)")
+                u = User(username=username)
+
+            u.role = role
+            u.personal_id = personal_id
+
+            # si viene password, actualizar
+            if password:
+                u.set_password(password)
+
+            db.session.add(u)
+            if is_new:
+                inserted += 1
+            else:
+                updated += 1
+
+        return inserted, updated
+
+    # ====== resto de tablas (genérico por PK real) ======
     for row in df.to_dict(orient="records"):
         row = cast_row(row, casters)
 
@@ -307,7 +391,7 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
         if pk_val is None or (isinstance(pk_val, tuple) and any(v is None for v in pk_val)):
             continue
 
-        # ✅ evita autoflush durante el SELECT
+        # evita autoflush durante el SELECT
         with db.session.no_autoflush:
             obj = db.session.get(Model, pk_val)
 
@@ -323,7 +407,7 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
             if f in row:
                 setattr(obj, f, row.get(f))
 
-        # ✅ guard: Kit debe traer fraccion_id sí o sí
+        # guard: Kit debe traer fraccion_id sí o sí
         if table_name == "Kit" and getattr(obj, "fraccion_id", None) in (None, "", " "):
             raise ValueError(f"Kit {getattr(obj,'kit_id',None)} quedó sin fraccion_id (NOT NULL).")
 
@@ -364,7 +448,10 @@ def reset_db():
     db.session.query(SubArea).delete(synchronize_session=False)
     db.session.query(Area).delete(synchronize_session=False)
 
+    # ✅ Users antes de Personal
+    db.session.query(User).delete(synchronize_session=False)
     db.session.query(Personal).delete(synchronize_session=False)
+
     db.session.query(NivelLimpieza).delete(synchronize_session=False)
 
 
@@ -385,7 +472,7 @@ def main():
             try:
                 df = load_df(args.dir, t)
                 ins, upd = upsert_table(df, t)
-                db.session.commit()  # ✅ commit por tabla
+                db.session.commit()  # commit por tabla
                 print(f"{t}: +{ins} insert / ~{upd} update")
             except Exception as e:
                 db.session.rollback()

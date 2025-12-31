@@ -4,9 +4,15 @@ from typing import Optional
 from datetime import datetime, date, timedelta
 
 import pdfkit
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort, session
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, or_ 
+
+from flask_login import login_user, logout_user, login_required, current_user
+
+from .models import User
+
+from functools import wraps
 
 from .extensions import db
 from .models import (
@@ -28,6 +34,17 @@ from .models import (
     Kit, KitDetalle, Herramienta,
     Receta, RecetaDetalle, Quimico, Consumo,
 )
+
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if getattr(current_user, "role", None) != "admin":
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
 
 # =========================
 # Helpers de PDF
@@ -301,8 +318,27 @@ def fmt_quimico_y_receta(receta) -> tuple[str, str]:
 # =========================
 # HOME (panel semanal)
 # =========================
+# =========================
+# HOME (router)
+# =========================
 @main_bp.route("/")
+@login_required
 def home():
+    # admin -> panel semanal
+    if getattr(current_user, "role", None) == "admin":
+        return redirect(url_for("main.home_admin_panel"))
+
+    # operativo -> su ruta de hoy
+    return redirect(url_for("main.mi_ruta"))
+
+
+
+# =========================
+# HOME ADMIN (panel semanal real)
+# =========================
+@main_bp.route("/admin")
+@admin_required
+def home_admin_panel():
     hoy = date.today()
     lunes = get_monday(hoy)
     _, semana_num, _ = lunes.isocalendar()
@@ -341,13 +377,15 @@ def home():
         sabado=sabado,
         semana_num=semana_num,
         plantillas=plantillas,
-        plantilla_activa=plantilla_activa
+        plantilla_activa=plantilla_activa,
+        hide_nav=False,  # opcional: si tu template usa esto
     )
 
 # =========================
 # INIT DB
 # =========================
 @main_bp.route("/initdb")
+@admin_required
 def initdb():
     db.create_all()
     return "Base de datos creada (tablas listas)."
@@ -356,11 +394,13 @@ def initdb():
 # ÁREAS
 # =========================
 @main_bp.route("/areas")
+@admin_required
 def listar_areas():
     areas = Area.query.all()
     return render_template("areas_list.html", areas=areas)
 
 @main_bp.route("/areas/nueva", methods=["GET", "POST"])
+@admin_required
 def nueva_area():
     if request.method == "POST":
         area_id = request.form.get("area_id")
@@ -382,6 +422,7 @@ def nueva_area():
 # SUBÁREAS (compat con templates viejos)
 # =========================
 @main_bp.route("/subareas")
+@admin_required
 def listar_subareas():
     # Tu template subareas_list.html pide:
     # s.nivel_limpieza y s.tiempo_total_subarea, que ya no existen en SubArea v2.
@@ -422,6 +463,7 @@ def listar_subareas():
     return render_template("subareas_list.html", subareas=subareas_view)
 
 @main_bp.route("/subareas/nueva", methods=["GET", "POST"])
+@admin_required
 def nueva_subarea():
     areas = Area.query.all()
     if request.method == "POST":
@@ -450,6 +492,7 @@ def nueva_subarea():
 # PERSONAL
 # =========================
 @main_bp.route("/personal/nuevo", methods=["GET", "POST"])
+@admin_required
 def personal_nuevo():
     if request.method == "POST":
         personal_id = request.form.get("personal_id")
@@ -464,6 +507,7 @@ def personal_nuevo():
 # ASIGNACIÓN RUTA BASE A PERSONAL
 # =========================
 @main_bp.route("/personal/<personal_id>/asignar", methods=["GET", "POST"])
+@admin_required
 def asignar_ruta(personal_id):
     persona = Personal.query.filter_by(personal_id=personal_id).first()
     areas = Area.query.all()
@@ -496,6 +540,7 @@ def asignar_ruta(personal_id):
 # BORRAR TAREA (día)
 # =========================
 @main_bp.route("/plan/<fecha>/borrar/<int:tarea_id>", methods=["POST"])
+@admin_required
 def borrar_tarea(fecha, tarea_id):
     tarea = LanzamientoTarea.query.get_or_404(tarea_id)
     db.session.delete(tarea)
@@ -531,6 +576,7 @@ def subareas_por_area(area_id):
 # PLAN DIARIO (asignar)
 # =========================
 @main_bp.route("/plan/<fecha>/asignar", methods=["GET", "POST"])
+@admin_required
 def plan_dia_asignar(fecha):
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
     dia = get_or_create_dia(fecha_obj)
@@ -636,6 +682,7 @@ def calcular_tiempo_tarea(tarea) -> float:
 # Ruta Día (centro de reportes)
 # =========================
 @main_bp.route("/plan/<fecha>/ruta")
+@admin_required
 def ruta_dia(fecha):
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
@@ -656,7 +703,16 @@ def ruta_dia(fecha):
 # REPORTE (micro) — HTML reporte_personal.html
 # =========================
 @main_bp.route("/reporte/<fecha>/<personal_id>")
+@login_required
 def reporte_persona_dia(fecha, personal_id):
+
+    if current_user.role != "admin":
+        if current_user.personal_id != personal_id:
+            abort(403)
+        if fecha != date.today().strftime("%Y-%m-%d"):
+            abort(403)
+
+
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
 
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
@@ -841,7 +897,15 @@ def reporte_persona_dia(fecha, personal_id):
 # REPORTE Persona PDF (macro) — sop_macro_pdf.html
 # =========================
 @main_bp.route("/reporte/<fecha>/<personal_id>/pdf")
+@login_required
 def reporte_persona_dia_pdf(fecha, personal_id):
+
+    if current_user.role != "admin":
+        if current_user.personal_id != personal_id:
+            abort(403)
+        if fecha != date.today().strftime("%Y-%m-%d"):
+            abort(403)
+
     try:
         fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
     except ValueError:
@@ -1030,6 +1094,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 # UI: GET formulario aplicar plantilla
 # =========================
 @main_bp.route("/plantillas/aplicar")
+@admin_required
 def plantillas_aplicar_form():
     hoy = date.today()
     lunes_destino = get_monday(hoy)
@@ -1046,6 +1111,7 @@ def plantillas_aplicar_form():
 # POST aplicar plantilla
 # =========================
 @main_bp.route("/plantillas/aplicar", methods=["POST"])
+@admin_required
 def plantillas_aplicar_post():
     modo = request.form.get("modo")  # ruta_base | semana | plantilla
     overwrite = request.form.get("overwrite") == "on"
@@ -1068,6 +1134,7 @@ def plantillas_aplicar_post():
 # CRUD mínimo: guardar semana como plantilla (original)
 # =========================
 @main_bp.route("/plantillas/guardar", methods=["POST"])
+@admin_required
 def guardar_semana_como_plantilla():
     nombre = request.form.get("nombre")
     lunes_ref = datetime.strptime(request.form.get("lunes_ref"), "%Y-%m-%d").date()
@@ -1103,6 +1170,7 @@ def guardar_semana_como_plantilla():
 # GUARDAR semana visible como plantilla (home.html)
 # =========================
 @main_bp.route("/plantillas/guardar_simple", methods=["POST"])
+@admin_required
 def guardar_semana_como_plantilla_simple():
     lunes_ref_str = request.form.get("lunes_ref")
     if not lunes_ref_str:
@@ -1181,6 +1249,7 @@ def guardar_semana_como_plantilla_simple():
 # APLICAR plantilla guardada (home.html)
 # =========================
 @main_bp.route("/plantillas/aplicar_simple", methods=["POST"])
+@admin_required
 def aplicar_plantilla_guardada_simple():
     lunes_destino_str = request.form.get("lunes_destino")
     plantilla_id_str = request.form.get("plantilla_id")  # none | id
@@ -1208,6 +1277,7 @@ def aplicar_plantilla_guardada_simple():
     return redirect(url_for("main.home"))
 
 @main_bp.route("/plantillas/borrar/<int:plantilla_id>", methods=["POST"])
+@admin_required
 def borrar_plantilla(plantilla_id):
     plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
     PlantillaItem.query.filter_by(plantilla_id=plantilla_id).delete()
@@ -1222,6 +1292,7 @@ def borrar_plantilla(plantilla_id):
 # Ordenar Elementos Plantilla
 # =========================
 @main_bp.route("/elemento_set/<elemento_set_id>/orden", methods=["GET", "POST"])
+@admin_required
 def ordenar_elementoset(elemento_set_id):
     es = (
         ElementoSet.query.options(
@@ -1251,6 +1322,7 @@ def ordenar_elementoset(elemento_set_id):
 # SOP · Editor completo ElementoSet (selección + orden + kit/receta/consumo)
 # =========================
 @main_bp.route("/sop/<sop_id>/elementoset", methods=["GET", "POST"])
+@admin_required
 def sop_elementoset_edit(sop_id):
     # nivel por query o form
     nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
@@ -1443,7 +1515,12 @@ def build_met_map(fraccion_ids: set[str], nivel_ids: set[int]):
 # Panel de Plantillas
 # =========================
 @main_bp.route("/plantillas")
+@admin_required
 def plantillas_panel():
+
+    if current_user.role != "admin":
+        abort(403)
+
     hoy = date.today()
     lunes_ref = get_monday(hoy)
 
@@ -1490,6 +1567,7 @@ def plantillas_panel():
 # REMOVER plantilla activa (NO borra tareas)
 # =========================
 @main_bp.route("/plantillas/remover_semana", methods=["POST"])
+@admin_required
 def remover_plantilla_semana():
     lunes_destino_str = request.form.get("lunes_destino")
     if not lunes_destino_str:
@@ -1507,6 +1585,7 @@ def remover_plantilla_semana():
 # Crear plantilla vacía (desde cero)
 # =========================
 @main_bp.route("/plantillas/crear", methods=["POST"])
+@admin_required
 def plantillas_crear():
     nombre = (request.form.get("nombre") or "").strip()
     if not nombre:
@@ -1529,6 +1608,7 @@ def plantillas_crear():
 # Agregar item a un día de una plantilla
 # =========================
 @main_bp.route("/plantillas/<int:plantilla_id>/item/add", methods=["POST"])
+@admin_required
 def plantilla_item_add(plantilla_id: int):
     plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
 
@@ -1577,11 +1657,11 @@ def plantilla_item_add(plantilla_id: int):
     return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
 
 
-
 # =========================
 # Borrar item
 # =========================
 @main_bp.route("/plantillas/item/<int:item_id>/delete", methods=["POST"])
+@admin_required
 def plantilla_item_delete(item_id: int):
     it = PlantillaItem.query.get_or_404(item_id)
     plantilla_id = it.plantilla_id
@@ -1597,6 +1677,7 @@ def plantilla_item_delete(item_id: int):
 # (Opcional) Renombrar plantilla
 # =========================
 @main_bp.route("/plantillas/<int:plantilla_id>/rename", methods=["POST"])
+@admin_required
 def plantilla_rename(plantilla_id: int):
     plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
     nombre = (request.form.get("nombre") or "").strip()
@@ -1619,6 +1700,7 @@ def plantilla_rename(plantilla_id: int):
 # Editor de día (Plantilla) — Lun..Sáb sin fecha
 # =========================
 @main_bp.route("/plantillas/<int:plantilla_id>/dia/<int:dia_index>")
+@admin_required
 def plantilla_dia(plantilla_id: int, dia_index: int):
     plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
 
@@ -1730,6 +1812,7 @@ def make_es_id(sop_id: str, fraccion_id: str, nivel_id: int) -> str:
 from sqlalchemy import and_
 
 @main_bp.route("/sop")
+@admin_required
 def sop_panel():
     area_id = (request.args.get("area_id") or "").strip()
     subarea_id = (request.args.get("subarea_id") or "").strip()
@@ -1821,6 +1904,7 @@ def sop_fraccion_detalle_id_from(sop_fraccion_id: str, nivel_limpieza_id: int) -
 # SOP: asiganar detalles
 # =========================
 @main_bp.route("/sop/<sop_id>/detalles", methods=["GET", "POST"])
+@admin_required
 def sop_detalles(sop_id):
     # nivel por query o form
     nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
@@ -2051,6 +2135,7 @@ def sop_detalles(sop_id):
 
 
 @main_bp.route("/sop/<sop_id>/fracciones")
+@admin_required
 def sop_fracciones_edit(sop_id):
     nivel = (request.args.get("nivel") or "media").strip().lower()
     if nivel not in ("basica", "media", "profundo"):
@@ -2104,6 +2189,7 @@ def sop_fracciones_edit(sop_id):
 # SOP: crear (seleccionar fracciones por nivel)
 # =========================
 @main_bp.route("/sop/crear/<subarea_id>", methods=["GET", "POST"])
+@admin_required
 def sop_crear(subarea_id):
     # nivel viene del panel o query
     nivel = canon_nivel(request.args.get("nivel")) or canon_nivel(request.form.get("nivel")) or "basica"
@@ -2239,4 +2325,81 @@ def sop_crear(subarea_id):
         fracciones=fracciones,
         selected_ids=selected_ids,   # ✅ coincide con tu template
         orden_map=orden_map,         # ✅ coincide con tu template
+    )
+
+
+@main_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+
+        user = User.query.filter_by(username=username).first()
+        if not user or not user.check_password(password):
+            flash("Credenciales inválidas.", "warning")
+            return render_template("login.html"), 401
+
+        login_user(user)
+
+        # admin al home, operativo a su ruta
+        if user.role == "admin":
+            return redirect(url_for("main.home"))
+        return redirect(url_for("main.mi_ruta"))
+
+    return render_template("login.html")
+
+
+@main_bp.route("/logout", methods=["POST"])
+@login_required
+def logout():
+    logout_user()
+    session.clear()
+    return redirect(url_for("main.login"))
+
+
+
+@main_bp.route("/mi_ruta")
+@login_required
+def mi_ruta():
+    # Si es admin, no debe entrar aquí
+    if getattr(current_user, "role", None) == "admin":
+        return redirect(url_for("main.home_admin_panel"))
+
+    # Operativo debe estar ligado a un Personal
+    if not getattr(current_user, "personal_id", None):
+        abort(403)
+
+    hoy = date.today()
+    hoy_str = hoy.strftime("%Y-%m-%d")
+
+    # Busca el día en BD
+    dia = LanzamientoDia.query.filter_by(fecha=hoy).first()
+
+    tareas = []
+    tiempo_total = 0.0
+
+    if dia:
+        tareas = (
+            LanzamientoTarea.query
+            .filter_by(dia_id=dia.dia_id, personal_id=current_user.personal_id)
+            .all()
+        )
+        # (Opcional) si tienes calcular_tiempo_tarea(t)
+        try:
+            tiempo_total = sum(float(calcular_tiempo_tarea(t)) for t in tareas)
+        except Exception:
+            tiempo_total = 0.0
+
+    # Link único a su reporte del día (HTML y PDF)
+    link_reporte = url_for("main.reporte_persona_dia", fecha=hoy_str, personal_id=current_user.personal_id)
+    link_pdf = url_for("main.reporte_persona_dia_pdf", fecha=hoy_str, personal_id=current_user.personal_id)
+
+    return render_template(
+        "mi_ruta.html",
+        hoy=hoy,
+        hoy_str=hoy_str,
+        tareas=tareas,
+        tiempo_total=round(tiempo_total, 2),
+        link_reporte=link_reporte,
+        link_pdf=link_pdf,
     )

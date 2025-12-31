@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LuxSOP · Mi ruta — {{ hoy_str }}</title>
+  <style>
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --red: #dc3545;
+      --red-d: #b02a37;
+      --card: #fff;
+    }
+    * { box-sizing: border-box; }
+
+    body{
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      max-width: 1200px;
+      margin-inline: auto;
+    }
+
+    header{
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .head-row{
+      display:flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      padding-bottom: .6rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .title h1{
+      margin:0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .title .sub{
+      margin-top: .2rem;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .btn-sm{
+      border: none;
+      border-radius: 8px;
+      padding: .42rem .7rem;
+      font-size: .85rem;
+      line-height: 1;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap: 8px;
+      height: 32px;
+      font-family: inherit;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-blue:hover{ filter: brightness(.95); }
+
+    .btn-ghost{
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--fg);
+    }
+    .btn-ghost:hover{ filter: brightness(.98); }
+
+    .btn-red{
+      background: var(--red);
+      color: #fff;
+      border: 1px solid var(--red-d);
+    }
+    .btn-red:hover{ background: var(--red-d); }
+
+    .card{
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      padding: 1.5rem 1.6rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+
+    .muted{ color: var(--muted); font-size: .9rem; }
+
+    table{
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+    th, td{
+      padding: .65rem .75rem;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+      font-size: .92rem;
+      vertical-align: top;
+    }
+    th{ background: #fafafa; font-weight: 600; }
+    tr:last-child td{ border-bottom: none; }
+
+    footer{
+      margin-top: 26px;
+      font-size: .75rem;
+      color: #777;
+      text-align: center;
+    }
+
+    .inline-form{ display:inline; margin:0; padding:0; }
+
+    @media (max-width: 640px){
+      body{ padding: 1.2rem; }
+      .head-row{ flex-direction: column; align-items:flex-start; }
+      .card{ padding: 1.2rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="head-row">
+      <div class="title">
+        <h1>Mi ruta · {{ hoy_str }}</h1>
+        <div class="sub">Tiempo estimado total: <strong>{{ tiempo_total }}</strong> min</div>
+      </div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <!-- (Opcional) Estás aquí, pero si lo quieres visible: -->
+       
+        <a class="btn-sm btn-blue" href="{{ link_reporte }}">Ruta</a>
+
+        <!-- Logout por POST -->
+        <form class="inline-form" method="POST" action="{{ url_for('main.logout') }}">
+          <button class="btn-sm btn-red" type="submit">Salir</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <section class="card">
+    {% if not tareas or (tareas|length)==0 %}
+      <p class="muted" style="margin:0;">No tienes tareas asignadas para hoy.</p>
+    {% else %}
+      <table>
+        <thead>
+          <tr>
+            <th>Área</th>
+            <th>Subárea</th>
+            <th>Nivel</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tareas %}
+            <tr>
+              <td>{{ t.area.area_nombre if t.area else t.area_id }}</td>
+              <td>{{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}</td>
+              <td>{{ t.nivel_limpieza_asignado }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <footer>LuxSOP ERP · Operación diaria</footer>
+</body>
+</html>
