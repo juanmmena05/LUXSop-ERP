@@ -1837,28 +1837,70 @@ def sop_detalles(sop_id):
     sop = SOP.query.filter_by(sop_id=sop_id).first_or_404()
     subarea = sop.subarea
 
-    # ✅ lista de fracciones del SOP (sidebar)
-    sop_fracciones = (
+    # ✅ Todas las fracciones del SOP (global)
+    sop_fracciones_all = (
         SopFraccion.query
         .filter_by(sop_id=sop_id)
         .order_by(SopFraccion.orden.asc())
         .all()
     )
 
-    if not sop_fracciones:
+    if not sop_fracciones_all:
         flash("Este SOP no tiene fracciones todavía.", "warning")
-        return redirect(url_for("main.sop_panel", area_id=subarea.area_id, subarea_id=subarea.subarea_id))
+        return redirect(url_for(
+            "main.sop_panel",
+            area_id=subarea.area_id,
+            subarea_id=subarea.subarea_id,
+            nivel=nivel
+        ))
 
-    # ✅ fracción seleccionada (o la primera)
+    # ✅ Fracciones que YA tienen detalle para este nivel
+    sop_fracciones_nivel = (
+        SopFraccion.query
+        .join(SopFraccionDetalle, SopFraccionDetalle.sop_fraccion_id == SopFraccion.sop_fraccion_id)
+        .filter(
+            SopFraccion.sop_id == sop_id,
+            SopFraccionDetalle.nivel_limpieza_id == nivel_id
+        )
+        .order_by(SopFraccion.orden.asc())
+        .all()
+    )
+
+    # ✅ Si el nivel aún NO está configurado: render vacío (sin redirigir)
+    if not sop_fracciones_nivel:
+        recetas = Receta.query.order_by(Receta.nombre.asc()).all()
+        consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
+        kits = []  # no aplica aún
+        return render_template(
+            "sop_detalles.html",
+            sop=sop,
+            subarea=subarea,
+            nivel=nivel,
+            nivel_id=nivel_id,
+            nivel_obj=nivel_obj,
+            sop_fracciones=[],
+            sf_actual=None,
+            detalle=None,
+            kits=kits,
+            recetas=recetas,
+            consumos=consumos,
+            elemento_sets=[],
+            elemento_detalles=[],
+            metodologia_base=None,
+            hide_nav=True,
+        )
+
+    # ✅ ya hay fracciones para este nivel -> sidebar solo con esas
+    sop_fracciones = sop_fracciones_nivel
+
     sop_fraccion_id = (request.args.get("sop_fraccion_id") or request.form.get("sop_fraccion_id") or "").strip()
     sf_actual = next((x for x in sop_fracciones if x.sop_fraccion_id == sop_fraccion_id), sop_fracciones[0])
-    fr = sf_actual.fraccion
+    fr = sf_actual.fraccion  # puede ser None si no hay relación cargada, pero normalmente sí
 
-    # ✅ recetas/consumos
     recetas = Receta.query.order_by(Receta.nombre.asc()).all()
     consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
 
-    # ✅ detalle del nivel (si falta lo crea)
+    # detalle del nivel
     detalle = (
         SopFraccionDetalle.query
         .filter_by(sop_fraccion_id=sf_actual.sop_fraccion_id, nivel_limpieza_id=nivel_id)
@@ -1873,13 +1915,13 @@ def sop_detalles(sop_id):
         db.session.add(detalle)
         db.session.flush()
 
-    # ✅ metodología base y pasos
+    # Metodología (solo lectura)
     metodologia_base = None
     met = Metodologia.query.filter_by(fraccion_id=fr.fraccion_id, nivel_limpieza_id=nivel_id).first()
     if met and met.metodologia_base:
         metodologia_base = met.metodologia_base
 
-    # ✅ elemento_sets disponibles para ESTE (subarea + fracción + nivel)
+    # Elemento sets válidos para (subarea, fraccion, nivel)
     elemento_sets = (
         ElementoSet.query
         .filter_by(
@@ -1891,7 +1933,6 @@ def sop_detalles(sop_id):
         .all()
     )
 
-    # ✅ elemento_detalles si hay elemento_set seleccionado
     elemento_detalles = []
     if detalle.elemento_set_id:
         elemento_detalles = (
@@ -1901,7 +1942,6 @@ def sop_detalles(sop_id):
             .all()
         )
 
-    # ✅ kits posibles (por fracción, nivel NULL o igual al nivel)
     kits = (
         Kit.query
         .filter(
@@ -1913,65 +1953,83 @@ def sop_detalles(sop_id):
     )
 
     # =========================
-    # POST: guardar SOLO la fracción seleccionada
+    # ✅ POST: Guardar detalle
     # =========================
     if request.method == "POST":
         mode = (request.form.get("mode") or "directo").strip().lower()
-        tiempo = (request.form.get("tiempo_unitario_min") or "").strip()
 
         # tiempo
-        try:
-            detalle.tiempo_unitario_min = float(tiempo) if tiempo != "" else None
-        except Exception:
+        tiempo_raw = (request.form.get("tiempo_unitario_min") or "").strip()
+        if tiempo_raw == "":
             detalle.tiempo_unitario_min = None
+        else:
+            try:
+                detalle.tiempo_unitario_min = float(tiempo_raw)
+            except ValueError:
+                flash("Tiempo inválido.", "warning")
+                return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
 
         if mode == "elementos":
-            # usuario puede seleccionar uno o dejar vacío (si vacío creamos uno)
-            es_id_sel = (request.form.get("elemento_set_id") or "").strip() or None
+            # Regla BD: si elemento_set_id != NULL => kit_id y receta_id deben ser NULL
+            detalle.kit_id = None
+            detalle.receta_id = None
 
-            if es_id_sel:
-                detalle.elemento_set_id = es_id_sel
-            else:
-                # crea ElementoSet por default si no existe ninguno
-                es = ElementoSet.query.filter_by(
-                    subarea_id=subarea.subarea_id,
-                    fraccion_id=fr.fraccion_id,
-                    nivel_limpieza_id=nivel_id,
-                ).first()
+            # Recomendación: consumo directo también en NULL (para no mezclar directo vs elementos)
+            detalle.consumo_id = None
 
+            es_id = (request.form.get("elemento_set_id") or "").strip() or None
+
+            # Si no seleccionó, usar/crear default por convención humana
+            if not es_id:
+                es_id = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
+
+                es = ElementoSet.query.filter_by(elemento_set_id=es_id).first()
                 if not es:
-                    es_id_new = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
                     es = ElementoSet(
-                        elemento_set_id=es_id_new,
+                        elemento_set_id=es_id,
                         subarea_id=subarea.subarea_id,
                         fraccion_id=fr.fraccion_id,
                         nivel_limpieza_id=nivel_id,
                         nombre=f"{subarea.subarea_nombre} · {fr.fraccion_nombre} ({nivel})"
                     )
                     db.session.add(es)
-                    db.session.flush()
 
-                detalle.elemento_set_id = es.elemento_set_id
+            else:
+                # Validación: que el elemento_set_id pertenezca a esta subarea+fraccion+nivel
+                es_ok = ElementoSet.query.filter_by(
+                    elemento_set_id=es_id,
+                    subarea_id=subarea.subarea_id,
+                    fraccion_id=fr.fraccion_id,
+                    nivel_limpieza_id=nivel_id,
+                ).first()
+                if not es_ok:
+                    flash("Elemento Set inválido para esta subárea/fracción/nivel.", "warning")
+                    return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
 
-            # regla: si hay elemento_set → kit/receta NULL
-            detalle.kit_id = None
-            detalle.receta_id = None
-            detalle.consumo_id = None
+            detalle.elemento_set_id = es_id
 
         else:
-            kit_id = (request.form.get("kit_id") or "").strip() or None
-            receta_id = (request.form.get("receta_id") or "").strip() or None
-            consumo_id = (request.form.get("consumo_id") or "").strip() or None
-
+            # Modo directo: no usar elemento_set
             detalle.elemento_set_id = None
-            detalle.kit_id = kit_id
-            detalle.receta_id = receta_id
-            detalle.consumo_id = consumo_id
 
-        db.session.commit()
-        flash("Detalle guardado correctamente.", "success")
+            detalle.kit_id = (request.form.get("kit_id") or "").strip() or None
+            detalle.receta_id = (request.form.get("receta_id") or "").strip() or None
+            detalle.consumo_id = (request.form.get("consumo_id") or "").strip() or None
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            # Si quieres ver el error real en consola:
+            print("💥 ERROR COMMIT sop_detalles:", repr(e))
+            flash("Error guardando detalle (revisa consola).", "error")
+            return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+
+        flash("✅ Detalle guardado.", "success")
+        # ✅ Importante: aquí verás POST 302 en logs (y luego GET 200)
         return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
 
+    # GET
     return render_template(
         "sop_detalles.html",
         sop=sop,
@@ -1992,39 +2050,54 @@ def sop_detalles(sop_id):
     )
 
 
-
 @main_bp.route("/sop/<sop_id>/fracciones")
 def sop_fracciones_edit(sop_id):
-    # nivel como query param: ?nivel=media
     nivel = (request.args.get("nivel") or "media").strip().lower()
+    if nivel not in ("basica", "media", "profundo"):
+        nivel = "media"
+
+    nivel_id = nivel_to_id(nivel) or 2
 
     sop = SOP.query.filter_by(sop_id=sop_id).first()
     if not sop:
         flash("SOP no encontrado.", "error")
         return redirect(url_for("main.sop_panel"))
 
-    # si ya tiene fracciones, manda a la primera (detalles)
+    # ✅ ¿Existe AL MENOS un detalle para este nivel?
+    has_level = (
+        db.session.query(SopFraccionDetalle.sop_fraccion_detalle_id)
+        .join(SopFraccion, SopFraccion.sop_fraccion_id == SopFraccionDetalle.sop_fraccion_id)
+        .filter(
+            SopFraccion.sop_id == sop_id,
+            SopFraccionDetalle.nivel_limpieza_id == nivel_id
+        )
+        .first()
+        is not None
+    )
+
+    if not has_level:
+        # ir a seleccionar fracciones para ese nivel
+        return redirect(url_for("main.sop_crear", subarea_id=sop.subarea_id, nivel=nivel))
+
+    # si sí hay nivel, manda a la primera fracción de ese nivel
     first_sf = (
         SopFraccion.query
-        .filter_by(sop_id=sop_id)
+        .join(SopFraccionDetalle, SopFraccionDetalle.sop_fraccion_id == SopFraccion.sop_fraccion_id)
+        .filter(
+            SopFraccion.sop_id == sop_id,
+            SopFraccionDetalle.nivel_limpieza_id == nivel_id
+        )
         .order_by(SopFraccion.orden.asc())
         .first()
     )
 
-    if first_sf:
-        return redirect(url_for(
-            "main.sop_detalles",
-            sop_id=sop_id,
-            nivel=nivel,
-            sop_fraccion_id=first_sf.sop_fraccion_id
-        ))
-
-    # si aún no hay fracciones, regresa al panel con subárea seleccionada
     return redirect(url_for(
-        "main.sop_panel",
-        area_id=sop.subarea.area_id,
-        subarea_id=sop.subarea_id
+        "main.sop_detalles",
+        sop_id=sop_id,
+        nivel=nivel,
+        sop_fraccion_id=first_sf.sop_fraccion_id
     ))
+
 
 
 # =========================
@@ -2032,17 +2105,20 @@ def sop_fracciones_edit(sop_id):
 # =========================
 @main_bp.route("/sop/crear/<subarea_id>", methods=["GET", "POST"])
 def sop_crear(subarea_id):
-    # nivel viene del panel
+    # nivel viene del panel o query
     nivel = canon_nivel(request.args.get("nivel")) or canon_nivel(request.form.get("nivel")) or "basica"
     nivel_id = nivel_to_id(nivel) or 1
 
-    subarea = SubArea.query.options(joinedload(SubArea.area)).filter_by(subarea_id=subarea_id).first_or_404()
-    sop_id = make_sop_id(subarea_id)
+    subarea = (
+        SubArea.query.options(joinedload(SubArea.area))
+        .filter_by(subarea_id=subarea_id)
+        .first_or_404()
+    )
 
-    # SOP existente (si ya está creado)
+    sop_id = make_sop_id(subarea_id)
     sop = SOP.query.filter_by(subarea_id=subarea_id).first()
 
-    # ✅ Recordatorio: Solo fracciones con Metodologia para este nivel
+    # ✅ Fracciones disponibles SOLO si tienen metodología para ese nivel
     fracciones = (
         Fraccion.query
         .join(Metodologia, Metodologia.fraccion_id == Fraccion.fraccion_id)
@@ -2050,36 +2126,73 @@ def sop_crear(subarea_id):
         .order_by(Fraccion.fraccion_id.asc())
         .all()
     )
-    candidate_ids = {f.fraccion_id for f in fracciones}
 
-    # ✅ Precarga: fracciones ya existentes en el SOP (para marcarlas y traer su orden)
+    # ====== SELECTED + ORDEN MAP para este nivel ======
     selected_ids = set()
     orden_map = {}
+
     if sop:
-        existing = (
+        sfs_nivel = (
             SopFraccion.query
-            .filter_by(sop_id=sop.sop_id)
+            .join(SopFraccionDetalle, SopFraccionDetalle.sop_fraccion_id == SopFraccion.sop_fraccion_id)
+            .filter(
+                SopFraccion.sop_id == sop.sop_id,
+                SopFraccionDetalle.nivel_limpieza_id == nivel_id
+            )
             .all()
         )
-        for sf in existing:
-            selected_ids.add(sf.fraccion_id)
-            orden_map[sf.fraccion_id] = sf.orden
+        selected_ids = {sf.fraccion_id for sf in sfs_nivel}
+        orden_map = {sf.fraccion_id: (sf.orden or 1000) for sf in sfs_nivel}
 
+    # =========================
+    # POST: guardar cambios del nivel
+    # =========================
     if request.method == "POST":
         selected = request.form.getlist("fraccion_id")
+        selected_set = set(selected)
+
         if not selected:
             flash("Selecciona al menos 1 fracción.", "warning")
             return redirect(url_for("main.sop_crear", subarea_id=subarea_id, nivel=nivel))
 
-        selected_set = set(selected)
-
-        # 1) Crear SOP si no existe
+        # 1) crear SOP si no existe
         if not sop:
             sop = SOP(sop_id=sop_id, subarea_id=subarea_id)
             db.session.add(sop)
-            db.session.flush()  # ya tenemos sop.sop_id
+            db.session.flush()
 
-        # 2) Upsert SopFraccion + asegurar SopFraccionDetalle (para ESTE nivel)
+        # 2) calcular qué se removió (solo para este nivel)
+        prev_selected = selected_ids.copy() if selected_ids else set()
+        to_remove = prev_selected - selected_set
+
+        if to_remove:
+            sfs_to_remove = (
+                SopFraccion.query
+                .filter(
+                    SopFraccion.sop_id == sop.sop_id,
+                    SopFraccion.fraccion_id.in_(list(to_remove))
+                )
+                .all()
+            )
+
+            for sf in sfs_to_remove:
+                # borrar detalle de ESTE nivel
+                SopFraccionDetalle.query.filter_by(
+                    sop_fraccion_id=sf.sop_fraccion_id,
+                    nivel_limpieza_id=nivel_id
+                ).delete()
+
+                # si ya no quedan detalles en ningún nivel → borrar SopFraccion
+                still_has_any = (
+                    db.session.query(SopFraccionDetalle.sop_fraccion_detalle_id)
+                    .filter(SopFraccionDetalle.sop_fraccion_id == sf.sop_fraccion_id)
+                    .first()
+                    is not None
+                )
+                if not still_has_any:
+                    db.session.delete(sf)
+
+        # 3) upsert seleccionadas: actualizar orden + asegurar detalle del nivel
         for fr_id in selected:
             orden_raw = (request.form.get(f"orden_{fr_id}") or "").strip()
             orden = int(orden_raw) if orden_raw.isdigit() else 1000
@@ -2095,7 +2208,7 @@ def sop_crear(subarea_id):
                 db.session.add(sf)
                 db.session.flush()
             else:
-                sf.orden = orden
+                sf.orden = orden  # ✅ importantísimo: actualiza orden
 
             sd = SopFraccionDetalle.query.filter_by(
                 sop_fraccion_id=sf.sop_fraccion_id,
@@ -2107,32 +2220,15 @@ def sop_crear(subarea_id):
                     sop_fraccion_detalle_id=make_sd_id(sop.sop_id, fr_id, nivel_id),
                     sop_fraccion_id=sf.sop_fraccion_id,
                     nivel_limpieza_id=nivel_id,
-                    tiempo_unitario_min=None,  # el tiempo se captura en /detalles
+                    tiempo_unitario_min=None,
                 )
                 db.session.add(sd)
 
-        # 3) ✅ BORRAR fracciones desmarcadas (solo dentro del set permitido por nivel)
-        # IMPORTANTÍSIMO: NO usar bulk delete porque rompe cascadas/orphans.
-        to_remove_ids = (candidate_ids - selected_set)
-
-        if to_remove_ids:
-            sfs_to_remove = (
-                SopFraccion.query
-                .filter(
-                    SopFraccion.sop_id == sop.sop_id,
-                    SopFraccion.fraccion_id.in_(list(to_remove_ids))
-                )
-                .all()
-            )
-            for sf in sfs_to_remove:
-                db.session.delete(sf)  # ✅ cascada borra detalles
-
         db.session.commit()
         flash(f"✅ Fracciones guardadas para nivel {nivel}.", "success")
-
-        # siguiente paso: editor de fracciones/detalles
         return redirect(url_for("main.sop_fracciones_edit", sop_id=sop.sop_id, nivel=nivel))
 
+    # GET
     return render_template(
         "sop_crear.html",
         subarea=subarea,
@@ -2141,6 +2237,6 @@ def sop_crear(subarea_id):
         nivel=nivel,
         nivel_id=nivel_id,
         fracciones=fracciones,
-        selected_ids=selected_ids,   # ✅ NUEVO
-        orden_map=orden_map,         # ✅ NUEVO
+        selected_ids=selected_ids,   # ✅ coincide con tu template
+        orden_map=orden_map,         # ✅ coincide con tu template
     )

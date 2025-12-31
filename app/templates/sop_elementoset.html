@@ -177,13 +177,11 @@
             </td>
 
             <td>
-              <div>
+                
+            <div>
                 <strong>{{ el.elemento_id }}</strong> —
-                {{ el.nombre if el.nombre else (el.descripcion if el.descripcion else '') }}
-              </div>
-              {% if el.descripcion and (not el.nombre) %}
-                <div class="muted">{{ el.descripcion }}</div>
-              {% endif %}
+                {{ el.descripcion if el.descripcion else '' }}
+            </div>
             </td>
 
             <td>
