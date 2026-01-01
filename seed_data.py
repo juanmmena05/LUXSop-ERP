@@ -383,7 +383,7 @@ with app.app_context():
     
     elementos_set = [
         ElementoSet( elemento_set_id="ES-SP-001-P",  subarea_id="AD-DI-BA-001", fraccion_id="FR-SP-001", nivel_limpieza_id=3, nombre="Elementos Superfcies"),
-        ElementoSet( elemento_set_id="ES-VI-001-P",  subarea_id="AD-DI-BA-001", fraccion_id="FR-VI-001", nivel_limpieza_id=3, nombre="Vidrios Superiores")
+        ElementoSet( elemento_set_id="ES-VI-001-P",  subarea_id="AD-DI-BA-001", fraccion_id="FR-VI-001", nivel_limpieza_id=3, nombre="Elementos Vidrios")
     ]
     db.session.add_all(elementos_set)
 
