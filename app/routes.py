@@ -3,7 +3,6 @@ import unicodedata
 from typing import Optional
 from datetime import datetime, date, timedelta
 
-import pdfkit
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort, session
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, or_ 
@@ -11,8 +10,10 @@ from sqlalchemy import and_, or_
 from flask_login import login_user, logout_user, login_required, current_user
 
 from .models import User
-
 from functools import wraps
+
+import os
+import pdfkit
 
 from .extensions import db
 from .models import (
@@ -36,7 +37,6 @@ from .models import (
 )
 
 
-
 def admin_required(fn):
     @wraps(fn)
     @login_required
@@ -49,8 +49,13 @@ def admin_required(fn):
 # =========================
 # Helpers de PDF
 # =========================
-WKHTMLTOPDF_CMD = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+WKHTMLTOPDF_CMD = os.getenv(
+    "WKHTMLTOPDF_CMD",
+    r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"  # fallback Windows
+)
+
 PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_CMD)
+
 
 PDF_OPTIONS = {
     "page-size": "A5",
