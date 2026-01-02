@@ -135,8 +135,16 @@
       margin-bottom: 12px;
     }
     .list li:last-child { box-shadow: none; }
+
+    /* ===== Tablas ===== */
+    .table-scroll {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
     table.elementos-tabla {
       width: 100%;
+      min-width: 640px; /* fuerza scroll si no cabe (ajusta si quieres) */
       border-collapse: collapse;
       margin-top: 10px;
       font-size: 0.85rem;
@@ -151,6 +159,7 @@
       background-color: #f3f3f3;
       font-weight: 600;
     }
+
     .observacion-critica {
       background-color: #fff3cd;
       border-left: 4px solid #f0ad4e;
@@ -167,16 +176,16 @@
       padding: 10px 0;
     }
     hr.separador { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+
     .herramientas-grid {
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
       justify-content: center;
       align-items: center;
-      width: max-content; /* 👈 clave */
-      margin: 0 auto;      /* 👈 centra el bloque en la celda */
+      width: max-content;
+      margin: 0 auto;
     }
-
     .herramienta-box {
       background: #eef2ff;
       padding: 1px 3px;
@@ -185,6 +194,52 @@
       text-align: center;
     }
 
+    /* ===== Responsive móvil ===== */
+    @media (max-width: 600px) {
+      .wrap {
+        max-width: 100%;
+        padding: 4px;
+      }
+
+      .card {
+        padding: 8px;
+        border-radius: 10px;
+      }
+
+      .row {
+        gap: 8px;
+      }
+
+      /* Header del acordeón: que se acomode en varias líneas */
+      .acc-head {
+        flex-wrap: wrap;
+      }
+      .acc-head h3 {
+        width: 100%;
+      }
+      .acc-meta {
+        width: 100%;
+      }
+
+      /* Botones: 1 por fila */
+      .btn {
+        width: 100%;
+        text-align: center;
+      }
+
+      /* Observación crítica: sin sangría en móvil */
+      .observacion-critica {
+        margin: 8px 0 12px 0;
+        max-width: 100%;
+      }
+
+      /* Chips/herramientas: que no fuercen ancho */
+      .herramientas-grid {
+        width: 100%;
+        justify-content: flex-start;
+        margin: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -248,34 +303,38 @@
 
                       {% if f.tabla and f.tabla.rows and f.tabla.rows|length > 0 %}
                         <div class="section-line"></div>
-                        <table class="elementos-tabla">
-                          <thead>
-                            <tr>
-                              {% for h in f.tabla.headers %}
-                                <th>{{ h }}</th>
-                              {% endfor %}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {% for r in f.tabla.rows %}
+
+                        <!-- ✅ wrapper para scroll horizontal en móvil -->
+                        <div class="table-scroll">
+                          <table class="elementos-tabla">
+                            <thead>
                               <tr>
-                                {% for c in r %}
-                                  <td>
-                                    {% if loop.last and c is iterable and c is not string %}
-                                      <div class="herramientas-grid">
-                                        {% for herramienta in c %}
-                                          <div class="herramienta-box">{{ herramienta }}</div>
-                                        {% endfor %}
-                                      </div>
-                                    {% else %}
-                                      {{ c }}
-                                    {% endif %}
-                                  </td>
+                                {% for h in f.tabla.headers %}
+                                  <th>{{ h }}</th>
                                 {% endfor %}
                               </tr>
-                            {% endfor %}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {% for r in f.tabla.rows %}
+                                <tr>
+                                  {% for c in r %}
+                                    <td>
+                                      {% if loop.last and c is iterable and c is not string %}
+                                        <div class="herramientas-grid">
+                                          {% for herramienta in c %}
+                                            <div class="herramienta-box">{{ herramienta }}</div>
+                                          {% endfor %}
+                                        </div>
+                                      {% else %}
+                                        {{ c }}
+                                      {% endif %}
+                                    </td>
+                                  {% endfor %}
+                                </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
                       {% else %}
                         <div class="muted no-aplica"><em>No aplica.</em></div>
                       {% endif %}
@@ -298,8 +357,10 @@
       <p class="muted">No hay SOP asignado para este día.</p>
     {% endif %}
   </div>
+
   <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
 </div>
+
 <script>
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-acc-toggle]');
