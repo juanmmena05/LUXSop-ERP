@@ -14,6 +14,7 @@ from functools import wraps
 
 import os
 import pdfkit
+import shutil
 
 from .extensions import db
 from .models import (
@@ -49,12 +50,19 @@ def admin_required(fn):
 # =========================
 # Helpers de PDF
 # =========================
-WKHTMLTOPDF_CMD = os.getenv(
-    "WKHTMLTOPDF_CMD",
-    r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"  # fallback Windows
-)
+try:
+    import pdfkit
+except Exception:
+    pdfkit = None
 
-PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_CMD)
+WKHTMLTOPDF_CMD = os.getenv("WKHTMLTOPDF_CMD") or shutil.which("wkhtmltopdf")
+
+PDFKIT_CONFIG = None
+if pdfkit and WKHTMLTOPDF_CMD:
+    try:
+        PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_CMD)
+    except Exception:
+        PDFKIT_CONFIG = None
 
 
 PDF_OPTIONS = {
@@ -904,7 +912,12 @@ def reporte_persona_dia(fecha, personal_id):
 @main_bp.route("/reporte/<fecha>/<personal_id>/pdf")
 @login_required
 def reporte_persona_dia_pdf(fecha, personal_id):
+    # ✅ Opción 1: si PDF no está disponible (wkhtmltopdf), no romper app
+    if (pdfkit is None) or (PDFKIT_CONFIG is None):
+        flash("PDF no disponible en este servidor (wkhtmltopdf no está instalado).", "warning")
+        return redirect(url_for("main.mi_ruta"))
 
+    # Seguridad: operativo solo puede ver SU PDF y SOLO el de hoy
     if current_user.role != "admin":
         if current_user.personal_id != personal_id:
             abort(403)
@@ -1005,7 +1018,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
         fracciones_filtradas = []
 
-        for sf in sop_full.sop_fracciones or []:
+        for sf in (sop_full.sop_fracciones or []):
             sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
             if not sd:
                 continue
@@ -1028,8 +1041,6 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
-            tabla = None
-
             if elemento_set:
                 headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
                 rows = []
@@ -1039,7 +1050,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
                     c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ CAMBIO
+                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ OK
 
                     rows.append([
                         na(getattr(elemento, "descripcion", None)),
@@ -1051,12 +1062,11 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                     ])
 
                 tabla = {"headers": headers, "rows": rows}
-
             else:
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas_list(kit)  # ✅ CAMBIO
+                h_str = fmt_herramientas_list(kit)  # ✅ OK
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
             fracciones_filtradas.append({
@@ -1071,28 +1081,40 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 "metodologia": metodologia_dict,
             })
 
+        # ✅ guardar orden_subarea desde el objeto (sin query extra)
         detalles.append({
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
             "sop_codigo": sop.sop_id,
             "observacion_critica": sop.observacion_critica_sop,
+            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
             "fracciones": fracciones_filtradas
         })
 
-    detalles.sort(
-        key=lambda d: (
-            getattr(SubArea.query.filter_by(subarea_nombre=d["subarea"]).first(), "orden_subarea", 9999)
-        )
-    )
+    # si no se pudo construir nada (por faltas de SOP/metodologías/etc.)
+    if not detalles:
+        return f"No fue posible generar el PDF para {personal_id} en {fecha} (sin detalles).", 404
+
+    # ✅ sort sin query
+    detalles.sort(key=lambda d: d.get("orden_subarea", 9999))
 
     html = render_template("sop_macro_pdf.html", persona=persona, fecha=fecha_obj, detalles=detalles)
-    pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=PDF_OPTIONS)
 
-    return make_response((pdf_bytes, 200, {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
-    }))
+    # PDF_OPTIONS debe existir; si no, usa dict vacío
+    options = PDF_OPTIONS if "PDF_OPTIONS" in globals() and isinstance(PDF_OPTIONS, dict) else {}
+
+    try:
+        pdf_bytes = pdfkit.from_string(html, False, configuration=PDFKIT_CONFIG, options=options)
+    except Exception as e:
+        flash(f"No se pudo generar el PDF: {e}", "warning")
+        return redirect(url_for("main.mi_ruta"))
+
+    resp = make_response(pdf_bytes)
+    resp.headers["Content-Type"] = "application/pdf"
+    resp.headers["Content-Disposition"] = f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
+    return resp
+
 
 
 # =========================
@@ -2396,8 +2418,19 @@ def mi_ruta():
             tiempo_total = 0.0
 
     # Link único a su reporte del día (HTML y PDF)
-    link_reporte = url_for("main.reporte_persona_dia", fecha=hoy_str, personal_id=current_user.personal_id)
-    link_pdf = url_for("main.reporte_persona_dia_pdf", fecha=hoy_str, personal_id=current_user.personal_id)
+    link_reporte = url_for(
+        "main.reporte_persona_dia",
+        fecha=hoy_str,
+        personal_id=current_user.personal_id
+    )
+    link_pdf = url_for(
+        "main.reporte_persona_dia_pdf",
+        fecha=hoy_str,
+        personal_id=current_user.personal_id
+    )
+
+    # ✅ NUEVO: bandera para UI (PDF disponible solo si wkhtmltopdf está OK)
+    pdf_enabled = (pdfkit is not None) and (PDFKIT_CONFIG is not None)
 
     return render_template(
         "mi_ruta.html",
@@ -2407,4 +2440,5 @@ def mi_ruta():
         tiempo_total=round(tiempo_total, 2),
         link_reporte=link_reporte,
         link_pdf=link_pdf,
+        pdf_enabled=pdf_enabled,   # ✅ nuevo
     )

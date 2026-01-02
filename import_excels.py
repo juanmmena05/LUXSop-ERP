@@ -1,6 +1,6 @@
 import os
 import argparse
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import pandas as pd
 import numpy as np
@@ -19,24 +19,31 @@ from app.models import (
     User,  # ✅ NUEVO
 )
 
-# ========= 1) Leer SOLO columnas bajo "BD" =========
-# Soporta tu formato: fila 1 (index 0) con celdas combinadas "BD"
+# ======================================================
+# 1) Leer SOLO columnas bajo "BD"
+# Soporta: fila 1 (index 0) con celdas combinadas "BD"
+#          fila 2 (index 1) headers
+#          data desde fila 3 (index 2)
+# ======================================================
 def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
     raw = pd.read_excel(xlsx_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
+    # fila 0: grupos (BD, UI, etc). Al estar combinadas, ffill funciona.
     groups = raw.iloc[0].replace({np.nan: None}).ffill().astype(str).str.strip().str.upper()
     bd_mask = groups.eq("BD").to_numpy()
 
     if bd_mask.sum() == 0:
         return pd.DataFrame()
 
+    # fila 1: nombres de columnas
     cols = raw.iloc[1, bd_mask].astype(str).str.strip().tolist()
 
+    # datos desde fila 2
     df = raw.iloc[2:, bd_mask].copy()
     df.columns = cols
     df = df.replace({np.nan: None})
 
-    # quitar filas vacías
+    # quitar filas completamente vacías
     df = df.loc[df.apply(lambda r: any(v is not None and str(v).strip() != "" for v in r), axis=1)]
 
     # strip strings
@@ -46,9 +53,10 @@ def read_bd_df(xlsx_path: str, sheet_name: str) -> pd.DataFrame:
     return df
 
 
-# ========= Casters robustos =========
+# ======================================================
+# Casters robustos
+# ======================================================
 def to_int(v):
-    """Convierte Excel/str/float a int, soporta '1.0', 1.0, np.nan, ''."""
     if v is None:
         return None
     if isinstance(v, float) and np.isnan(v):
@@ -63,17 +71,13 @@ def to_int(v):
             return int(s)
         try:
             f = float(s)
-            if float(f).is_integer():
-                return int(f)
-            return None
+            return int(f) if float(f).is_integer() else None
         except Exception:
             return None
     if isinstance(v, (int, np.integer)):
         return int(v)
     if isinstance(v, float):
-        if float(v).is_integer():
-            return int(v)
-        return None
+        return int(v) if float(v).is_integer() else None
     try:
         return int(v)
     except Exception:
@@ -100,7 +104,24 @@ def to_float(v):
         return None
 
 
-# ========= 2) Config global =========
+# ======================================================
+# Helpers de User
+# ======================================================
+def _norm_str(x: Any) -> str:
+    return ("" if x is None else str(x)).strip()
+
+def _canon_role(x: Any) -> str:
+    r = _norm_str(x).lower()
+    if r in ("admin",):
+        return "admin"
+    if r in ("operativo", "operador", "op", "oper"):
+        return "operativo"
+    return r
+
+
+# ======================================================
+# 2) Config global
+# ======================================================
 CFG: Dict[str, Dict[str, Any]] = {
     "NivelLimpieza": {
         "file": "NivelLimpieza.xlsx", "sheet": "NivelLimpieza", "model": NivelLimpieza,
@@ -115,11 +136,14 @@ CFG: Dict[str, Dict[str, Any]] = {
         "casters": {},
     },
 
-    # ✅ NUEVO: USERS (Excel trae password en texto plano; se hashea con set_password)
-    # Archivo: User.xlsx   Hoja: User   (con encabezado BD como los demás)
+    # ✅ NUEVO: User
+    # Archivo: User.xlsx
+    # Hoja: User
+    # Columnas BD: username | password | role | personal_id
     "User": {
         "file": "User.xlsx", "sheet": "User", "model": User,
-        "pk": ["username"],  # OJO: el PK real es user_id, pero aquí usamos username para upsert especial
+        # pk "virtual" para el import (NO es el PK real), lo usamos para upsert por username
+        "pk": ["username"],
         "fields": ["username", "password", "role", "personal_id"],
         "casters": {},
     },
@@ -172,15 +196,12 @@ CFG: Dict[str, Dict[str, Any]] = {
         "fields": ["herramienta_id", "nombre", "descripcion", "estatus"],
         "casters": {},
     },
-
-    # ✅ Kit debe incluir fraccion_id (NOT NULL). nivel_limpieza_id puede ser NULL (kit general).
     "Kit": {
         "file": "Herramienta.xlsx", "sheet": "Kit", "model": Kit,
         "pk": ["kit_id"],
         "fields": ["kit_id", "fraccion_id", "nivel_limpieza_id", "nombre"],
         "casters": {"nivel_limpieza_id": to_int},
     },
-
     "KitDetalle": {
         "file": "Herramienta.xlsx", "sheet": "KitDetalle", "model": KitDetalle,
         "pk": ["kit_id", "herramienta_id"],
@@ -247,7 +268,7 @@ CFG: Dict[str, Dict[str, Any]] = {
 IMPORT_ORDER = [
     "NivelLimpieza",
     "Personal",
-    "User",  # ✅ IMPORTANTE: Users después de Personal
+    "User",  # ✅ Users después de Personal (porque valida personal_id)
 
     "Area",
     "SubArea",
@@ -276,6 +297,7 @@ def load_df(import_dir: str, table_name: str) -> pd.DataFrame:
     path = os.path.join(import_dir, cfg["file"])
     if not os.path.exists(path):
         return pd.DataFrame()
+    # si la hoja no existe, pandas lanza; lo dejamos “visible” para que te diga el nombre exacto
     return read_bd_df(path, cfg["sheet"])
 
 
@@ -291,20 +313,6 @@ def get_pk_value(pk_cols: List[str], row: Dict[str, Any]):
     if len(pk_cols) == 1:
         return row.get(pk_cols[0])
     return tuple(row.get(c) for c in pk_cols)
-
-
-def _norm_str(x: Any) -> str:
-    return ("" if x is None else str(x)).strip()
-
-
-def _canon_role(x: str) -> str:
-    r = _norm_str(x).lower()
-    # aceptamos variantes por si acaso
-    if r in ("admin",):
-        return "admin"
-    if r in ("operativo", "operador", "op", "oper"):
-        return "operativo"
-    return r
 
 
 def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
@@ -324,9 +332,9 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
     df = df[[c for c in fields if c in df.columns]].copy()
     df = df.replace({np.nan: None})
 
-    # ✅ CASO ESPECIAL: USER
-    # - PK real es user_id, pero el Excel trae username
-    # - password se hashea con set_password
+    # ======================================================
+    # CASO ESPECIAL: USER (upsert por username, hash password)
+    # ======================================================
     if table_name == "User":
         for row in df.to_dict(orient="records"):
             username = _norm_str(row.get("username"))
@@ -351,7 +359,6 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
                 if not p:
                     raise ValueError(f"User '{username}': no existe Personal '{personal_id}'")
 
-                # unique=True personal_id en User
                 existing_link = User.query.filter(User.personal_id == personal_id, User.username != username).first()
                 if existing_link:
                     raise ValueError(
@@ -363,7 +370,6 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
 
             is_new = u is None
             if is_new:
-                # password_hash es NOT NULL -> para nuevos, password obligatorio
                 if not password:
                     raise ValueError(f"User nuevo '{username}': password requerido (password_hash NOT NULL)")
                 u = User(username=username)
@@ -371,7 +377,7 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
             u.role = role
             u.personal_id = personal_id
 
-            # si viene password, actualizar
+            # si viene password, actualiza hash
             if password:
                 u.set_password(password)
 
@@ -383,7 +389,9 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
 
         return inserted, updated
 
-    # ====== resto de tablas (genérico por PK real) ======
+    # ======================================================
+    # RESTO: genérico por PK real
+    # ======================================================
     for row in df.to_dict(orient="records"):
         row = cast_row(row, casters)
 
@@ -391,7 +399,6 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
         if pk_val is None or (isinstance(pk_val, tuple) and any(v is None for v in pk_val)):
             continue
 
-        # evita autoflush durante el SELECT
         with db.session.no_autoflush:
             obj = db.session.get(Model, pk_val)
 
@@ -400,7 +407,6 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
             init_kwargs = {c: row.get(c) for c in pk_cols}
             obj = Model(**init_kwargs)
 
-        # set fields (except PK)
         for f in fields:
             if f in pk_cols:
                 continue
@@ -472,7 +478,7 @@ def main():
             try:
                 df = load_df(args.dir, t)
                 ins, upd = upsert_table(df, t)
-                db.session.commit()  # commit por tabla
+                db.session.commit()
                 print(f"{t}: +{ins} insert / ~{upd} update")
             except Exception as e:
                 db.session.rollback()

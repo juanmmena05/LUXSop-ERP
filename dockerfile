@@ -1,6 +1,12 @@
-FROM python:3.11-slim
+# Base estable (evita trixie)
+FROM python:3.11-slim-bullseye
 
-# Dependencias para wkhtmltopdf + fuentes (para que el PDF no falle)
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Dependencias para wkhtmltopdf (Bullseye sí lo trae)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wkhtmltopdf \
     fontconfig \
@@ -12,19 +18,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
   && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# ✅ Tu requirements está en app/requirements.txt
+COPY app/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# En Linux wkhtmltopdf normalmente vive aquí
-ENV WKHTMLTOPDF_CMD=/usr/bin/wkhtmltopdf
+# Copiar todo el proyecto
+COPY . /app
 
 EXPOSE 8000
 
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "wsgi:app"]
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["gunicorn","-b","0.0.0.0:8000","run:app"]
+
