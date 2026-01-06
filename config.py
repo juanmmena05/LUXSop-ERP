@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# ✅ Cargar variables de .env
+load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-cambia-esto")
@@ -12,7 +16,7 @@ class Config:
         SQLALCHEMY_DATABASE_URI = DATABASE_URL
     else:
         # 2) Fallback dev: SQLite (persistible si DB_PATH está)
-        DB_PATH = os.environ.get("DB_PATH")  # ej: /data/app.db
+        DB_PATH = os.environ.get("DB_PATH")
         if DB_PATH:
             SQLALCHEMY_DATABASE_URI = "sqlite:///" + DB_PATH
         else:

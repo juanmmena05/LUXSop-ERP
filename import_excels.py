@@ -427,39 +427,77 @@ def upsert_table(df: pd.DataFrame, table_name: str) -> Tuple[int, int]:
 
 
 def reset_db():
-    # Borrar en orden seguro (hijas -> padres)
+    # Importar TODOS los modelos
+    from app.models import (
+        # Lanzamiento y Plantillas
+        LanzamientoTarea, LanzamientoDia, LanzamientoSemana,
+        PlantillaSemanaAplicada, PlantillaItem, PlantillaSemanal,
+        AsignacionPersonal,
+        # Resto de modelos
+        SopFraccionDetalle, SopFraccion,
+        ElementoDetalle, ElementoSet, Elemento,
+        RecetaDetalle, Receta, Quimico,
+        KitDetalle, Kit, Herramienta,
+        MetodologiaBasePaso, Metodologia, MetodologiaBase,
+        Consumo, Fraccion,
+        SOP, SubArea, Area,
+        User, Personal, NivelLimpieza
+    )
+    
+    # Borrar en orden seguro (hijas → padres, respetando foreign keys)
+    
+    # 1. Tablas de lanzamiento (lo más dependiente)
+    db.session.query(LanzamientoTarea).delete(synchronize_session=False)
+    db.session.query(LanzamientoDia).delete(synchronize_session=False)
+    db.session.query(LanzamientoSemana).delete(synchronize_session=False)
+    
+    # 2. Plantillas
+    db.session.query(PlantillaSemanaAplicada).delete(synchronize_session=False)
+    db.session.query(PlantillaItem).delete(synchronize_session=False)
+    db.session.query(PlantillaSemanal).delete(synchronize_session=False)
+    
+    # 3. Asignaciones
+    db.session.query(AsignacionPersonal).delete(synchronize_session=False)
+    
+    # 4. SOP y sus detalles
     db.session.query(SopFraccionDetalle).delete(synchronize_session=False)
     db.session.query(SopFraccion).delete(synchronize_session=False)
 
+    # 5. Elementos
     db.session.query(ElementoDetalle).delete(synchronize_session=False)
     db.session.query(ElementoSet).delete(synchronize_session=False)
     db.session.query(Elemento).delete(synchronize_session=False)
 
+    # 6. Recetas y químicos
     db.session.query(RecetaDetalle).delete(synchronize_session=False)
     db.session.query(Receta).delete(synchronize_session=False)
     db.session.query(Quimico).delete(synchronize_session=False)
 
+    # 7. Kits y herramientas
     db.session.query(KitDetalle).delete(synchronize_session=False)
     db.session.query(Kit).delete(synchronize_session=False)
     db.session.query(Herramienta).delete(synchronize_session=False)
 
+    # 8. Metodologías
     db.session.query(MetodologiaBasePaso).delete(synchronize_session=False)
     db.session.query(Metodologia).delete(synchronize_session=False)
     db.session.query(MetodologiaBase).delete(synchronize_session=False)
 
+    # 9. Consumos y fracciones
     db.session.query(Consumo).delete(synchronize_session=False)
     db.session.query(Fraccion).delete(synchronize_session=False)
 
+    # 10. SOP, SubAreas, Areas
     db.session.query(SOP).delete(synchronize_session=False)
     db.session.query(SubArea).delete(synchronize_session=False)
     db.session.query(Area).delete(synchronize_session=False)
 
-    # ✅ Users antes de Personal
+    # 11. Users y Personal
     db.session.query(User).delete(synchronize_session=False)
     db.session.query(Personal).delete(synchronize_session=False)
 
+    # 12. Niveles de limpieza
     db.session.query(NivelLimpieza).delete(synchronize_session=False)
-
 
 def main():
     parser = argparse.ArgumentParser()
