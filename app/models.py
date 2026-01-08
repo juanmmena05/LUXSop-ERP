@@ -505,6 +505,7 @@ class LanzamientoTarea(db.Model):
     subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
 
     nivel_limpieza_asignado = db.Column(db.String, nullable=False)
+    orden = db.Column(db.Integer, default=0)
 
     dia = db.relationship("LanzamientoDia", back_populates="tareas")
     personal = db.relationship("Personal", lazy="joined")
@@ -538,6 +539,7 @@ class PlantillaItem(db.Model):
     area_id = db.Column(db.String, db.ForeignKey('area.area_id'), nullable=False)
     subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False)
     nivel_limpieza_asignado = db.Column(db.String, nullable=False)
+    orden = db.Column(db.Integer, default=0)
 
     plantilla = db.relationship("PlantillaSemanal", back_populates="items")
     personal = db.relationship("Personal", lazy="joined")

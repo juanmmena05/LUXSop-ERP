@@ -169,16 +169,19 @@ def existe_tarea(fecha_obj: date, personal_id, subarea_id) -> bool:
         subarea_id=subarea_id
     ).first() is not None
 
-def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel):
+
+def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel, orden=0):
     dia = upsert_dia(fecha_obj)
     t = LanzamientoTarea(
         dia_id=dia.dia_id,
         personal_id=personal_id,
         area_id=area_id,
         subarea_id=subarea_id,
-        nivel_limpieza_asignado=canon_nivel(nivel) or "basica"
+        nivel_limpieza_asignado=canon_nivel(nivel) or "basica",
+        orden=orden
     )
-    db.session.add(t)
+    db.session.add(t)   
+
 
 # ====== APLICADORES ======
 def aplicar_ruta_base_personal(lunes_destino: date, overwrite: bool):
@@ -209,6 +212,7 @@ def aplicar_desde_semana(origen_lunes: date, destino_lunes: date, overwrite: boo
                 crear_tarea(fecha_dest, t.personal_id, t.area_id, t.subarea_id, canon_nivel(t.nivel_limpieza_asignado) or "basica")
     db.session.commit()
 
+
 def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite: bool):
     if overwrite:
         borrar_asignaciones_semana(destino_lunes)
@@ -217,7 +221,7 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
     for it in plantilla.items:
         fecha_dest = destino_lunes + timedelta(days=it.dia_index)
         if not existe_tarea(fecha_dest, it.personal_id, it.subarea_id):
-            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica")
+            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica", it.orden or 0)
     db.session.commit()
 
 
@@ -637,6 +641,14 @@ def plan_dia_asignar(fecha):
             tareas_por_persona[key] = {"persona": persona, "subtareas": []}
         tareas_por_persona[key]["subtareas"].append(t)
 
+    # Ordenar subtareas por el campo 'orden', luego por área y subárea
+    for key in tareas_por_persona:
+        tareas_por_persona[key]["subtareas"].sort(key=lambda x: (
+            x.orden or 0,
+            x.area.orden_area if x.area else 0,
+            x.subarea.orden_subarea if x.subarea else 0
+        ))
+
     # ========== NUEVO: Calcular tiempo total por persona ==========
     tiempo_total_por_persona = {}
     for persona_id, grupo in tareas_por_persona.items():
@@ -911,13 +923,13 @@ def reporte_persona_dia(fecha, personal_id):
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas,
 
-             # ✅ claves de orden (SIN queries)
+            # ✅ claves de orden (SIN queries)
+            "orden": t.orden if t.orden is not None else 0,
             "orden_area": area.orden_area if area.orden_area is not None else 9999,
             "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999
         })
 
-    detalles.sort(key=lambda d: (d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
-
+    detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
     return render_template(
         "reporte_personal.html",
@@ -1101,25 +1113,29 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             })
 
         detalles.append({
+            "tarea_id": t.tarea_id,
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
+
+            # ✅ SOLO TIEMPO TOTAL EN MINUTOS (sin sop_id)
+            "tiempo_total_min": round(tiempo_total_min, 2),
+
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas,
 
-            # ✅ total por subárea
-            "tiempo_total_min": round(tiempo_total_min, 2),
-
-            # ✅ orden área -> subárea
+            # ✅ claves de orden (SIN queries)
+            "orden": t.orden if t.orden is not None else 0,
             "orden_area": area.orden_area if area.orden_area is not None else 9999,
-            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
+            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999
         })
 
+    
     if not detalles:
         return f"No fue posible generar el PDF para {personal_id} en {fecha} (sin detalles).", 404
 
     # ✅ sort correcto
-    detalles.sort(key=lambda d: (d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
+    detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
     html = render_template("sop_macro_pdf.html", persona=persona, fecha=fecha_obj, detalles=detalles)
 
@@ -1785,9 +1801,13 @@ def plantilla_dia(plantilla_id: int, dia_index: int):
             items_por_persona[pid] = {"persona": it.personal, "items": []}
         items_por_persona[pid]["items"].append(it)
 
-    # orden amable
+    # orden: primero por 'orden' (drag & drop), luego por área y subárea
     for pid in items_por_persona:
-        items_por_persona[pid]["items"].sort(key=lambda x: (x.area_id or "", x.subarea_id or ""))
+        items_por_persona[pid]["items"].sort(key=lambda x: (
+            x.orden or 0,
+            x.area.orden_area if x.area else 9999,
+            x.subarea.orden_subarea if x.subarea else 9999
+        ))
 
     return render_template(
         "plantilla_dia_form.html",
@@ -2464,3 +2484,45 @@ def mi_ruta():
         link_pdf=link_pdf,
         pdf_enabled=pdf_enabled,   # ✅ nuevo
     )
+
+
+# =========================
+# API: Reordenar tareas (drag & drop)
+# =========================
+@main_bp.route("/api/reordenar-tareas", methods=["POST"])
+@admin_required
+def reordenar_tareas():
+    data = request.get_json()
+    if not data or "orden" not in data:
+        return {"error": "Datos inválidos"}, 400
+    
+    for item in data["orden"]:
+        tarea_id = item.get("tarea_id")
+        nuevo_orden = item.get("orden")
+        tarea = LanzamientoTarea.query.get(tarea_id)
+        if tarea:
+            tarea.orden = nuevo_orden
+    
+    db.session.commit()
+    return {"success": True}, 200
+
+
+# =========================
+# API: Reordenar items de plantilla (drag & drop)
+# =========================
+@main_bp.route("/api/reordenar-plantilla-items", methods=["POST"])
+@admin_required
+def reordenar_plantilla_items():
+    data = request.get_json()
+    if not data or "orden" not in data:
+        return {"error": "Datos inválidos"}, 400
+    
+    for item in data["orden"]:
+        item_id = item.get("item_id")
+        nuevo_orden = item.get("orden")
+        plantilla_item = PlantillaItem.query.get(item_id)
+        if plantilla_item:
+            plantilla_item.orden = nuevo_orden
+    
+    db.session.commit()
+    return {"success": True}, 200
