@@ -144,7 +144,7 @@
     }
     table.elementos-tabla {
       width: 100%;
-      min-width: 640px; /* fuerza scroll si no cabe (ajusta si quieres) */
+      min-width: 640px;
       border-collapse: collapse;
       margin-top: 10px;
       font-size: 0.85rem;
@@ -210,7 +210,6 @@
         gap: 8px;
       }
 
-      /* Header del acordeón: que se acomode en varias líneas */
       .acc-head {
         flex-wrap: wrap;
       }
@@ -221,19 +220,16 @@
         width: 100%;
       }
 
-      /* Botones: 1 por fila */
       .btn {
         width: 100%;
         text-align: center;
       }
 
-      /* Observación crítica: sin sangría en móvil */
       .observacion-critica {
         margin: 8px 0 12px 0;
         max-width: 100%;
       }
 
-      /* Chips/herramientas: que no fuercen ancho */
       .herramientas-grid {
         width: 100%;
         justify-content: flex-start;
@@ -271,8 +267,13 @@
               <h3>{{ d.subarea }}</h3>
               <span class="acc-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
               <div class="spacer"></div>
-              <span class="muted">{{ d.sop_codigo if d.sop_codigo else 'N/D' }}</span>
+
+              <!-- ✅ TIEMPO TOTAL SOLO EN MINUTOS -->
+              <span class="muted">
+                {{ d.tiempo_total_min if d.tiempo_total_min is not none else 'N/D' }} min
+              </span>
             </div>
+
             <div class="acc-body">
               {% if d.observacion_critica %}
                 <p><strong>⚠ Observaciones críticas:</strong><br>{{ d.observacion_critica }}</p>
@@ -304,7 +305,6 @@
                       {% if f.tabla and f.tabla.rows and f.tabla.rows|length > 0 %}
                         <div class="section-line"></div>
 
-                        <!-- ✅ wrapper para scroll horizontal en móvil -->
                         <div class="table-scroll">
                           <table class="elementos-tabla">
                             <thead>

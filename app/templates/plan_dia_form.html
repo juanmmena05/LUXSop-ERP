@@ -32,7 +32,10 @@
     .top-bar a { background: var(--accent); color: #fff; padding: .5rem .75rem; text-decoration: none; border-radius: 8px; font-size: .85rem; }
     .filter-bar { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; }
     .card { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-    .card h2 { margin: 0 0 .5rem; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: .4rem; }
+    .card h2 { margin: 0 0 .5rem; font-size: 1rem; border-bottom: 1px solid #eee; padding-bottom: .4rem; display: flex; justify-content: space-between; align-items: center; }
+    .card h2 .persona-nombre { flex: 1; }
+    .card h2 .tiempo-total { font-weight: normal; font-size: 0.85rem; color: var(--muted); }
+    .card h2 .tiempo-total strong { color: var(--ok); font-weight: 600; }
     .asig-item { padding: .6rem .8rem; border: 1px solid #eee; border-radius: 8px; background: #fefefe; margin-bottom: .5rem; display: flex; justify-content: space-between; align-items: center; }
     .asig-item small { font-size: .8rem; color: var(--muted); }
     .asig-meta { font-size: .85rem; }
@@ -157,7 +160,10 @@
 
     {% for persona_id, grupo in tareas_por_persona.items() %}
       <div class="card persona-card" data-persona="persona-{{ persona_id }}">
-        <h2>{{ grupo.persona.nombre }}</h2>
+        <h2>
+          <span class="persona-nombre">{{ grupo.persona.nombre }}</span>
+          <span class="tiempo-total">Total: <strong>{{ tiempo_total_por_persona.get(persona_id, 0) }} min</strong></span>
+        </h2>
         {% for t in grupo.subtareas %}
           <div class="asig-item">
             <div class="asig-meta">

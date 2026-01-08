@@ -637,6 +637,13 @@ def plan_dia_asignar(fecha):
             tareas_por_persona[key] = {"persona": persona, "subtareas": []}
         tareas_por_persona[key]["subtareas"].append(t)
 
+    # ========== NUEVO: Calcular tiempo total por persona ==========
+    tiempo_total_por_persona = {}
+    for persona_id, grupo in tareas_por_persona.items():
+        total = sum(tiempos_por_tarea.get(t.tarea_id, 0) for t in grupo["subtareas"])
+        tiempo_total_por_persona[persona_id] = round(total, 1)
+    # ==============================================================
+
     asignadas_ids = {t.subarea_id for t in tareas_del_dia}
 
     return render_template(
@@ -648,9 +655,11 @@ def plan_dia_asignar(fecha):
         tareas_del_dia=tareas_del_dia,
         tareas_por_persona=tareas_por_persona,
         tiempos_por_tarea=tiempos_por_tarea,
+        tiempo_total_por_persona=tiempo_total_por_persona,  # ← NUEVO
         asignadas_ids=asignadas_ids,
         hide_nav=True,
     )
+
 
 # =========================
 # Calcular Tiempo Tarea (v2)
@@ -724,7 +733,6 @@ def reporte_persona_dia(fecha, personal_id):
             abort(403)
         if fecha != date.today().strftime("%Y-%m-%d"):
             abort(403)
-
 
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
 
@@ -820,10 +828,10 @@ def reporte_persona_dia(fecha, personal_id):
 
         # ✅ Construir mapa: (fraccion_id, nivel_id) -> MetodologiaBase (con pasos)
         fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
-        nivel_ids = {nivel_id}
-        met_map = build_met_map(fraccion_ids, nivel_ids)
+        met_map = build_met_map(fraccion_ids, {nivel_id})
 
         fracciones_filtradas = []
+        tiempo_total_min = 0.0  # ✅ acumulador
 
         for sf in sop_full.sop_fracciones or []:
             sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
@@ -843,6 +851,10 @@ def reporte_persona_dia(fecha, personal_id):
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
+            # ✅ sumar SOLO lo que se va a mostrar
+            if tiempo_min is not None:
+                tiempo_total_min += tiempo_min
+
             # ====== ARMADO DE TABLA UNICA POR FRACCIÓN ======
             tabla = None
 
@@ -855,7 +867,7 @@ def reporte_persona_dia(fecha, personal_id):
 
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
                     c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ CAMBIO
+                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))
 
                     rows.append([
                         na(getattr(elemento, "descripcion", None)),
@@ -872,7 +884,7 @@ def reporte_persona_dia(fecha, personal_id):
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas_list(kit)  # ✅ CAMBIO
+                h_str = fmt_herramientas_list(kit)
 
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
@@ -892,18 +904,28 @@ def reporte_persona_dia(fecha, personal_id):
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
-            "sop_codigo": sop.sop_id,
+
+            # ✅ SOLO TIEMPO TOTAL EN MINUTOS (sin sop_id)
+            "tiempo_total_min": round(tiempo_total_min, 2),
+
             "observacion_critica": sop.observacion_critica_sop,
-            "fracciones": fracciones_filtradas
+            "fracciones": fracciones_filtradas,
+
+             # ✅ claves de orden (SIN queries)
+            "orden_area": area.orden_area if area.orden_area is not None else 9999,
+            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999
         })
 
-    detalles.sort(
-        key=lambda d: (
-            getattr(SubArea.query.filter_by(subarea_nombre=d["subarea"]).first(), "orden_subarea", 9999)
-        )
-    )
+    detalles.sort(key=lambda d: (d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
-    return render_template("reporte_personal.html", persona=persona, fecha=fecha_obj, detalles=detalles, hide_nav=True)
+
+    return render_template(
+        "reporte_personal.html",
+        persona=persona,
+        fecha=fecha_obj,
+        detalles=detalles,
+        hide_nav=True
+    )
 
 
 # =========================
@@ -914,7 +936,7 @@ def reporte_persona_dia(fecha, personal_id):
 def reporte_persona_dia_pdf(fecha, personal_id):
     # ✅ Opción 1: si PDF no está disponible (wkhtmltopdf), no romper app
     if (pdfkit is None) or (PDFKIT_CONFIG is None):
-        flash("PDF no disponible en este servidor (wkhtmltopdf no está instalado).", "warning")
+        flash("PDF no disponible en este servidor (wkhtmltopdf no está instalado o no se detectó).", "warning")
         return redirect(url_for("main.mi_ruta"))
 
     # Seguridad: operativo solo puede ver SU PDF y SOLO el de hoy
@@ -959,8 +981,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
 
         sop_full = (
             SOP.query.options(
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.fraccion),
+                joinedload(SOP.sop_fracciones).joinedload(SopFraccion.fraccion),
 
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
@@ -1013,10 +1034,10 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             continue
 
         fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
-        nivel_ids = {nivel_id}
-        met_map = build_met_map(fraccion_ids, nivel_ids)
+        met_map = build_met_map(fraccion_ids, {nivel_id})
 
         fracciones_filtradas = []
+        tiempo_total_min = 0.0  # ✅ total por subárea
 
         for sf in (sop_full.sop_fracciones or []):
             sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
@@ -1040,18 +1061,17 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             consumo_sd = getattr(sd, "consumo", None)
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
+            if tiempo_min is not None:
+                tiempo_total_min += tiempo_min  # ✅ suma
 
             if elemento_set:
                 headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
                 rows = []
-
                 for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
                     elemento = getattr(ed, "elemento", None)
-
                     q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
                     c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))  # ✅ OK
-
+                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))
                     rows.append([
                         na(getattr(elemento, "descripcion", None)),
                         na(str(getattr(elemento, "cantidad", None) or "")),
@@ -1060,13 +1080,12 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                         c_str,
                         h_str,
                     ])
-
                 tabla = {"headers": headers, "rows": rows}
             else:
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas_list(kit)  # ✅ OK
+                h_str = fmt_herramientas_list(kit)
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
             fracciones_filtradas.append({
@@ -1081,27 +1100,29 @@ def reporte_persona_dia_pdf(fecha, personal_id):
                 "metodologia": metodologia_dict,
             })
 
-        # ✅ guardar orden_subarea desde el objeto (sin query extra)
         detalles.append({
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
-            "sop_codigo": sop.sop_id,
             "observacion_critica": sop.observacion_critica_sop,
+            "fracciones": fracciones_filtradas,
+
+            # ✅ total por subárea
+            "tiempo_total_min": round(tiempo_total_min, 2),
+
+            # ✅ orden área -> subárea
+            "orden_area": area.orden_area if area.orden_area is not None else 9999,
             "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
-            "fracciones": fracciones_filtradas
         })
 
-    # si no se pudo construir nada (por faltas de SOP/metodologías/etc.)
     if not detalles:
         return f"No fue posible generar el PDF para {personal_id} en {fecha} (sin detalles).", 404
 
-    # ✅ sort sin query
-    detalles.sort(key=lambda d: d.get("orden_subarea", 9999))
+    # ✅ sort correcto
+    detalles.sort(key=lambda d: (d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
     html = render_template("sop_macro_pdf.html", persona=persona, fecha=fecha_obj, detalles=detalles)
 
-    # PDF_OPTIONS debe existir; si no, usa dict vacío
     options = PDF_OPTIONS if "PDF_OPTIONS" in globals() and isinstance(PDF_OPTIONS, dict) else {}
 
     try:
@@ -1114,6 +1135,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
     resp.headers["Content-Type"] = "application/pdf"
     resp.headers["Content-Disposition"] = f"attachment; filename=SOP_{personal_id}_{fecha}.pdf"
     return resp
+
 
 
 
