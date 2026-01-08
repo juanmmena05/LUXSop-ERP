@@ -73,6 +73,7 @@
     }
     .panel-title{
       display: flex; gap: 10px; align-items: baseline; margin: 0 0 4px 0;
+      flex-wrap: wrap;
     }
     .panel-title h2{ font-size: 1.1rem; margin: 0; }
     .panel-meta{ color: var(--muted); font-size: .9rem; }
@@ -220,7 +221,12 @@
             <div class="panel">
               <div class="panel-title">
                 <h2>{{ d.subarea }}</h2>
-                <div class="panel-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></div>
+
+                <!-- ✅ Aquí agregamos el tiempo total por subárea (minutos) -->
+                <div class="panel-meta">
+                  ({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong>
+                  — ⏱ <strong>{{ d.tiempo_total_min if d.tiempo_total_min is not none else 'N/D' }}</strong> min
+                </div>
               </div>
 
               {% if d.observacion_critica %}
