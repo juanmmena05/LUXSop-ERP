@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LuxSOP · Mi ruta — {{ hoy_str }}</title>
+  <title>LuxSOP · Mi ruta – {{ hoy_str }}</title>
   <style>
     :root {
       --fg: #222;
@@ -11,121 +11,238 @@
       --line: #ddd;
       --bg: #f9f9f9;
       --blue: #0d6efd;
+      --green: #198754;
       --red: #dc3545;
       --red-d: #b02a37;
       --card: #fff;
     }
     * { box-sizing: border-box; }
 
-    body{
+    body {
       font-family: system-ui, sans-serif;
       color: var(--fg);
       background: var(--bg);
       margin: 0;
       padding: 2rem;
-      max-width: 1200px;
+      max-width: 600px;
       margin-inline: auto;
     }
 
-    header{
+    header {
       display: grid;
       gap: 10px;
       margin-bottom: 18px;
     }
-    .head-row{
-      display:flex;
+    .head-row {
+      display: flex;
       justify-content: space-between;
       align-items: flex-end;
       gap: 12px;
-      padding-bottom: .6rem;
+      padding-bottom: 0.6rem;
       border-bottom: 1px solid var(--line);
     }
-    .title h1{
-      margin:0;
+    .title h1 {
+      margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
     }
-    .title .sub{
-      margin-top: .2rem;
+    .title .sub {
+      margin-top: 0.2rem;
       color: var(--muted);
-      font-size: .85rem;
+      font-size: 0.85rem;
     }
 
-    .btn-sm{
+    .btn-sm {
       border: none;
       border-radius: 8px;
-      padding: .42rem .7rem;
-      font-size: .85rem;
+      padding: 0.42rem 0.7rem;
+      font-size: 0.85rem;
       line-height: 1;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
-      align-items:center;
-      justify-content:center;
+      align-items: center;
+      justify-content: center;
       gap: 8px;
       height: 32px;
       font-family: inherit;
     }
-    .btn-blue{ background: var(--blue); color:#fff; }
-    .btn-blue:hover{ filter: brightness(.95); }
-
-    .btn-ghost{
-      background: #fff;
-      border: 1px solid var(--line);
-      color: var(--fg);
-    }
-    .btn-ghost:hover{ filter: brightness(.98); }
-
-    .btn-red{
+    .btn-red {
       background: var(--red);
       color: #fff;
       border: 1px solid var(--red-d);
     }
-    .btn-red:hover{ background: var(--red-d); }
+    .btn-red:hover { background: var(--red-d); }
 
-    .card{
+    .card {
       background: #fff;
       border: 1px solid #ccc;
       border-radius: 12px;
-      padding: 1.5rem 1.6rem;
+      padding: 1.4rem;
       box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     }
 
-    .muted{ color: var(--muted); font-size: .9rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
 
-    table{
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      margin-top: 14px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
+    /* Progress bar */
+    .progress-section {
+      margin-bottom: 20px;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .progress-text {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .progress-bar {
+      height: 12px;
+      background: #e9ecef;
+      border-radius: 999px;
       overflow: hidden;
-      background: #fff;
     }
-    th, td{
-      padding: .65rem .75rem;
-      border-bottom: 1px solid #eee;
-      text-align: left;
-      font-size: .92rem;
-      vertical-align: top;
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 999px;
+      transition: width 0.3s ease;
     }
-    th{ background: #fafafa; font-weight: 600; }
-    tr:last-child td{ border-bottom: none; }
 
-    footer{
+    /* Task list (solo visual) */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fefefe;
+    }
+    .task-item.is-checked {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .task-status {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .task-status.pending {
+      background: #f3f4f6;
+      color: var(--muted);
+      border: 2px solid var(--line);
+    }
+    .task-status.done {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .task-info {
+      flex: 1;
+    }
+    .task-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .task-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .task-time {
+      font-size: 0.8rem;
+      color: var(--green);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .nivel-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      color: #fff;
+      margin-left: 6px;
+    }
+    .nivel-basica { background: #6c757d; }
+    .nivel-media { background: #0d6efd; }
+    .nivel-profundo { background: #212529; }
+
+    /* Botón grande Ver Ruta */
+    .btn-ruta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 16px 20px;
+      margin-top: 20px;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-ruta:hover {
+      background: #157347;
+      transform: translateY(-1px);
+    }
+    .btn-ruta:active {
+      transform: translateY(0);
+    }
+
+    footer {
       margin-top: 26px;
-      font-size: .75rem;
+      font-size: 0.75rem;
       color: #777;
       text-align: center;
     }
 
-    .inline-form{ display:inline; margin:0; padding:0; }
+    .inline-form { display: inline; margin: 0; padding: 0; }
 
-    @media (max-width: 640px){
-      body{ padding: 1.2rem; }
-      .head-row{ flex-direction: column; align-items:flex-start; }
-      .card{ padding: 1.2rem; }
+    /* Mensaje completado */
+    .completed-msg {
+      text-align: center;
+      padding: 20px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      margin-top: 16px;
+    }
+    .completed-msg .icon {
+      font-size: 2.5rem;
+      margin-bottom: 8px;
+    }
+    .completed-msg .text {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 1rem; }
+      .head-row { flex-direction: column; align-items: flex-start; }
+      .card { padding: 1rem; }
     }
   </style>
 </head>
@@ -135,15 +252,10 @@
     <div class="head-row">
       <div class="title">
         <h1>Mi ruta · {{ hoy_str }}</h1>
-        <div class="sub">Tiempo estimado total: <strong>{{ tiempo_total }}</strong> min</div>
+        <div class="sub">Tiempo estimado: <strong>{{ tiempo_total }}</strong> min</div>
       </div>
 
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <!-- (Opcional) Estás aquí, pero si lo quieres visible: -->
-       
-        <a class="btn-sm btn-blue" href="{{ link_reporte }}">Ruta</a>
-
-        <!-- Logout por POST -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <form class="inline-form" method="POST" action="{{ url_for('main.logout') }}">
           <button class="btn-sm btn-red" type="submit">Salir</button>
         </form>
@@ -152,30 +264,80 @@
   </header>
 
   <section class="card">
-    {% if not tareas or (tareas|length)==0 %}
-      <p class="muted" style="margin:0;">No tienes tareas asignadas para hoy.</p>
+    {% if not tareas or (tareas|length) == 0 %}
+      <p class="muted" style="margin: 0;">No tienes tareas asignadas para hoy.</p>
     {% else %}
-      <table>
-        <thead>
-          <tr>
-            <th>Área</th>
-            <th>Subárea</th>
-            <th>Nivel</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for t in tareas %}
-            <tr>
-              <td>{{ t.area.area_nombre if t.area else t.area_id }}</td>
-              <td>{{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}</td>
-              <td>{{ t.nivel_limpieza_asignado }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      
+      <!-- Progress -->
+      <div class="progress-section">
+        <div class="progress-header">
+          <span class="progress-text">Progreso: {{ completadas }}/{{ total_tareas }}</span>
+          <span class="progress-text">{{ progreso_pct }}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" data-width="{{ progreso_pct }}"></div>
+        </div>
+      </div>
+
+      <!-- Task List (solo visual) -->
+      <div class="task-list">
+        {% set nivel_clases = {'basica': 'nivel-basica', 'media': 'nivel-media', 'profundo': 'nivel-profundo'} %}
+        {% set nivel_labels = {'basica': 'Básica', 'media': 'Media', 'profundo': 'Profundo'} %}
+        
+        {% for t in tareas %}
+          {% set is_checked = t.tarea_id in checks_map %}
+          {% set check_time = checks_map.get(t.tarea_id, '') %}
+          
+          <div class="task-item {% if is_checked %}is-checked{% endif %}">
+            <div class="task-status {% if is_checked %}done{% else %}pending{% endif %}">
+              {% if is_checked %}✓{% else %}○{% endif %}
+            </div>
+            
+            <div class="task-info">
+              <div class="task-title">
+                {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
+                <span class="nivel-badge {{ nivel_clases.get(t.nivel_limpieza_asignado|lower, 'nivel-basica') }}">
+                  {{ nivel_labels.get(t.nivel_limpieza_asignado|lower, t.nivel_limpieza_asignado) }}
+                </span>
+              </div>
+              <div class="task-meta">
+                {{ t.area.area_nombre if t.area else t.area_id }}
+              </div>
+            </div>
+            
+            {% if is_checked %}
+              <div class="task-time">{{ check_time }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if completadas == total_tareas %}
+        <!-- Mensaje de completado -->
+        <div class="completed-msg">
+          <div class="icon">🎉</div>
+          <div class="text">¡Ruta completada!</div>
+        </div>
+      {% else %}
+        <!-- Botón Ver Ruta -->
+        <a class="btn-ruta" href="{{ url_for('main.reporte_persona_dia', fecha=hoy_str, personal_id=current_user.personal_id) }}">
+          📋 Ver Ruta Completa
+        </a>
+      {% endif %}
+
     {% endif %}
   </section>
 
   <footer>LuxSOP ERP · Operación diaria</footer>
+
+  <script>
+    // Inicializar width del progress bar desde data-attribute
+    (function(){
+      var fill = document.getElementById('progressFill');
+      if (fill && fill.dataset.width) {
+        fill.style.width = fill.dataset.width + '%';
+      }
+    })();
+  </script>
 </body>
 </html>
