@@ -1,7 +1,7 @@
 # routes_v2.py
 import unicodedata
 from typing import Optional
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort, session
 from sqlalchemy.orm import joinedload
@@ -30,6 +30,7 @@ from .models import (
     LanzamientoSemana, LanzamientoDia, LanzamientoTarea,
     AsignacionPersonal,
     PlantillaSemanal, PlantillaItem, PlantillaSemanaAplicada,
+    TareaCheck,
 
     # Recursos / elementos
     Elemento, ElementoSet, ElementoDetalle,
@@ -739,13 +740,18 @@ def ruta_dia(fecha):
 @main_bp.route("/reporte/<fecha>/<personal_id>")
 @login_required
 def reporte_persona_dia(fecha, personal_id):
-
+    
+    # Determinar si el usuario puede hacer checks (solo operativo, solo hoy, solo sus tareas)
+    puede_hacer_check = False
+    es_hoy = (fecha == date.today().strftime("%Y-%m-%d"))
+    
     if current_user.role != "admin":
         if current_user.personal_id != personal_id:
             abort(403)
-        if fecha != date.today().strftime("%Y-%m-%d"):
+        if not es_hoy:
             abort(403)
-
+        puede_hacer_check = True  # Operativo viendo su reporte de hoy
+    
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
 
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
@@ -757,6 +763,13 @@ def reporte_persona_dia(fecha, personal_id):
         persona = Personal.query.filter_by(personal_id=personal_id).first()
         nombre = persona.nombre if persona else personal_id
         return f"No hay tareas para {nombre} el {fecha}.", 404
+
+    # Obtener checks existentes
+    tarea_ids = [t.tarea_id for t in tareas]
+    checks_map = {}
+    if tarea_ids:
+        checks = TareaCheck.query.filter(TareaCheck.tarea_id.in_(tarea_ids)).all()
+        checks_map = {c.tarea_id: c.checked_at.strftime("%H:%M") for c in checks}
 
     persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
     detalles = []
@@ -781,33 +794,28 @@ def reporte_persona_dia(fecha, personal_id):
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.fraccion),
 
-                # Detalle sin elementos: kit/herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.kit)
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
 
-                # Detalle sin elementos: receta/químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.receta)
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
 
-                # Detalle sin elementos: consumo
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.consumo),
 
-                # Detalle con elementos: elemento_set -> elemento
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
                     .joinedload(ElementoSet.detalles)
                     .joinedload(ElementoDetalle.elemento),
 
-                # Detalle con elementos: ElementoDetalle.receta -> químicos
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
@@ -816,7 +824,6 @@ def reporte_persona_dia(fecha, personal_id):
                     .joinedload(Receta.detalles)
                     .joinedload(RecetaDetalle.quimico),
 
-                # Detalle con elementos: ElementoDetalle.kit -> herramientas
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
@@ -825,7 +832,6 @@ def reporte_persona_dia(fecha, personal_id):
                     .joinedload(Kit.detalles)
                     .joinedload(KitDetalle.herramienta),
 
-                # Detalle con elementos: ElementoDetalle.consumo
                 joinedload(SOP.sop_fracciones)
                     .joinedload(SopFraccion.detalles)
                     .joinedload(SopFraccionDetalle.elemento_set)
@@ -838,12 +844,11 @@ def reporte_persona_dia(fecha, personal_id):
         if not sop_full:
             continue
 
-        # ✅ Construir mapa: (fraccion_id, nivel_id) -> MetodologiaBase (con pasos)
         fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
         met_map = build_met_map(fraccion_ids, {nivel_id})
 
         fracciones_filtradas = []
-        tiempo_total_min = 0.0  # ✅ acumulador
+        tiempo_total_min = 0.0
 
         for sf in sop_full.sop_fracciones or []:
             sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
@@ -863,11 +868,9 @@ def reporte_persona_dia(fecha, personal_id):
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
 
-            # ✅ sumar SOLO lo que se va a mostrar
             if tiempo_min is not None:
                 tiempo_total_min += tiempo_min
 
-            # ====== ARMADO DE TABLA UNICA POR FRACCIÓN ======
             tabla = None
 
             if elemento_set:
@@ -916,14 +919,9 @@ def reporte_persona_dia(fecha, personal_id):
             "area": area.area_nombre,
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
-
-            # ✅ SOLO TIEMPO TOTAL EN MINUTOS (sin sop_id)
             "tiempo_total_min": round(tiempo_total_min, 2),
-
             "observacion_critica": sop.observacion_critica_sop,
             "fracciones": fracciones_filtradas,
-
-            # ✅ claves de orden (SIN queries)
             "orden": t.orden if t.orden is not None else 0,
             "orden_area": area.orden_area if area.orden_area is not None else 9999,
             "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999
@@ -931,11 +929,21 @@ def reporte_persona_dia(fecha, personal_id):
 
     detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
+    # Calcular progreso
+    total_tareas = len(detalles)
+    completadas = len([d for d in detalles if d["tarea_id"] in checks_map])
+    progreso_pct = round((completadas / total_tareas * 100) if total_tareas > 0 else 0)
+
     return render_template(
         "reporte_personal.html",
         persona=persona,
         fecha=fecha_obj,
         detalles=detalles,
+        checks_map=checks_map,
+        puede_hacer_check=puede_hacer_check,
+        total_tareas=total_tareas,
+        completadas=completadas,
+        progreso_pct=progreso_pct,
         hide_nav=True
     )
 
@@ -2426,7 +2434,9 @@ def logout():
     return redirect(url_for("main.login"))
 
 
-
+# ======================================================
+# REEMPLAZAR la función mi_ruta existente en routes.py
+# ======================================================
 @main_bp.route("/mi_ruta")
 @login_required
 def mi_ruta():
@@ -2446,33 +2456,32 @@ def mi_ruta():
 
     tareas = []
     tiempo_total = 0.0
+    checks_map = {}  # {tarea_id: "HH:MM"}
 
     if dia:
         tareas = (
             LanzamientoTarea.query
             .filter_by(dia_id=dia.dia_id, personal_id=current_user.personal_id)
+            .order_by(LanzamientoTarea.orden)
             .all()
         )
-        # (Opcional) si tienes calcular_tiempo_tarea(t)
+        
+        # Obtener checks de estas tareas
+        tarea_ids = [t.tarea_id for t in tareas]
+        if tarea_ids:
+            checks = TareaCheck.query.filter(TareaCheck.tarea_id.in_(tarea_ids)).all()
+            checks_map = {c.tarea_id: c.checked_at.strftime("%H:%M") for c in checks}
+        
+        # Calcular tiempo total
         try:
             tiempo_total = sum(float(calcular_tiempo_tarea(t)) for t in tareas)
         except Exception:
             tiempo_total = 0.0
 
-    # Link único a su reporte del día (HTML y PDF)
-    link_reporte = url_for(
-        "main.reporte_persona_dia",
-        fecha=hoy_str,
-        personal_id=current_user.personal_id
-    )
-    link_pdf = url_for(
-        "main.reporte_persona_dia_pdf",
-        fecha=hoy_str,
-        personal_id=current_user.personal_id
-    )
-
-    # ✅ NUEVO: bandera para UI (PDF disponible solo si wkhtmltopdf está OK)
-    pdf_enabled = (pdfkit is not None) and (PDFKIT_CONFIG is not None)
+    # Calcular progreso
+    total_tareas = len(tareas)
+    completadas = len(checks_map)
+    progreso_pct = round((completadas / total_tareas * 100) if total_tareas > 0 else 0)
 
     return render_template(
         "mi_ruta.html",
@@ -2480,11 +2489,11 @@ def mi_ruta():
         hoy_str=hoy_str,
         tareas=tareas,
         tiempo_total=round(tiempo_total, 2),
-        link_reporte=link_reporte,
-        link_pdf=link_pdf,
-        pdf_enabled=pdf_enabled,   # ✅ nuevo
+        checks_map=checks_map,
+        total_tareas=total_tareas,
+        completadas=completadas,
+        progreso_pct=progreso_pct,
     )
-
 
 # =========================
 # API: Reordenar tareas (drag & drop)
@@ -2525,4 +2534,96 @@ def reordenar_plantilla_items():
             plantilla_item.orden = nuevo_orden
     
     db.session.commit()
+    return {"success": True}, 200
+
+
+from datetime import datetime, timezone, timedelta
+
+
+# ======================================================
+# FUNCIÓN HELPER: Hora CDMX
+# ======================================================
+def now_cdmx():
+    """Retorna datetime actual en CDMX (CST = UTC-6)"""
+    utc_now = datetime.now(timezone.utc)
+    cdmx_offset = timedelta(hours=-6)
+    return (utc_now + cdmx_offset).replace(tzinfo=None)
+
+
+# ======================================================
+# API: Marcar tarea/subárea como completada (Operativo)
+# ======================================================
+@main_bp.route("/api/tarea/<int:tarea_id>/check", methods=["POST"])
+@login_required
+def marcar_tarea_check(tarea_id):
+    # Solo operativos pueden marcar sus propias tareas
+    if current_user.role == "admin":
+        return {"error": "Admin no puede marcar tareas"}, 403
+    
+    tarea = LanzamientoTarea.query.get_or_404(tarea_id)
+    
+    # Verificar que la tarea pertenece al operativo
+    if tarea.personal_id != current_user.personal_id:
+        return {"error": "Esta tarea no te pertenece"}, 403
+    
+    # Verificar que la tarea es de hoy
+    hoy = date.today()
+    dia = LanzamientoDia.query.get(tarea.dia_id)
+    if not dia or dia.fecha != hoy:
+        return {"error": "Solo puedes marcar tareas de hoy"}, 403
+    
+    # Verificar si ya existe un check
+    existing = TareaCheck.query.filter_by(tarea_id=tarea_id).first()
+    if existing:
+        return {
+            "error": "Tarea ya marcada", 
+            "checked_at": existing.checked_at.strftime("%H:%M")
+        }, 400
+    
+    # Crear el check
+    check = TareaCheck(
+        tarea_id=tarea_id,
+        checked_at=now_cdmx(),
+        user_id=current_user.user_id
+    )
+    db.session.add(check)
+    db.session.commit()
+    
+    return {
+        "success": True, 
+        "check_id": check.check_id,
+        "checked_at": check.checked_at.strftime("%H:%M")
+    }, 201
+
+
+# ======================================================
+# API: Desmarcar tarea/subárea (Operativo)
+# ======================================================
+@main_bp.route("/api/tarea/<int:tarea_id>/check", methods=["DELETE"])
+@login_required
+def desmarcar_tarea_check(tarea_id):
+    # Solo operativos pueden desmarcar sus propias tareas
+    if current_user.role == "admin":
+        return {"error": "Admin no puede desmarcar tareas"}, 403
+    
+    tarea = LanzamientoTarea.query.get_or_404(tarea_id)
+    
+    # Verificar que la tarea pertenece al operativo
+    if tarea.personal_id != current_user.personal_id:
+        return {"error": "Esta tarea no te pertenece"}, 403
+    
+    # Verificar que la tarea es de hoy
+    hoy = date.today()
+    dia = LanzamientoDia.query.get(tarea.dia_id)
+    if not dia or dia.fecha != hoy:
+        return {"error": "Solo puedes modificar tareas de hoy"}, 403
+    
+    # Buscar y borrar el check
+    check = TareaCheck.query.filter_by(tarea_id=tarea_id).first()
+    if not check:
+        return {"error": "Tarea no estaba marcada"}, 404
+    
+    db.session.delete(check)
+    db.session.commit()
+    
     return {"success": True}, 200

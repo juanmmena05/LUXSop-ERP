@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>SOP Diario — {{ persona.nombre }} ({{ fecha.strftime('%Y-%m-%d') }})</title>
+  <title>SOP Diario – {{ persona.nombre }} ({{ fecha.strftime('%Y-%m-%d') }})</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -13,6 +13,7 @@
       --line: #ddd;
       --accent: #0d6efd;
       --ok: #198754;
+      --green: #198754;
     }
     html, body {
       background: var(--bg);
@@ -63,12 +64,49 @@
       border-radius: 12px;
       padding: 16px;
     }
+
+    /* Progress bar */
+    .progress-section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .progress-text {
+      font-size: .95rem;
+      font-weight: 600;
+    }
+    .progress-bar {
+      height: 12px;
+      background: #e9ecef;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
     .accordion { display: grid; gap: 10px; }
     .acc-item {
       border: 1px solid var(--line);
       border-radius: 10px;
       overflow: hidden;
       background: #fff;
+      transition: border-color 0.2s;
+    }
+    .acc-item.is-checked {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
     }
     .acc-head {
       display: flex;
@@ -78,6 +116,9 @@
       cursor: pointer;
       user-select: none;
       background: #f8f9fa;
+    }
+    .acc-item.is-checked .acc-head {
+      background: #dcfce7;
     }
     .acc-head h3 { margin: 0; font-size: 1rem; }
     .acc-meta { font-size: .85rem; color: var(--muted); }
@@ -136,7 +177,7 @@
     }
     .list li:last-child { box-shadow: none; }
 
-    /* ===== Tablas ===== */
+    /* Tablas */
     .table-scroll {
       width: 100%;
       overflow-x: auto;
@@ -194,22 +235,79 @@
       text-align: center;
     }
 
-    /* ===== Responsive móvil ===== */
+    /* Check completado badge en header */
+    .check-badge {
+      background: #dcfce7;
+      color: #166534;
+      font-size: .8rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Checkbox de completado al final de cada subárea */
+    .check-section {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 2px dashed #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    .check-section.is-loading {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .check-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 2px solid var(--line);
+      background: #fff;
+      color: var(--fg);
+      transition: all 0.2s;
+    }
+    .check-btn:hover {
+      border-color: var(--green);
+      background: #f0fdf4;
+    }
+    .check-btn.is-checked {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+    .check-btn.is-checked:hover {
+      background: #166534;
+      border-color: #166534;
+    }
+    .check-time {
+      font-size: .85rem;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* Responsive móvil */
     @media (max-width: 600px) {
       .wrap {
         max-width: 100%;
         padding: 4px;
       }
-
       .card {
         padding: 8px;
         border-radius: 10px;
       }
-
       .row {
         gap: 8px;
       }
-
       .acc-head {
         flex-wrap: wrap;
       }
@@ -219,28 +317,33 @@
       .acc-meta {
         width: 100%;
       }
-
       .btn {
         width: 100%;
         text-align: center;
       }
-
       .observacion-critica {
         margin: 8px 0 12px 0;
         max-width: 100%;
       }
-
       .herramientas-grid {
         width: 100%;
         justify-content: flex-start;
         margin: 0;
+      }
+      .check-section {
+        flex-direction: column;
+        gap: 8px;
+      }
+      .check-btn {
+        width: 100%;
+        justify-content: center;
       }
     }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="row" style="margin-bottom:10px">
+  <div class="row" style="margin-bottom: 10px">
     <div>
       <h1>[{{ fecha.strftime('%Y-%m-%d') }}]</h1>
       <div class="sub">
@@ -249,7 +352,7 @@
     </div>
     <div class="spacer"></div>
     <div class="row">
-      <a class="btn secondary" href="/">⬅ Volver</a>
+      <a class="btn secondary" href="{{ url_for('main.mi_ruta') }}">⬅ Volver</a>
       <a class="btn ok"
          href="{{ url_for('main.reporte_persona_dia_pdf', fecha=fecha.strftime('%Y-%m-%d'), personal_id=persona.personal_id) }}"
          target="_blank" title="Descargar reporte completo en PDF">
@@ -258,17 +361,36 @@
     </div>
   </div>
 
+  {% if puede_hacer_check and detalles and detalles|length > 0 %}
+  <!-- Progress -->
+  <div class="progress-section">
+    <div class="progress-header" id="progressHeader">
+      <span class="progress-text">Progreso: {{ completadas }}/{{ total_tareas }}</span>
+      <span class="progress-text">{{ progreso_pct }}%</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" data-width="{{ progreso_pct }}"></div>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card">
     {% if detalles and detalles|length > 0 %}
       <div class="accordion" id="micro-accordion">
         {% for d in detalles %}
-          <div class="acc-item" id="micro-{{ loop.index }}">
+          {% set is_checked = d.tarea_id in checks_map %}
+          {% set check_time = checks_map.get(d.tarea_id, '') %}
+          
+          <div class="acc-item {% if is_checked %}is-checked{% endif %}" id="micro-{{ loop.index }}" data-tarea-id="{{ d.tarea_id }}">
             <div class="acc-head" data-acc-toggle="micro-{{ loop.index }}">
               <h3>{{ d.subarea }}</h3>
-              <span class="acc-meta">({{ d.area }}) — Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
+              <span class="acc-meta">({{ d.area }}) – Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
               <div class="spacer"></div>
 
-              <!-- ✅ TIEMPO TOTAL SOLO EN MINUTOS -->
+              {% if is_checked %}
+                <span class="check-badge">✓ {{ check_time }}</span>
+              {% endif %}
+
               <span class="muted">
                 {{ d.tiempo_total_min if d.tiempo_total_min is not none else 'N/D' }} min
               </span>
@@ -349,6 +471,25 @@
               {% else %}
                 <p class="muted">Sin fracciones para el nivel asignado.</p>
               {% endif %}
+
+              <!-- CHECK DE COMPLETADO AL FINAL DE CADA SUBÁREA -->
+              {% if puede_hacer_check %}
+                <div class="check-section" data-tarea-id="{{ d.tarea_id }}">
+                  <button type="button" 
+                          class="check-btn {% if is_checked %}is-checked{% endif %}"
+                          data-tarea-id="{{ d.tarea_id }}">
+                    {% if is_checked %}
+                      ✓ Completada
+                    {% else %}
+                      ☐ Marcar como completada
+                    {% endif %}
+                  </button>
+                  <span class="check-time" data-time-display>
+                    {% if is_checked %}{{ check_time }}{% endif %}
+                  </span>
+                </div>
+              {% endif %}
+
             </div>
           </div>
         {% endfor %}
@@ -358,20 +499,134 @@
     {% endif %}
   </div>
 
-  <div class="footer">LuxSOP ERP — SOP diario operativo.</div>
+  <div class="footer">LuxSOP ERP – SOP diario operativo.</div>
 </div>
 
+<!-- Datos para JS -->
+<script id="page-data" type="application/json">
+  {
+    "puedeHacerCheck": {{ puede_hacer_check|tojson }},
+    "totalTareas": {{ total_tareas }},
+    "completadas": {{ completadas }}
+  }
+</script>
+
 <script>
-  document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-acc-toggle]');
+  // Acordeón
+  document.addEventListener('click', function(e) {
+    var t = e.target.closest('[data-acc-toggle]');
     if (!t) return;
-    const id = t.getAttribute('data-acc-toggle');
-    const item = document.getElementById(id);
+    var id = t.getAttribute('data-acc-toggle');
+    var item = document.getElementById(id);
     if (!item) return;
-    const isOpen = item.classList.contains('open');
-    document.querySelectorAll('.acc-item.open').forEach(el => el.classList.remove('open'));
+    var isOpen = item.classList.contains('open');
+    document.querySelectorAll('.acc-item.open').forEach(function(el) { 
+      el.classList.remove('open'); 
+    });
     if (!isOpen) item.classList.add('open');
   });
+
+  // Inicializar width del progress bar desde data-attribute
+  (function(){
+    var fill = document.getElementById('progressFill');
+    if (fill && fill.dataset.width) {
+      fill.style.width = fill.dataset.width + '%';
+    }
+  })();
+
+  // Checks
+  (function(){
+    var pageDataEl = document.getElementById('page-data');
+    var pageData = JSON.parse(pageDataEl ? pageDataEl.textContent : '{}');
+    
+    if (!pageData.puedeHacerCheck) return;
+
+    var totalTareas = pageData.totalTareas || 0;
+    var completadas = pageData.completadas || 0;
+
+    function updateProgress() {
+      var pct = totalTareas > 0 ? Math.round((completadas / totalTareas) * 100) : 0;
+      
+      var fill = document.getElementById('progressFill');
+      if (fill) fill.style.width = pct + '%';
+      
+      var header = document.getElementById('progressHeader');
+      if (header) {
+        header.innerHTML = 
+          '<span class="progress-text">Progreso: ' + completadas + '/' + totalTareas + '</span>' +
+          '<span class="progress-text">' + pct + '%</span>';
+      }
+    }
+
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('.check-btn');
+      if (!btn) return;
+
+      var tareaId = btn.dataset.tareaId;
+      var section = btn.closest('.check-section');
+      var accItem = btn.closest('.acc-item');
+      var timeDisplay = section.querySelector('[data-time-display]');
+      var isChecked = btn.classList.contains('is-checked');
+
+      // Loading
+      section.classList.add('is-loading');
+
+      fetch('/api/tarea/' + tareaId + '/check', {
+        method: isChecked ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function(result) {
+        if (result.ok) {
+          if (isChecked) {
+            // Desmarcar
+            btn.classList.remove('is-checked');
+            btn.innerHTML = '☐ Marcar como completada';
+            timeDisplay.textContent = '';
+            accItem.classList.remove('is-checked');
+            
+            // Quitar badge del header
+            var badge = accItem.querySelector('.check-badge');
+            if (badge) badge.remove();
+            
+            completadas--;
+          } else {
+            // Marcar
+            btn.classList.add('is-checked');
+            btn.innerHTML = '✓ Completada';
+            timeDisplay.textContent = result.data.checked_at;
+            accItem.classList.add('is-checked');
+            
+            // Agregar badge al header
+            var accHead = accItem.querySelector('.acc-head');
+            var spacer = accHead.querySelector('.spacer');
+            var existingBadge = accHead.querySelector('.check-badge');
+            if (!existingBadge && spacer) {
+              var badge = document.createElement('span');
+              badge.className = 'check-badge';
+              badge.innerHTML = '✓ ' + result.data.checked_at;
+              spacer.insertAdjacentElement('afterend', badge);
+            }
+            
+            completadas++;
+          }
+          updateProgress();
+        } else {
+          alert(result.data.error || 'Error al procesar');
+        }
+      })
+      .catch(function(err) {
+        alert('Error de conexión');
+      })
+      .finally(function() {
+        section.classList.remove('is-loading');
+      });
+    });
+  })();
 </script>
 </body>
 </html>

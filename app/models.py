@@ -587,3 +587,41 @@ class User(db.Model, UserMixin):
 
     def check_password(self, raw_password: str) -> bool:
         return check_password_hash(self.password_hash, raw_password)
+    
+    
+# ======================================================
+# 13. CHECKS DE TAREAS (Operativo marca subárea completada)
+# ======================================================
+
+class TareaCheck(db.Model):
+    __tablename__ = 'tarea_check'
+    
+    check_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    tarea_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('lanzamiento_tarea.tarea_id', ondelete='CASCADE'), 
+        nullable=False, 
+        unique=True,  # Una tarea solo puede tener un check
+        index=True
+    )
+    
+    # Hora en que se marcó como completada (CDMX)
+    checked_at = db.Column(db.DateTime, nullable=False)
+    
+    # Quién marcó (para auditoría)
+    user_id = db.Column(
+        db.Integer, 
+        db.ForeignKey('user.user_id'), 
+        nullable=False,
+        index=True
+    )
+    
+    # Relaciones
+    tarea = db.relationship(
+        "LanzamientoTarea", 
+        backref=db.backref("check", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
+    )
+    user = db.relationship("User")
+    
+    def __repr__(self):
+        return f"<TareaCheck tarea={self.tarea_id} at={self.checked_at}>"
