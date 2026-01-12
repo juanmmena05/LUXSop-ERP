@@ -14,6 +14,8 @@
       --accent: #0d6efd;
       --ok: #198754;
       --green: #198754;
+      --purple: #7c3aed;
+      --orange: #fd7e14;
     }
     html, body {
       background: var(--bg);
@@ -248,6 +250,18 @@
       gap: 4px;
     }
 
+    /* ✅ Badges de tipo tarea */
+    .tipo-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+    .tipo-regular { background: #d1fae5; color: #065f46; }
+    .tipo-extraordinario { background: #ede9fe; color: #5b21b6; }
+    .tipo-consecuente { background: #dbeafe; color: #1e40af; }
+
     /* Checkbox de completado al final de cada subárea */
     .check-section {
       margin-top: 16px;
@@ -383,7 +397,20 @@
           
           <div class="acc-item {% if is_checked %}is-checked{% endif %}" id="micro-{{ loop.index }}" data-tarea-id="{{ d.tarea_id }}">
             <div class="acc-head" data-acc-toggle="micro-{{ loop.index }}">
-              <h3>{{ d.subarea }}</h3>
+              <h3>
+                {{ d.subarea }}
+                
+                <!-- ✅ Badge de tipo -->
+                {% if d.es_adicional %}
+                  {% if d.sop_id and '-C' in d.sop_id %}
+                    <span class="tipo-badge tipo-consecuente">Consecuente</span>
+                  {% else %}
+                    <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
+                  {% endif %}
+                {% else %}
+                  <span class="tipo-badge tipo-regular">Regular</span>
+                {% endif %}
+              </h3>
               <span class="acc-meta">({{ d.area }}) – Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
               <div class="spacer"></div>
 
