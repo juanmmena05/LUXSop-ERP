@@ -7,21 +7,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # ======================================================
 # 1. ÁREAS Y SUBÁREAS
 # ======================================================
-
 class Area(db.Model):
     __tablename__ = 'area'
 
-    area_id = db.Column(db.String, primary_key=True)
-    area_nombre = db.Column(db.String, nullable=False)
-    tipo_area = db.Column(db.String)
+    area_id = db.Column(db.String(50), primary_key=True)
+    area_nombre = db.Column(db.String(100))
+    tipo_area = db.Column(db.String(50))
+    grupo_area = db.Column(db.String(20), nullable=True)  # ← NUEVO
     cantidad_subareas = db.Column(db.Integer)
-    orden_area = db.Column(db.Integer, default=1000)
-
-    subareas = db.relationship(
-        "SubArea",
-        back_populates="area",
-        cascade="all, delete-orphan"
-    )
+    orden_area = db.Column(db.Integer, nullable=True)
+    subareas = db.relationship("SubArea", back_populates="area")
 
 
 class SubArea(db.Model):
@@ -59,28 +54,22 @@ class SubArea(db.Model):
 
 
 # ======================================================
-# 2. SOP (STANDARD OPERATING PROCEDURE)
+# 2. SOP (STANDARD OPERATING PROCEDURE) 
 # ======================================================
-
 class SOP(db.Model):
     __tablename__ = 'sop'
-    __table_args__ = (
-        # 1 SOP por subárea
-        db.UniqueConstraint('subarea_id', name='uq_sop_subarea'),
-    )
 
-    sop_id = db.Column(db.String, primary_key=True)
-    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
-    observacion_critica_sop = db.Column(db.Text)
+    sop_id = db.Column(db.String(50), primary_key=True)  # Ahora es SP-XX-XX-XXX-R o -C
+    subarea_id = db.Column(db.String(50), db.ForeignKey('sub_area.subarea_id'), nullable=False)
+    tipo_sop = db.Column(db.String(20), nullable=False, default='regular')
+    observacion_critica_sop = db.Column(db.Text, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('subarea_id', 'tipo_sop', name='uq_sop_subarea_tipo'),
+    )
 
     subarea = db.relationship("SubArea", back_populates="sop")
-
-    sop_fracciones = db.relationship(
-        "SopFraccion",
-        back_populates="sop",
-        cascade="all, delete-orphan",
-        order_by="SopFraccion.orden"
-    )
+    sop_fracciones = db.relationship("SopFraccion", back_populates="sop", cascade="all, delete-orphan", order_by="SopFraccion.orden")
 
 
 # ======================================================
@@ -103,13 +92,13 @@ class NivelLimpieza(db.Model):
 # ======================================================
 # 4. FRACCIONES (CATÁLOGO UNIVERSAL)
 # ======================================================
-
 class Fraccion(db.Model):
     __tablename__ = 'fraccion'
 
     fraccion_id = db.Column(db.String, primary_key=True)  # FR-XX-###
     fraccion_nombre = db.Column(db.String, nullable=False)
     nota_tecnica = db.Column(db.Text)
+    grupo_area = db.Column(db.String(20), nullable=True)  # ← NUEVO
 
     metodologias = db.relationship(
         "Metodologia",
@@ -118,9 +107,7 @@ class Fraccion(db.Model):
     )
 
     sop_fracciones = db.relationship("SopFraccion", back_populates="fraccion")
-
     elemento_sets = db.relationship("ElementoSet", back_populates="fraccion")
-
     kits = db.relationship("Kit", back_populates="fraccion", lazy="selectin")
 
 
@@ -493,24 +480,27 @@ class LanzamientoDia(db.Model):
 
 class LanzamientoTarea(db.Model):
     __tablename__ = 'lanzamiento_tarea'
-    __table_args__ = (
-        db.UniqueConstraint('dia_id', 'subarea_id', name='uq_tarea_dia_subarea'),
-    )
 
     tarea_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
-    dia_id = db.Column(db.Integer, db.ForeignKey('lanzamiento_dia.dia_id'), nullable=False, index=True)
-    personal_id = db.Column(db.String, db.ForeignKey('personal.personal_id'), nullable=False, index=True)
-    area_id = db.Column(db.String, db.ForeignKey('area.area_id'), nullable=False, index=True)
-    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False, index=True)
-
-    nivel_limpieza_asignado = db.Column(db.String, nullable=False)
+    dia_id = db.Column(db.Integer, db.ForeignKey('lanzamiento_dia.dia_id'), nullable=False)
+    personal_id = db.Column(db.String(50), db.ForeignKey('personal.personal_id'), nullable=False)
+    area_id = db.Column(db.String(50), db.ForeignKey('area.area_id'), nullable=False)
+    subarea_id = db.Column(db.String(50), db.ForeignKey('sub_area.subarea_id'), nullable=False)
+    sop_id = db.Column(db.Integer, db.ForeignKey('sop.sop_id'), nullable=True)  # ← NUEVO
+    nivel_limpieza_asignado = db.Column(db.String(20))
+    es_adicional = db.Column(db.Boolean, default=False)  # ← NUEVO
     orden = db.Column(db.Integer, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('dia_id', 'subarea_id', 'sop_id', name='uq_tarea_dia_subarea_sop'),
+    )
 
     dia = db.relationship("LanzamientoDia", back_populates="tareas")
     personal = db.relationship("Personal", lazy="joined")
     area = db.relationship("Area", lazy="joined")
     subarea = db.relationship("SubArea", lazy="joined")
+    sop = db.relationship("SOP")  # ← NUEVO
 
 
 # ======================================================
@@ -528,23 +518,27 @@ class PlantillaSemanal(db.Model):
     semanas_aplicadas = db.relationship("PlantillaSemanaAplicada", back_populates="plantilla")
 
 
+
 class PlantillaItem(db.Model):
     __tablename__ = 'plantilla_item'
 
     item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     plantilla_id = db.Column(db.Integer, db.ForeignKey('plantilla_semanal.plantilla_id'), nullable=False)
-    dia_index = db.Column(db.Integer, nullable=False)  # 0 = Lunes ... 5 = Sábado
-
-    personal_id = db.Column(db.String, db.ForeignKey('personal.personal_id'), nullable=False)
-    area_id = db.Column(db.String, db.ForeignKey('area.area_id'), nullable=False)
-    subarea_id = db.Column(db.String, db.ForeignKey('sub_area.subarea_id'), nullable=False)
-    nivel_limpieza_asignado = db.Column(db.String, nullable=False)
+    dia_index = db.Column(db.Integer, nullable=False)
+    personal_id = db.Column(db.String(50), db.ForeignKey('personal.personal_id'), nullable=False)
+    area_id = db.Column(db.String(50), db.ForeignKey('area.area_id'), nullable=False)
+    subarea_id = db.Column(db.String(50), db.ForeignKey('sub_area.subarea_id'), nullable=False)
+    sop_id = db.Column(db.Integer, db.ForeignKey('sop.sop_id'), nullable=True)  # ← NUEVO
+    nivel_limpieza_asignado = db.Column(db.String(20))
+    es_adicional = db.Column(db.Boolean, default=False)  # ← NUEVO
     orden = db.Column(db.Integer, default=0)
 
     plantilla = db.relationship("PlantillaSemanal", back_populates="items")
     personal = db.relationship("Personal", lazy="joined")
     area = db.relationship("Area", lazy="joined")
     subarea = db.relationship("SubArea", lazy="joined")
+    sop = db.relationship("SOP")  # ← NUEVO
+
 
 
 class PlantillaSemanaAplicada(db.Model):
@@ -588,7 +582,7 @@ class User(db.Model, UserMixin):
     def check_password(self, raw_password: str) -> bool:
         return check_password_hash(self.password_hash, raw_password)
     
-    
+
 # ======================================================
 # 13. CHECKS DE TAREAS (Operativo marca subárea completada)
 # ======================================================

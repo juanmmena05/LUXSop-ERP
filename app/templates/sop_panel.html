@@ -8,7 +8,7 @@
     :root{
       --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
       --blue:#0d6efd; --green:#198754; --card:#fff;
-      --h:46px; /* altura unificada para inputs y “pills” */
+      --h:46px;
     }
     *{ box-sizing:border-box; }
     body{
@@ -41,7 +41,7 @@
     label{
       display:block;
       font-size:.85rem;
-      font-weight:600;      /* ✅ antes 700 */
+      font-weight:600;
       color:#333;
       margin-bottom:6px;
     }
@@ -61,7 +61,7 @@
       height:var(--h);
       padding:.55rem 1.1rem;
       font-size:1rem;
-      font-weight:600;      /* ✅ para que no se vea tan bold */
+      font-weight:600;
       cursor:pointer;
       text-decoration:none;
       display:inline-flex;
@@ -77,7 +77,7 @@
     /* ====== Card 1: selección ====== */
     .control-grid{
       display:grid;
-      grid-template-columns: 1.1fr 1.1fr 1fr auto;
+      grid-template-columns: 1fr 1.2fr 1.2fr 1fr auto;
       gap:14px;
       align-items:end;
     }
@@ -112,11 +112,11 @@
       background:#fff;
       border-radius:999px;
       font-size:.98rem;
-      font-weight:600;      /* ✅ antes “se veía bold” */
+      font-weight:600;
       line-height:1;
       white-space:nowrap;
     }
-    .pill strong{ font-weight:700; } /* ✅ antes 800 */
+    .pill strong{ font-weight:700; }
     .pill-ok{ border-color:#cde8d5; background:#eef9f0; color:#226b3d; }
     .pill-warn{ border-color:#ffe8a1; background:#fff8e1; color:#7a5b00; }
 
@@ -207,9 +207,6 @@
         color: var(--muted);
         font-size: .75rem;
     }
-
-
-
   </style>
 </head>
 
@@ -220,7 +217,6 @@
 <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
 
 <nav class="side-nav" id="sideNav" aria-label="Menú principal">
-
   <div class="side-nav__head">
     <div class="side-nav__brand">
       <strong>LuxSOP</strong>
@@ -237,13 +233,12 @@
   <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
    <button type="submit" class="side-nav__link side-nav__link-btn">🚪 Salir</button>
   </form>
-
 </nav>
 
 <div class="head">
   <h1>SOP</h1>
   <div class="sub">
-    Selecciona Área/Subárea y Nivel. Luego carga para ver/crear/modificar el SOP.
+    Selecciona Tipo, Área/Subárea y Nivel. Luego carga para ver/crear/modificar el SOP.
   </div>
 </div>
 
@@ -253,6 +248,15 @@
   <div class="card">
     <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopFilterForm">
       <div class="control-grid">
+        
+        <div class="field">
+          <label for="tipo_sop">Tipo SOP</label>
+          <select name="tipo_sop" id="tipo_sop">
+            <option value="regular" {% if tipo_sop == 'regular' %}selected{% endif %}>Regular</option>
+            <option value="consecuente" {% if tipo_sop == 'consecuente' %}selected{% endif %}>Consecuente</option>
+          </select>
+        </div>
+
         <div class="field">
           <label for="area_id">Área</label>
           <select name="area_id" id="area_id">
@@ -280,9 +284,11 @@
         <div class="field">
           <label for="nivel">Nivel</label>
           <select name="nivel" id="nivel">
-            <option value="basica"   {% if nivel == 'basica' %}selected{% endif %}>Básica</option>
-            <option value="media"    {% if nivel == 'media' %}selected{% endif %}>Media</option>
-            <option value="profundo" {% if nivel == 'profundo' %}selected{% endif %}>Profundo</option>
+            <!-- ✅ Opciones se actualizan dinámicamente según tipo_sop -->
+            <option value="basica" {% if nivel == 'basica' %}selected{% endif %}>Básica</option>
+            <option value="media" {% if nivel == 'media' %}selected{% endif %} class="nivel-regular">Media</option>
+            <option value="profundo" {% if nivel == 'profundo' %}selected{% endif %} class="nivel-regular">Profundo</option>
+            <option value="extraordinario" {% if nivel == 'extraordinario' %}selected{% endif %} class="nivel-regular">Extraordinario</option>
           </select>
         </div>
 
@@ -292,52 +298,53 @@
   </div>
 
   <!-- ===== Card 2: Resultado ===== -->
-    {% if subarea_id %}
-    <div class="card">
-        <div class="result-row">
-        <div class="stats">
+  {% if subarea_id %}
+  <div class="card">
+    <div class="result-row">
+      <div class="stats">
 
-            {% if sop %}
-            <div class="pill">SOP: <strong>{{ sop.sop_id }}</strong></div>
-            {% else %}
-            <div class="pill pill-warn">SOP: <strong>No creado</strong></div>
-            {% endif %}
+        {% if sop %}
+        <div class="pill">SOP: <strong>{{ sop.sop_id }}</strong></div>
+        {% else %}
+        <div class="pill pill-warn">SOP: <strong>No creado</strong></div>
+        {% endif %}
 
-            <div class="pill">Nivel: <strong>{{ nivel }}</strong></div>
+        <div class="pill">Tipo: <strong>{{ tipo_sop|capitalize }}</strong></div>
+        <div class="pill">Nivel: <strong>{{ nivel|capitalize }}</strong></div>
 
-            {% if sop and has_nivel %}
-            <div class="pill pill-ok">Estado nivel: <strong>Creado</strong></div>
-            {% else %}
-            <div class="pill pill-warn">Estado nivel: <strong>Sin detalles</strong></div>
-            {% endif %}
-        </div>
+        {% if sop and has_nivel %}
+        <div class="pill pill-ok">Estado: <strong>Creado</strong></div>
+        {% else %}
+        <div class="pill pill-warn">Estado: <strong>Sin detalles</strong></div>
+        {% endif %}
+      </div>
 
-        <div class="right-actions">
-            {% if sop and has_fracciones %}
-            <a class="btn btn-green"
-                href="{{ url_for('main.sop_fracciones_edit', sop_id=sop.sop_id, nivel=nivel) }}">
-                Modificar SOP
-            </a>
-            {% else %}
-            <a class="btn btn-green"
-                href="{{ url_for('main.sop_crear', subarea_id=subarea_id, nivel=nivel) }}">
-                Crear SOP
-            </a>
-            {% endif %}
-        </div>
-        </div>
+      <div class="right-actions">
+        {% if sop and has_fracciones %}
+        <a class="btn btn-green"
+            href="{{ url_for('main.sop_fracciones_edit', sop_id=sop.sop_id, nivel=nivel) }}">
+            Modificar SOP
+        </a>
+        {% else %}
+        <a class="btn btn-green"
+            href="{{ url_for('main.sop_crear', subarea_id=subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
+            Crear SOP
+        </a>
+        {% endif %}
+      </div>
     </div>
-    {% endif %}
+  </div>
+  {% endif %}
 
 </div>
 
 <script>
   // menú lateral
   (function(){
-    const nav = document.getElementById('sideNav');
-    const btn = document.getElementById('navToggle');
-    const closeBtn = document.getElementById('navClose');
-    const overlay = document.getElementById('navOverlay');
+    var nav = document.getElementById('sideNav');
+    var btn = document.getElementById('navToggle');
+    var closeBtn = document.getElementById('navClose');
+    var overlay = document.getElementById('navOverlay');
     if(!nav || !btn || !overlay) return;
 
     function openNav(){
@@ -356,25 +363,68 @@
     btn.addEventListener('click', openNav);
     overlay.addEventListener('click', closeNav);
     closeBtn && closeBtn.addEventListener('click', closeNav);
-    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeNav(); });
-    nav.addEventListener('click', (e)=>{ if(e.target.closest('a')) closeNav(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeNav(); });
+    nav.addEventListener('click', function(e){ if(e.target.closest('a')) closeNav(); });
   })();
 
-  // UX: recargar al cambiar Área/Nivel
+  // ✅ NUEVO: Filtrar niveles según tipo_sop
   (function(){
-    const form = document.getElementById('sopFilterForm');
-    const area = document.getElementById('area_id');
-    const sub = document.getElementById('subarea_id');
-    const nivel = document.getElementById('nivel');
+    var tipoSop = document.getElementById('tipo_sop');
+    var nivelSelect = document.getElementById('nivel');
+    
+    if(!tipoSop || !nivelSelect) return;
+    
+    function actualizarNiveles() {
+      var tipo = tipoSop.value;
+      var nivelesRegular = nivelSelect.querySelectorAll('.nivel-regular');
+      
+      if (tipo === 'consecuente') {
+        // Consecuente: solo Básica
+        nivelesRegular.forEach(function(opt) {
+          opt.style.display = 'none';
+          opt.disabled = true;
+        });
+        // Forzar selección a Básica
+        nivelSelect.value = 'basica';
+      } else {
+        // Regular: todos los niveles
+        nivelesRegular.forEach(function(opt) {
+          opt.style.display = '';
+          opt.disabled = false;
+        });
+      }
+    }
+    
+    // Ejecutar al cargar
+    actualizarNiveles();
+    
+    // Ejecutar al cambiar tipo
+    tipoSop.addEventListener('change', actualizarNiveles);
+  })();
+
+  // UX: recargar al cambiar selectores
+  (function(){
+    var form = document.getElementById('sopFilterForm');
+    var tipoSop = document.getElementById('tipo_sop');
+    var area = document.getElementById('area_id');
+    var sub = document.getElementById('subarea_id');
+    var nivel = document.getElementById('nivel');
 
     if(!form || !area || !nivel) return;
 
-    area.addEventListener('change', ()=>{
+    tipoSop && tipoSop.addEventListener('change', function(){
+      // Primero actualizar niveles, luego submit
+      setTimeout(function() {
+        form.submit();
+      }, 50);
+    });
+
+    area.addEventListener('change', function(){
       if(sub) sub.value = "";
       form.submit();
     });
 
-    nivel.addEventListener('change', ()=>{
+    nivel.addEventListener('change', function(){
       form.submit();
     });
   })();

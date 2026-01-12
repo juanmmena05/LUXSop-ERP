@@ -1,7 +1,8 @@
 {% set nivel_clases = {
   'basica': 'nivel-basica',
   'media': 'nivel-media',
-  'profundo': 'nivel-profundo'
+  'profundo': 'nivel-profundo',
+  'extraordinario': 'nivel-extraordinario'
 } %}
 <!DOCTYPE html>
 <html lang="es">
@@ -18,16 +19,112 @@
       --accent: #0d6efd;
       --ok: #198754;
       --card: #fff;
+      --yellow: #ffc107;
+      --orange: #fd7e14;
+      --purple: #7c3aed;
+      --red: #dc3545;
+      --blue-deep: #0056b3;  /* ✅ NUEVO: Azul profundo para Adicional */
     }
+
+
+    
     body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); }
     .wrap { display: flex; min-height: 100vh; }
-    .sidebar { width: 280px; background: var(--card); padding: 20px; border-right: 1px solid var(--line); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+    
+    /* ===== FLASH MESSAGES ===== */
+    .flash-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 350px;
+    }
+    .flash {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      animation: slideIn 0.3s ease;
+    }
+    .flash-warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+    }
+    .flash-error {
+      background: #f8d7da;
+      border: 1px solid var(--red);
+      color: #721c24;
+    }
+    .flash-success {
+      background: #d1e7dd;
+      border: 1px solid var(--ok);
+      color: #0f5132;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    
+    /* ===== SIDEBAR CON DOS BOXES ===== */
+    .sidebar { 
+      width: 320px; 
+      background: var(--bg); 
+      padding: 16px; 
+      border-right: 1px solid var(--line); 
+      position: sticky; 
+      top: 0; 
+      height: 100vh; 
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    /* Box común */
+    .task-box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    
+    .task-box h2 {
+      margin: 0 0 12px 0;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    
+    .task-box h2 .badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: white;
+    }
+    
+    /* ✅ DESPUÉS: */
+    /* Box REGULAR - Verde */
+    .box-regular h2 .badge { background: var(--ok); }
+    .box-regular button[type="submit"] { background: var(--ok); }
+
+    /* Box ADICIONAL - Azul profundo */
+    .box-adicional h2 .badge { background: var(--blue-deep); }
+    .box-adicional button[type="submit"] { background: var(--blue-deep); }
+    
     .content { flex: 1; padding: 24px; }
-    h1 { font-size: 1.2rem; margin-bottom: 1rem; }
-    label { display: block; margin-top: 12px; font-size: .85rem; font-weight: 500; }
-    select, button { width: 100%; padding: .5rem; margin-top: .25rem; font-size: .9rem; border-radius: 6px; border: 1px solid var(--line); }
-    button { background: var(--ok); color: white; border: none; cursor: pointer; margin-top: 1rem; }
+    
+    label { display: block; margin-top: 10px; font-size: .8rem; font-weight: 500; color: var(--muted); }
+    select, button { width: 100%; padding: .45rem; margin-top: .25rem; font-size: .85rem; border-radius: 6px; border: 1px solid var(--line); }
+    button { color: white; border: none; cursor: pointer; margin-top: 12px; }
     button:hover { filter: brightness(.95); }
+    
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .top-bar a { background: var(--accent); color: #fff; padding: .5rem .75rem; text-decoration: none; border-radius: 8px; font-size: .85rem; }
     .filter-bar { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; }
@@ -40,17 +137,31 @@
     .asig-item small { font-size: .8rem; color: var(--muted); }
     .asig-meta { font-size: .85rem; flex: 1; }
     .asig-item form { margin: 0; }
-    .btn-delete { background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 1rem; padding: .25rem .5rem; }
+    .btn-delete { background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 1rem; padding: .25rem .5rem; width: auto; margin: 0; }
 
     /* subáreas ocupadas en el select */
-    #subarea-select option.ocupada { background-color: #f1f1f1; color: #888; }
-    #subarea-select option.ocupada:disabled { opacity: 0.8; }
+    select option.ocupada { background-color: #f1f1f1; color: #888; }
+    select option.ocupada:disabled { opacity: 0.8; }
+    
+    /* Sin SOP disponible */
+    select option.sin-sop { background-color: #fff3cd; color: #856404; }
 
     /* badges de nivel */
     .nivel-badge { padding: 2px 6px; border-radius: 4px; font-size: .7rem; color: white; margin-left: 8px; }
     .nivel-basica { background: #adb5bd; }
     .nivel-media { background: #6c757d; }
     .nivel-profundo { background: #343a40; }
+    .nivel-extraordinario { background: #a78bfa; }  /* Púrpura más claro */
+    /* Badge de tipo tarea */
+    .tipo-badge {
+      font-size: .65rem;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+    .tipo-regular { background: #d1fae5; color: #065f46; }
+    .tipo-extraordinario { background: #cce5ff; color: #004085; }  /* ✅ Azul profundo claro */
+    .tipo-consecuente { background: #d1ecf1; color: #0c5460; }  
 
     /* ===== Drag & Drop ===== */
     .tareas-lista { min-height: 20px; }
@@ -90,9 +201,46 @@
     }
     .drawer a:hover{ background:#f6f6f6; border-color:#eee; }
     .drawer .muted{ color:var(--muted); font-size:.8rem; margin-top:6px; }
+    
+    /* Mensaje de no SOP */
+    .no-sop-msg {
+      display: none;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      margin-top: 8px;
+    }
+    .no-sop-msg.show { display: block; }
+    
+    /* Nivel fijo (mostrar como texto) */
+    .nivel-fijo {
+      background: #f3f4f6;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .45rem;
+      margin-top: .25rem;
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    .nivel-fijo.purple { background: #ede9fe; color: #5b21b6; }
+    .nivel-fijo.gray { background: #f3f4f6; color: #374151; }
   </style>
 </head>
 <body>
+
+<!-- ✅ FLASH MESSAGES -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-container" id="flash-container">
+      {% for category, msg in messages %}
+        <div class="flash flash-{{ category }}">{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
 
 {% if not hide_nav %}
   <button class="burger" id="burger" aria-label="Abrir menú">☰</button>
@@ -107,46 +255,116 @@
 
 <div class="wrap">
   <div class="sidebar">
-    <h1>Agregar Tarea</h1>
-    <form method="post" action="{{ url_for('main.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}">
-      <label>Personal</label>
-      <select name="personal_id" id="personal-select" required>
-        <option value="" disabled selected>Seleccionar personal</option>
-        {% for p in personal_list %}
-          <option value="{{ p.personal_id }}">{{ p.nombre }}</option>
-        {% endfor %}
-      </select>
+    
+    <!-- ===== BOX 1: REGULAR ===== -->
+    <div class="task-box box-regular">
+      <h2>
+        <span class="badge">REGULAR</span>
+        Limpieza Principal
+      </h2>
+      <form method="post" action="{{ url_for('main.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-regular">
+        <!-- Campos ocultos -->
+        <input type="hidden" name="es_adicional" value="0">
+        <input type="hidden" name="tipo_sop" value="regular">
+        
+        <label>Personal</label>
+        <select name="personal_id" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for p in personal_list %}
+            <option value="{{ p.personal_id }}">{{ p.nombre }}</option>
+          {% endfor %}
+        </select>
 
-      <label>Área</label>
-      <select name="area_id" id="area-select" required>
-        <option value="" disabled selected>Seleccionar área</option>
-        {% for a in areas_list %}
-          <option value="{{ a.area_id }}">{{ a.area_nombre }}</option>
-        {% endfor %}
-      </select>
+        <label>Área</label>
+        <select name="area_id" class="area-select" data-target="regular" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for a in areas_list %}
+            <option value="{{ a.area_id }}">{{ a.area_nombre }}</option>
+          {% endfor %}
+        </select>
 
-      <label>Subárea</label>
-      <select name="subarea_id" id="subarea-select" required>
-        <option value="" disabled selected>Seleccionar subárea</option>
-        {% for s in subareas_list %}
-          {% if s.subarea_id in asignadas_ids %}
-            <option value="{{ s.subarea_id }}" disabled class="ocupada">{{ s.subarea_nombre }}</option>
-          {% else %}
+        <label>Subárea</label>
+        <select name="subarea_id" id="subarea-regular" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for s in subareas_list %}
+            {% if s.subarea_id in asignadas_regular_ids %}
+              <option value="{{ s.subarea_id }}" disabled class="ocupada">{{ s.subarea_nombre }} (asignada)</option>
+            {% else %}
+              <option value="{{ s.subarea_id }}">{{ s.subarea_nombre }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        
+        <div class="no-sop-msg" id="no-sop-regular">
+          ⚠️ Esta subárea no tiene SOP Regular configurado.
+        </div>
+
+        <label>Nivel de limpieza</label>
+        <select name="nivel_limpieza_asignado" required>
+          <option value="" disabled selected>Seleccionar</option>
+          <option value="basica">Básica</option>
+          <option value="media">Media</option>
+          <option value="profundo">Profundo</option>
+          <!-- ✅ Sin Extraordinario en REGULAR -->
+        </select>
+
+        <button type="submit">Agregar tarea</button>
+      </form>
+    </div>
+    
+    <!-- ===== BOX 2: ADICIONAL ===== -->
+    <div class="task-box box-adicional">
+      <h2>
+        <span class="badge">ADICIONAL</span>
+        Tarea Extra
+      </h2>
+      <form method="post" action="{{ url_for('main.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-adicional">
+        <!-- Campo oculto -->
+        <input type="hidden" name="es_adicional" value="1">
+        
+        <label>Personal</label>
+        <select name="personal_id" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for p in personal_list %}
+            <option value="{{ p.personal_id }}">{{ p.nombre }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Área</label>
+        <select name="area_id" class="area-select" data-target="adicional" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for a in areas_list %}
+            <option value="{{ a.area_id }}">{{ a.area_nombre }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Subárea</label>
+        <select name="subarea_id" id="subarea-adicional" required>
+          <option value="" disabled selected>Seleccionar</option>
+          {% for s in subareas_list %}
             <option value="{{ s.subarea_id }}">{{ s.subarea_nombre }}</option>
-          {% endif %}
-        {% endfor %}
-      </select>
+          {% endfor %}
+        </select>
+        
+        <div class="no-sop-msg" id="no-sop-adicional">
+          ⚠️ Esta subárea no tiene SOP del tipo seleccionado.
+        </div>
 
-      <label>Nivel de limpieza</label>
-      <select name="nivel_limpieza_asignado" required>
-        <option value="" disabled selected>Seleccionar nivel</option>
-        <option value="basica">Básica</option>
-        <option value="media">Media</option>
-        <option value="profundo">Profundo</option>
-      </select>
+        <label>Tipo de Limpieza</label>
+        <select name="tipo_sop" id="tipo-sop-adicional" required>
+          <option value="extraordinario" selected>Extraordinario</option>
+          <option value="consecuente">Consecuente</option>
+        </select>
 
-      <button type="submit">Agregar tarea</button>
-    </form>
+        <!-- ✅ Nivel fijo según tipo (campo oculto + display) -->
+        <label>Nivel de limpieza</label>
+        <input type="hidden" name="nivel_limpieza_asignado" id="nivel-adicional-hidden" value="extraordinario">
+        <div class="nivel-fijo purple" id="nivel-adicional-display">Extraordinario</div>
+
+        <button type="submit">Agregar tarea</button>
+      </form>
+    </div>
+    
   </div>
 
   <div class="content">
@@ -165,7 +383,7 @@
       </select>
     </div>
 
-    {% set etiquetas = {'basica':'Básica','media':'Media','profundo':'Profundo'} %}
+    {% set etiquetas = {'basica':'Básica','media':'Media','profundo':'Profundo','extraordinario':'Extraordinario'} %}
 
     {% for persona_id, grupo in tareas_por_persona.items() %}
       <div class="card persona-card" data-persona="persona-{{ persona_id }}">
@@ -177,8 +395,23 @@
           {% for t in grupo.subtareas %}
             <div class="asig-item" draggable="true" data-tarea-id="{{ t.tarea_id }}">
               <span class="drag-handle">⋮⋮</span>
+              <!-- ✅ CAMBIAR: -->
               <div class="asig-meta">
                 <strong>{{ t.area.area_nombre if t.area else t.area_id }}</strong> — {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
+                
+                <!-- ✅ Solo mostrar badge de tipo si NO es Extraordinario -->
+                {% if t.nivel_limpieza_asignado|lower != 'extraordinario' %}
+                  {% if t.es_adicional %}
+                    {% if t.sop_id and '-C' in t.sop_id %}
+                      <span class="tipo-badge tipo-consecuente">Consecuente</span>
+                    {% else %}
+                      <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="tipo-badge tipo-regular">Regular</span>
+                  {% endif %}
+                {% endif %}
+                
                 <span class="nivel-badge {{ nivel_clases.get(t.nivel_limpieza_asignado|lower, 'nivel-basica') }}">
                   {{ etiquetas.get(t.nivel_limpieza_asignado, t.nivel_limpieza_asignado|capitalize) }}
                 </span>
@@ -196,26 +429,143 @@
 </div>
 
 <script>
-  // --- Filtrado dinámico de subáreas según área seleccionada (respeta ocupadas del día) ---
-  document.getElementById('area-select').addEventListener('change', function () {
-    const fechaActual = "{{ fecha.strftime('%Y-%m-%d') }}";
-    fetch('{{ url_for("main.subareas_por_area", area_id="__ID__") }}'.replace('__ID__', this.value) + '?fecha=' + fechaActual)
-      .then(response => response.json())
+  const fechaActual = "{{ fecha.strftime('%Y-%m-%d') }}";
+  
+  // ✅ Auto-ocultar flash messages después de 4 segundos
+  (function() {
+    const flashContainer = document.getElementById('flash-container');
+    if (flashContainer) {
+      setTimeout(() => {
+        flashContainer.style.transition = 'opacity 0.5s ease';
+        flashContainer.style.opacity = '0';
+        setTimeout(() => flashContainer.remove(), 500);
+      }, 2500);
+    }
+  })();
+  
+  // ===== Filtrado dinámico de subáreas según área (BOX REGULAR) =====
+  document.querySelectorAll('.area-select').forEach(areaSelect => {
+    areaSelect.addEventListener('change', function() {
+      const target = this.dataset.target; // "regular" o "adicional"
+      const subareaSelect = document.getElementById('subarea-' + target);
+      const areaId = this.value;
+      
+      if (target === 'regular') {
+        // Box REGULAR: usa endpoint que marca ocupadas
+        fetch('{{ url_for("main.subareas_por_area", area_id="__ID__") }}'.replace('__ID__', areaId) + '?fecha=' + fechaActual)
+          .then(r => r.json())
+          .then(data => {
+            subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar</option>';
+            data.forEach(sub => {
+              const opt = document.createElement('option');
+              opt.value = sub.id;
+              opt.textContent = sub.nombre + (sub.ocupada ? ' (asignada)' : '');
+              if (sub.ocupada) {
+                opt.disabled = true;
+                opt.classList.add('ocupada');
+              }
+              subareaSelect.appendChild(opt);
+            });
+          });
+      } else {
+
+        // Box ADICIONAL: usa endpoint con info de SOPs, sin bloqueo
+        subareaSelect.innerHTML = '<option value="" disabled selected>Cargando...</option>'; // ✅ ANTES del fetch
+        fetch('{{ url_for("main.subareas_con_sop", area_id="__ID__") }}'.replace('__ID__', areaId))
+          .then(r => r.json())
+          .then(data => {
+            subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar</option>';
+            window.subareasSOPInfo = {};
+            data.forEach(sub => {
+              window.subareasSOPInfo[sub.id] = {
+                tiene_regular: sub.tiene_regular,
+                tiene_consecuente: sub.tiene_consecuente
+              };
+              const opt = document.createElement('option');
+              opt.value = sub.id;
+              opt.textContent = sub.nombre;
+              subareaSelect.appendChild(opt);
+            });
+          });
+      }
+    });
+  });
+
+  // ===== Verificar SOP existe (BOX REGULAR) =====
+  document.getElementById('subarea-regular').addEventListener('change', function() {
+    const subareaId = this.value;
+    const msgEl = document.getElementById('no-sop-regular');
+    
+    if (!subareaId) {
+      msgEl.classList.remove('show');
+      return;
+    }
+    
+    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+      .replace('__SUB__', subareaId)
+      .replace('__TIPO__', 'regular'))
+      .then(r => r.json())
       .then(data => {
-        const subareaSelect = document.getElementById('subarea-select');
-        subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar subárea</option>';
-        data.forEach(sub => {
-          const opt = document.createElement('option');
-          opt.value = sub.id;
-          opt.textContent = sub.nombre;
-          if (sub.ocupada) {
-            opt.disabled = true;
-            opt.classList.add('ocupada');
-          }
-          subareaSelect.appendChild(opt);
-        });
+        if (!data.existe) {
+          msgEl.classList.add('show');
+        } else {
+          msgEl.classList.remove('show');
+        }
       });
   });
+
+  // ===== Verificar SOP existe (BOX ADICIONAL) =====
+  function verificarSOPAdicional() {
+    const subareaId = document.getElementById('subarea-adicional').value;
+    const tipoSelect = document.getElementById('tipo-sop-adicional').value;
+    const msgEl = document.getElementById('no-sop-adicional');
+    
+    // ✅ Mapear tipo UI a tipo_sop real
+    const tipoSopReal = (tipoSelect === 'extraordinario') ? 'regular' : 'consecuente';
+    
+    if (!subareaId) {
+      msgEl.classList.remove('show');
+      return;
+    }
+    
+    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+      .replace('__SUB__', subareaId)
+      .replace('__TIPO__', tipoSopReal))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.existe) {
+          const tipoNombre = (tipoSelect === 'extraordinario') ? 'Regular (para Extraordinario)' : 'Consecuente';
+          msgEl.textContent = '⚠️ Esta subárea no tiene SOP ' + tipoNombre + ' configurado.';
+          msgEl.classList.add('show');
+        } else {
+          msgEl.classList.remove('show');
+        }
+      });
+  }
+  
+  document.getElementById('subarea-adicional').addEventListener('change', verificarSOPAdicional);
+  document.getElementById('tipo-sop-adicional').addEventListener('change', function() {
+    actualizarNivelAdicional();
+    verificarSOPAdicional();
+  });
+
+  // ===== Actualizar nivel fijo según tipo (ADICIONAL) =====
+  function actualizarNivelAdicional() {
+    const tipoSelect = document.getElementById('tipo-sop-adicional').value;
+    const nivelHidden = document.getElementById('nivel-adicional-hidden');
+    const nivelDisplay = document.getElementById('nivel-adicional-display');
+    
+    if (tipoSelect === 'extraordinario') {
+      nivelHidden.value = 'extraordinario';
+      nivelDisplay.textContent = 'Extraordinario';
+      nivelDisplay.className = 'nivel-fijo purple';
+    } else {
+      // Consecuente → Solo Básica
+      nivelHidden.value = 'basica';
+      nivelDisplay.textContent = 'Básica';
+      nivelDisplay.className = 'nivel-fijo gray';
+    }
+  }
 
   // --- Filtro por persona ---
   document.getElementById('filtro-persona').addEventListener('change', function () {
@@ -223,12 +573,6 @@
     document.querySelectorAll('.persona-card').forEach(card => {
       card.style.display = (selected === 'all' || card.dataset.persona === selected) ? '' : 'none';
     });
-  });
-
-  // 🔄 Resetear selects después de enviar la tarea
-  const form = document.querySelector('.sidebar form');
-  form.addEventListener('submit', function() {
-    setTimeout(() => form.reset(), 100);
   });
 
   // ===== DRAG & DROP =====
@@ -247,8 +591,6 @@
       if (e.target.classList.contains('asig-item')) {
         e.target.classList.remove('dragging');
         document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        
-        // Guardar nuevo orden
         guardarOrden(lista);
       }
     });
@@ -258,7 +600,6 @@
       const afterElement = getDragAfterElement(lista, e.clientY);
       const dragging = lista.querySelector('.dragging');
       
-      // Remover clase drag-over de todos
       lista.querySelectorAll('.asig-item').forEach(item => item.classList.remove('drag-over'));
       
       if (afterElement == null) {
@@ -304,20 +645,14 @@
 
     fetch('{{ url_for("main.reordenar_tareas") }}', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orden: orden })
     })
     .then(response => response.json())
     .then(data => {
-      if (data.success) {
-        console.log('Orden guardado');
-      }
+      if (data.success) console.log('Orden guardado');
     })
-    .catch(error => {
-      console.error('Error al guardar orden:', error);
-    });
+    .catch(error => console.error('Error al guardar orden:', error));
   }
 </script>
 

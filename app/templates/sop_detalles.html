@@ -300,7 +300,7 @@
 
   <div class="row" style="justify-content:flex-end;">
     <a class="btn btn-blue"
-       href="{{ url_for('main.sop_panel', area_id=(subarea.area_id if subarea else None), subarea_id=(subarea.subarea_id if subarea else None), nivel=nivel) }}">
+       href="{{ url_for('main.sop_panel', area_id=(subarea.area_id if subarea else None), subarea_id=(subarea.subarea_id if subarea else None), nivel=nivel, tipo_sop=tipo_sop) }}">
       ← Volver
     </a>
   </div>
@@ -314,17 +314,17 @@
     <div class="sf-list">
       {% for sf in sop_fracciones %}
         <a class="sf-link {% if sf_actual and sf.sop_fraccion_id == sf_actual.sop_fraccion_id %}is-active{% endif %}"
-           href="{{ url_for('main.sop_detalles', sop_id=sop.sop_id, nivel=nivel, sop_fraccion_id=sf.sop_fraccion_id) }}">
+            href="{{ url_for('main.sop_detalles', sop_id=sop.sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf.sop_fraccion_id) }}">
           <div><strong>{{ sf.fraccion.fraccion_id if sf.fraccion else sf.fraccion_id }}</strong> — {{ sf.fraccion.fraccion_nombre if sf.fraccion else '' }}</div>
           <small>Orden: {{ sf.orden }}</small>
         </a>
       {% endfor %}
     </div>
 
-    <!-- ✅ NUEVO: Editar fracciones -->
-    <div class="sf-action">
-        <a class="sf-action-link"
-            href="{{ url_for('main.sop_crear', subarea_id=subarea.subarea_id, nivel=nivel) }}">
+    <div style="margin-top:10px;">
+        <a class="btn btn-blue"
+          style="width:100%; justify-content:center;"
+            href="{{ url_for('main.sop_crear', subarea_id=subarea.subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
             Editar Fracciones
         </a>
     </div>
@@ -447,7 +447,7 @@
           <!-- ✅ FIX: SIEMPRE habilitado, endpoint crea/amarra el set -->
           <div style="display:flex; justify-content:flex-end; margin-top:10px;">
             <a class="btn btn-blue"
-               href="{{ url_for('main.sop_elementoset_edit', sop_id=sop.sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id) }}">
+               href="{{ url_for('main.sop_elementoset_edit', sop_id=sop.sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf_actual.sop_fraccion_id) }}">
               Editar Elementos
             </a>
           </div>

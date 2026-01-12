@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort, session
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, or_ 
+from sqlalchemy import and_, or_
 
 from flask_login import login_user, logout_user, login_required, current_user
 
@@ -130,11 +130,18 @@ def canon_nivel(s: Optional[str]) -> Optional[str]:
         return "media"
     if x in {"3", "profundo", "profunda"}:
         return "profundo"
+    if x in {"4", "extraordinario", "extraordinaria"}:  # ✅ AÑADIR
+        return "extraordinario"
     return None
 
 def nivel_to_id(s: Optional[str]) -> Optional[int]:
     x = canon_nivel(s or "")
-    return {"basica": 1, "media": 2, "profundo": 3}.get(x)
+    return {
+        "basica": 1, 
+        "media": 2, 
+        "profundo": 3,
+        "extraordinario": 4  # ✅ AÑADIR
+    }.get(x)
 
 main_bp = Blueprint("main", __name__)
 
@@ -221,10 +228,44 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
     plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
     for it in plantilla.items:
         fecha_dest = destino_lunes + timedelta(days=it.dia_index)
-        if not existe_tarea(fecha_dest, it.personal_id, it.subarea_id):
-            crear_tarea(fecha_dest, it.personal_id, it.area_id, it.subarea_id, canon_nivel(it.nivel_limpieza_asignado) or "basica", it.orden or 0)
+        
+        # ✅ Copiar sop_id y es_adicional desde PlantillaItem
+        sop_id = getattr(it, 'sop_id', None)
+        es_adicional = getattr(it, 'es_adicional', False)
+        
+        # Si no tiene sop_id (items viejos), calcularlo
+        if not sop_id:
+            sop = SOP.query.filter_by(subarea_id=it.subarea_id, tipo_sop="regular").first()
+            sop_id = sop.sop_id if sop else None
+        
+        dia = upsert_dia(fecha_dest)
+        
+        # Verificar si ya existe (para evitar duplicados)
+        if es_adicional and sop_id and '-C' in sop_id:
+            # Consecuentes: no validar duplicados
+            pass
+        else:
+            existe = LanzamientoTarea.query.filter_by(
+                dia_id=dia.dia_id,
+                subarea_id=it.subarea_id,
+                sop_id=sop_id
+            ).first()
+            if existe:
+                continue
+        
+        t = LanzamientoTarea(
+            dia_id=dia.dia_id,
+            personal_id=it.personal_id,
+            area_id=it.area_id,
+            subarea_id=it.subarea_id,
+            nivel_limpieza_asignado=canon_nivel(it.nivel_limpieza_asignado) or "basica",
+            sop_id=sop_id,
+            es_adicional=es_adicional,
+            orden=it.orden or 0
+        )
+        db.session.add(t)
+    
     db.session.commit()
-
 
 # =========================
 # Helpers Tablas HTML
@@ -601,7 +642,6 @@ def plan_dia_asignar(fecha):
 
     personal_list = Personal.query.all()
     areas_list = Area.query.all()
-
     subareas_list = SubArea.query.order_by(SubArea.orden_subarea.asc()).all()
 
     if request.method == "POST":
@@ -609,30 +649,85 @@ def plan_dia_asignar(fecha):
         area_id = request.form.get("area_id")
         subarea_id = request.form.get("subarea_id")
         nivel_limpieza_asignado = canon_nivel(request.form.get("nivel_limpieza_asignado"))
+        
+        # Campos de los boxes
+        es_adicional_str = request.form.get("es_adicional", "0")
+        es_adicional = es_adicional_str == "1"
+        tipo_sop_form = (request.form.get("tipo_sop") or "regular").strip().lower()
+        
+        # ✅ MAPEO: "extraordinario" en UI → "regular" en BD
+        if tipo_sop_form == "extraordinario":
+            tipo_sop = "regular"
+            nivel_limpieza_asignado = "extraordinario"  # Forzar nivel
+        elif tipo_sop_form == "consecuente":
+            tipo_sop = "consecuente"
+            nivel_limpieza_asignado = "basica"  # Forzar nivel
+        else:
+            tipo_sop = "regular"
+        
+        # Validar nivel
         if not nivel_limpieza_asignado:
             flash("Nivel de limpieza inválido.", "warning")
             return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
-
-        existe_misma_subarea = LanzamientoTarea.query.filter_by(
-            dia_id=dia.dia_id,
-            subarea_id=subarea_id
-        ).first()
-        if existe_misma_subarea:
-            flash("Esa subárea ya tiene una tarea asignada en este día.", "warning")
+        
+        # ✅ VALIDACIÓN Box REGULAR: no permite subáreas ya asignadas como REGULAR (no adicional)
+        if not es_adicional:
+            existe_misma_subarea = LanzamientoTarea.query.filter_by(
+                dia_id=dia.dia_id,
+                subarea_id=subarea_id,
+                es_adicional=False
+            ).first()
+            if existe_misma_subarea:
+                flash("Esa subárea ya tiene una tarea REGULAR asignada en este día.", "warning")
+                return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
+        
+        # Verificar que existe el SOP del tipo
+        sop = SOP.query.filter_by(subarea_id=subarea_id, tipo_sop=tipo_sop).first()
+        if not sop:
+            tipo_nombre = "Regular" if tipo_sop == "regular" else "Consecuente"
+            flash(f"No existe SOP {tipo_nombre} para esta subárea.", "warning")
             return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
 
-        db.session.add(LanzamientoTarea(
+        # ✅ VALIDACIÓN de duplicados según tipo
+        if tipo_sop == "consecuente":
+            # Consecuentes: ILIMITADAS - no validar duplicados
+            pass
+        else:
+            # Regular (incluyendo extraordinario): solo 1 por sop_id
+            existe_mismo_sop = LanzamientoTarea.query.filter_by(
+                dia_id=dia.dia_id,
+                subarea_id=subarea_id,
+                sop_id=sop.sop_id
+            ).first()
+            if existe_mismo_sop:
+                # Determinar si es extraordinario o regular normal
+                if nivel_limpieza_asignado == "extraordinario":
+                    flash(f"Ya existe una tarea Regular/Extraordinario para esta subárea.", "warning")
+                else:
+                    flash(f"Ya existe una tarea Regular para esta subárea en este día.", "warning")
+                return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
+
+        # Crear tarea
+        t = LanzamientoTarea(
             dia_id=dia.dia_id,
             personal_id=personal_id,
             area_id=area_id,
             subarea_id=subarea_id,
-            nivel_limpieza_asignado=nivel_limpieza_asignado
-        ))
+            nivel_limpieza_asignado=nivel_limpieza_asignado,
+            sop_id=sop.sop_id,
+            es_adicional=es_adicional
+        )
+        db.session.add(t)
         db.session.commit()
+        
         return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
 
+    # ========== GET ==========
     tareas_del_dia = LanzamientoTarea.query.filter(LanzamientoTarea.dia_id == dia.dia_id).all()
     tiempos_por_tarea = {t.tarea_id: calcular_tiempo_tarea(t) for t in tareas_del_dia}
+
+    # Separar tareas
+    tareas_regulares = [t for t in tareas_del_dia if not getattr(t, 'es_adicional', False)]
 
     tareas_por_persona = {}
     for t in tareas_del_dia:
@@ -642,7 +737,6 @@ def plan_dia_asignar(fecha):
             tareas_por_persona[key] = {"persona": persona, "subtareas": []}
         tareas_por_persona[key]["subtareas"].append(t)
 
-    # Ordenar subtareas por el campo 'orden', luego por área y subárea
     for key in tareas_por_persona:
         tareas_por_persona[key]["subtareas"].sort(key=lambda x: (
             x.orden or 0,
@@ -650,14 +744,12 @@ def plan_dia_asignar(fecha):
             x.subarea.orden_subarea if x.subarea else 0
         ))
 
-    # ========== NUEVO: Calcular tiempo total por persona ==========
     tiempo_total_por_persona = {}
     for persona_id, grupo in tareas_por_persona.items():
         total = sum(tiempos_por_tarea.get(t.tarea_id, 0) for t in grupo["subtareas"])
         tiempo_total_por_persona[persona_id] = round(total, 1)
-    # ==============================================================
 
-    asignadas_ids = {t.subarea_id for t in tareas_del_dia}
+    asignadas_regular_ids = {t.subarea_id for t in tareas_regulares}
 
     return render_template(
         "plan_dia_form.html",
@@ -668,30 +760,39 @@ def plan_dia_asignar(fecha):
         tareas_del_dia=tareas_del_dia,
         tareas_por_persona=tareas_por_persona,
         tiempos_por_tarea=tiempos_por_tarea,
-        tiempo_total_por_persona=tiempo_total_por_persona,  # ← NUEVO
-        asignadas_ids=asignadas_ids,
+        tiempo_total_por_persona=tiempo_total_por_persona,
+        asignadas_ids=asignadas_regular_ids,
+        asignadas_regular_ids=asignadas_regular_ids,
         hide_nav=True,
     )
 
 
+
 # =========================
-# Calcular Tiempo Tarea (v2)
+# Calcular Tiempo Tarea (v2) - CORREGIDO
 # =========================
 def calcular_tiempo_tarea(tarea) -> float:
     """
     Tiempo total = suma de SopFraccionDetalle.tiempo_unitario_min
     filtrado por el nivel asignado.
+    
+    ✅ CORREGIDO: Usa tarea.sop_id en lugar de buscar por subarea_id
     """
     nivel_text = canon_nivel(tarea.nivel_limpieza_asignado) or "basica"
     nivel_id = nivel_to_id(nivel_text) or 1
 
-    subarea = getattr(tarea, "subarea", None) or SubArea.query.get(tarea.subarea_id)
-    if not subarea:
-        return 0.0
-
-    sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first()
-    if not sop:
-        return 0.0
+    # ✅ Usar sop_id de la tarea directamente
+    sop_id = getattr(tarea, 'sop_id', None)
+    
+    if not sop_id:
+        # Fallback para tareas antiguas sin sop_id
+        subarea = getattr(tarea, "subarea", None) or SubArea.query.get(tarea.subarea_id)
+        if not subarea:
+            return 0.0
+        sop = SOP.query.filter_by(subarea_id=subarea.subarea_id, tipo_sop="regular").first()
+        if not sop:
+            return 0.0
+        sop_id = sop.sop_id
 
     # Precarga fracciones/detalles
     sop_full = (
@@ -699,7 +800,7 @@ def calcular_tiempo_tarea(tarea) -> float:
             joinedload(SOP.sop_fracciones)
                 .joinedload(SopFraccion.detalles),
         )
-        .filter_by(sop_id=sop.sop_id)
+        .filter_by(sop_id=sop_id)
         .first()
     )
     if not sop_full:
@@ -712,6 +813,7 @@ def calcular_tiempo_tarea(tarea) -> float:
             total += float(sd.tiempo_unitario_min)
 
     return round(total, 2)
+
 
 # =========================
 # Ruta Día (centro de reportes)
@@ -780,7 +882,15 @@ def reporte_persona_dia(fecha, personal_id):
         if not area or not subarea:
             continue
 
-        sop = SOP.query.filter_by(subarea_id=subarea.subarea_id).first()
+        # ✅ CAMBIO CRÍTICO: Usar sop_id de la tarea
+        sop_id = getattr(t, 'sop_id', None)
+        print(f"DEBUG: tarea_id={t.tarea_id}, sop_id de tarea={sop_id}")  # ← AGREGAR
+        if sop_id:
+            sop = SOP.query.filter_by(sop_id=sop_id).first()
+        else:
+            # Fallback para tareas antiguas sin sop_id
+            sop = SOP.query.filter_by(subarea_id=subarea.subarea_id, tipo_sop="regular").first()
+        
         if not sop:
             continue
 
@@ -924,7 +1034,10 @@ def reporte_persona_dia(fecha, personal_id):
             "fracciones": fracciones_filtradas,
             "orden": t.orden if t.orden is not None else 0,
             "orden_area": area.orden_area if area.orden_area is not None else 9999,
-            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999
+            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
+            # ✅ NUEVOS CAMPOS para el template
+            "es_adicional": getattr(t, 'es_adicional', False),
+            "sop_id": sop_id,
         })
 
     detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
@@ -946,6 +1059,7 @@ def reporte_persona_dia(fecha, personal_id):
         progreso_pct=progreso_pct,
         hide_nav=True
     )
+
 
 
 # =========================
@@ -1397,9 +1511,14 @@ def ordenar_elementoset(elemento_set_id):
 @main_bp.route("/sop/<sop_id>/elementoset", methods=["GET", "POST"])
 @admin_required
 def sop_elementoset_edit(sop_id):
+
+    tipo_sop = (request.args.get("tipo_sop") or request.form.get("tipo_sop") or "regular").strip()
+    if tipo_sop not in ("regular", "consecuente"):
+        tipo_sop = "regular"
+
     # nivel por query o form
     nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
-    if nivel not in ("basica", "media", "profundo"):
+    if nivel not in ("basica", "media", "profundo", "extraordinario"):
         nivel = "media"
 
     nivel_obj = NivelLimpieza.query.filter_by(nombre=nivel).first()
@@ -1415,7 +1534,7 @@ def sop_elementoset_edit(sop_id):
     sop_fraccion_id = (request.args.get("sop_fraccion_id") or request.form.get("sop_fraccion_id") or "").strip()
     if not sop_fraccion_id:
         flash("Falta sop_fraccion_id.", "warning")
-        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel))
+        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop)) 
 
     sf = SopFraccion.query.filter_by(sop_fraccion_id=sop_fraccion_id, sop_id=sop_id).first()
     if not sf:
@@ -1443,17 +1562,15 @@ def sop_elementoset_edit(sop_id):
     if detalle.elemento_set_id:
         es = ElementoSet.query.filter_by(elemento_set_id=detalle.elemento_set_id).first()
 
+   
     if not es:
-        es = ElementoSet.query.filter_by(
-            subarea_id=subarea.subarea_id,
-            fraccion_id=fr.fraccion_id,
-            nivel_limpieza_id=nivel_id,
-        ).first()
+        # Buscar por ID esperado para este SOP específico
+        es_id_expected = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
+        es = ElementoSet.query.filter_by(elemento_set_id=es_id_expected).first()
 
         if not es:
-            es_id_new = make_es_id(sop.sop_id, fr.fraccion_id, nivel_id)
             es = ElementoSet(
-                elemento_set_id=es_id_new,
+                elemento_set_id=es_id_expected,
                 subarea_id=subarea.subarea_id,
                 fraccion_id=fr.fraccion_id,
                 nivel_limpieza_id=nivel_id,
@@ -1533,7 +1650,7 @@ def sop_elementoset_edit(sop_id):
 
         db.session.commit()
         flash("✅ Elementos del set guardados.", "success")
-        return redirect(url_for("main.sop_elementoset_edit", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf.sop_fraccion_id))
+        return redirect(url_for("main.sop_elementoset_edit", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf.sop_fraccion_id))
 
     return render_template(
         "sop_elementoset.html",
@@ -1550,7 +1667,10 @@ def sop_elementoset_edit(sop_id):
         kits=kits,
         recetas=recetas,
         consumos=consumos,
+        tipo_sop=tipo_sop,
     )
+
+
 
 
 # =========================
@@ -1689,39 +1809,85 @@ def plantilla_item_add(plantilla_id: int):
     personal_id = request.form.get("personal_id")
     area_id = request.form.get("area_id")
     subarea_id = request.form.get("subarea_id")
+    
+    # ✅ NUEVOS CAMPOS
+    es_adicional_str = request.form.get("es_adicional", "0")
+    es_adicional = es_adicional_str == "1"
+    tipo_sop_form = (request.form.get("tipo_sop") or "regular").strip().lower()
     nivel = canon_nivel(request.form.get("nivel_limpieza_asignado")) or "basica"
 
+    # Validar dia_index
     if dia_index is None or not str(dia_index).isdigit():
         flash("Día inválido.", "warning")
-        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+        return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=0))
 
     dia_index = int(dia_index)
     if dia_index < 0 or dia_index > 5:
         flash("Día inválido (0..5).", "warning")
-        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+        return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=0))
 
     if not (personal_id and area_id and subarea_id):
         flash("Faltan datos (personal/área/subárea).", "warning")
-        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+        return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
 
-    # (Opcional) Evitar duplicados exactos en el mismo día
-    exists = PlantillaItem.query.filter_by(
-        plantilla_id=plantilla_id,
-        dia_index=dia_index,
-        personal_id=personal_id,
-        subarea_id=subarea_id
-    ).first()
-    if exists:
-        flash("Ese personal ya tiene esa subárea en ese día dentro de la plantilla.", "warning")
-        return redirect(url_for("main.plantillas_panel", plantilla_id=plantilla_id))
+    # ✅ MAPEO: "extraordinario" en UI → "regular" en BD
+    if tipo_sop_form == "extraordinario":
+        tipo_sop = "regular"
+        nivel = "extraordinario"
+    elif tipo_sop_form == "consecuente":
+        tipo_sop = "consecuente"
+        nivel = "basica"
+    else:
+        tipo_sop = "regular"
 
+    # ✅ VALIDACIÓN: Box REGULAR no permite subáreas ya asignadas como REGULAR
+    if not es_adicional:
+        existe_misma_subarea = PlantillaItem.query.filter_by(
+            plantilla_id=plantilla_id,
+            dia_index=dia_index,
+            subarea_id=subarea_id,
+            es_adicional=False
+        ).first()
+        if existe_misma_subarea:
+            flash("Esa subárea ya tiene una tarea REGULAR en este día de la plantilla.", "warning")
+            return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
+
+    # ✅ Verificar que existe el SOP del tipo seleccionado
+    sop = SOP.query.filter_by(subarea_id=subarea_id, tipo_sop=tipo_sop).first()
+    if not sop:
+        tipo_nombre = "Regular" if tipo_sop == "regular" else "Consecuente"
+        flash(f"No existe SOP {tipo_nombre} para esta subárea.", "warning")
+        return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
+
+    # ✅ VALIDACIÓN de duplicados según tipo
+    if tipo_sop == "consecuente":
+        # Consecuentes: ILIMITADAS - no validar duplicados
+        pass
+    else:
+        # Regular (incluyendo extraordinario): solo 1 por sop_id en el día
+        existe_mismo_sop = PlantillaItem.query.filter_by(
+            plantilla_id=plantilla_id,
+            dia_index=dia_index,
+            subarea_id=subarea_id,
+            sop_id=sop.sop_id
+        ).first()
+        if existe_mismo_sop:
+            if nivel == "extraordinario":
+                flash("Ya existe una tarea Extraordinario para esta subárea en este día.", "warning")
+            else:
+                flash("Ya existe una tarea Regular para esta subárea en este día.", "warning")
+            return redirect(url_for("main.plantilla_dia", plantilla_id=plantilla_id, dia_index=dia_index))
+
+    # ✅ Crear item con sop_id y es_adicional
     it = PlantillaItem(
         plantilla_id=plantilla_id,
         dia_index=dia_index,
         personal_id=personal_id,
         area_id=area_id,
         subarea_id=subarea_id,
-        nivel_limpieza_asignado=nivel
+        nivel_limpieza_asignado=nivel,
+        sop_id=sop.sop_id,
+        es_adicional=es_adicional
     )
     db.session.add(it)
     db.session.commit()
@@ -1783,7 +1949,7 @@ def plantilla_dia(plantilla_id: int, dia_index: int):
     day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
     dia_nombre = day_names[dia_index]
 
-    # items del día (precargamos relaciones para mostrar nombres)
+    # items del día
     items = (
         PlantillaItem.query
         .options(
@@ -1795,13 +1961,15 @@ def plantilla_dia(plantilla_id: int, dia_index: int):
         .all()
     )
 
-    asignadas_ids = {it.subarea_id for it in items}
+    # ✅ Separar items regulares para el bloqueo
+    items_regulares = [it for it in items if not getattr(it, 'es_adicional', False)]
+    asignadas_regular_ids = {it.subarea_id for it in items_regulares}
 
     personal_list = Personal.query.order_by(Personal.nombre.asc()).all()
     areas_list = Area.query.order_by(Area.orden_area.asc(), Area.area_nombre.asc()).all()
     subareas_list = SubArea.query.order_by(SubArea.orden_subarea.asc()).all()
 
-    # (Opcional) agrupar por persona como en plan_dia_form
+    # Agrupar por persona
     items_por_persona = {}
     for it in items:
         pid = it.personal_id
@@ -1809,7 +1977,7 @@ def plantilla_dia(plantilla_id: int, dia_index: int):
             items_por_persona[pid] = {"persona": it.personal, "items": []}
         items_por_persona[pid]["items"].append(it)
 
-    # orden: primero por 'orden' (drag & drop), luego por área y subárea
+    # Ordenar items dentro de cada persona
     for pid in items_por_persona:
         items_por_persona[pid]["items"].sort(key=lambda x: (
             x.orden or 0,
@@ -1825,7 +1993,8 @@ def plantilla_dia(plantilla_id: int, dia_index: int):
         personal_list=personal_list,
         areas_list=areas_list,
         subareas_list=subareas_list,
-        asignadas_ids=asignadas_ids,
+        asignadas_ids=asignadas_regular_ids,  # Compatibilidad
+        asignadas_regular_ids=asignadas_regular_ids,  # ✅ Para box REGULAR
         items_por_persona=items_por_persona,
         hide_nav=True,
     )
@@ -1858,11 +2027,11 @@ def nivel_letter(nivel_id: int) -> str:
     # BD: 1=B, 2=M, 3=P
     return {1: "B", 2: "M", 3: "P"}.get(int(nivel_id), "B")
 
-def make_sop_id(subarea_id: str) -> str:
-    # subarea_id: "AD-DI-BA-001" -> "SP-AD-DI-BA-001"
-    if not subarea_id:
-        raise ValueError("subarea_id vacío")
-    return subarea_id if subarea_id.startswith("SP-") else f"SP-{subarea_id}"
+def make_sop_id(subarea_id: str, tipo_sop: str) -> str:
+    """Genera sop_id: SP-{subarea_id}-R o SP-{subarea_id}-C"""
+    sufijo = "R" if tipo_sop == "regular" else "C"
+    return f"SP-{subarea_id}-{sufijo}"
+
 
 def make_sf_id(sop_id: str, fraccion_id: str) -> str:
     # "SP-AD-DI-BA-001" + "FR-SE-001" -> "SF-AD-DI-BA-001-SE-001"
@@ -1884,17 +2053,20 @@ def make_es_id(sop_id: str, fraccion_id: str, nivel_id: int) -> str:
 
 
 # =========================
-# SOP Panel
+# SOP PANEL
 # =========================
-from sqlalchemy import and_
-
 @main_bp.route("/sop")
 @admin_required
 def sop_panel():
     area_id = (request.args.get("area_id") or "").strip()
     subarea_id = (request.args.get("subarea_id") or "").strip()
+    tipo_sop = (request.args.get("tipo_sop") or "regular").strip()  # ← NUEVO
 
-    # NUEVO: nivel seleccionado
+    # Validar tipo_sop
+    if tipo_sop not in ("regular", "consecuente"):
+        tipo_sop = "regular"
+
+    # Nivel seleccionado
     nivel = canon_nivel(request.args.get("nivel")) or "basica"
     nivel_id = nivel_to_id(nivel) or 1
 
@@ -1914,12 +2086,13 @@ def sop_panel():
     has_nivel = False
 
     if subarea_id:
-        sop = SOP.query.filter_by(subarea_id=subarea_id).first()
+        # ← MODIFICADO: buscar por subarea_id Y tipo_sop
+        sop = SOP.query.filter_by(subarea_id=subarea_id, tipo_sop=tipo_sop).first()
 
         if sop and sop.sop_fracciones and len(sop.sop_fracciones) > 0:
             has_fracciones = True
 
-        # ✅ Existe “nivel” si hay al menos un detalle para ese nivel
+        # Existe "nivel" si hay al menos un detalle para ese nivel
         if sop:
             has_nivel = (
                 db.session.query(SopFraccionDetalle.sop_fraccion_detalle_id)
@@ -1942,9 +2115,10 @@ def sop_panel():
         subarea_id=subarea_id,
         sop=sop,
         has_fracciones=has_fracciones,
-        has_nivel=has_nivel,          # NUEVO
-        nivel=nivel,                  # NUEVO
-        nivel_id=nivel_id,            # NUEVO
+        has_nivel=has_nivel,
+        nivel=nivel,
+        nivel_id=nivel_id,
+        tipo_sop=tipo_sop,  # ← NUEVO
     )
 
 
@@ -1983,9 +2157,14 @@ def sop_fraccion_detalle_id_from(sop_fraccion_id: str, nivel_limpieza_id: int) -
 @main_bp.route("/sop/<sop_id>/detalles", methods=["GET", "POST"])
 @admin_required
 def sop_detalles(sop_id):
+    # ✅ AÑADIR: Capturar tipo_sop
+    tipo_sop = (request.args.get("tipo_sop") or request.form.get("tipo_sop") or "regular").strip()
+    if tipo_sop not in ("regular", "consecuente"):
+        tipo_sop = "regular"
+    
     # nivel por query o form
     nivel = (request.args.get("nivel") or request.form.get("nivel") or "").strip().lower()
-    if nivel not in ("basica", "media", "profundo"):
+    if nivel not in ("basica", "media", "profundo", "extraordinario"):
         nivel = "media"
 
     nivel_obj = NivelLimpieza.query.filter_by(nombre=nivel).first()
@@ -2012,7 +2191,8 @@ def sop_detalles(sop_id):
             "main.sop_panel",
             area_id=subarea.area_id,
             subarea_id=subarea.subarea_id,
-            nivel=nivel
+            nivel=nivel,
+            tipo_sop=tipo_sop  # ✅ AÑADIR
         ))
 
     # ✅ Fracciones que YA tienen detalle para este nivel
@@ -2039,6 +2219,7 @@ def sop_detalles(sop_id):
             nivel=nivel,
             nivel_id=nivel_id,
             nivel_obj=nivel_obj,
+            tipo_sop=tipo_sop,  # ✅ AÑADIR
             sop_fracciones=[],
             sf_actual=None,
             detalle=None,
@@ -2082,13 +2263,15 @@ def sop_detalles(sop_id):
     if met and met.metodologia_base:
         metodologia_base = met.metodologia_base
 
-    # Elemento sets válidos para (subarea, fraccion, nivel)
+    # Elemento sets válidos para este SOP específico
+    sop_core = sop.sop_id.replace("SP-", "ES-")
     elemento_sets = (
         ElementoSet.query
-        .filter_by(
-            subarea_id=subarea.subarea_id,
-            fraccion_id=fr.fraccion_id,
-            nivel_limpieza_id=nivel_id,
+        .filter(
+            ElementoSet.subarea_id == subarea.subarea_id,
+            ElementoSet.fraccion_id == fr.fraccion_id,
+            ElementoSet.nivel_limpieza_id == nivel_id,
+            ElementoSet.elemento_set_id.like(f"{sop_core}-%")
         )
         .order_by(ElementoSet.elemento_set_id.asc())
         .all()
@@ -2128,7 +2311,7 @@ def sop_detalles(sop_id):
                 detalle.tiempo_unitario_min = float(tiempo_raw)
             except ValueError:
                 flash("Tiempo inválido.", "warning")
-                return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+                return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf_actual.sop_fraccion_id))  # ✅ AÑADIR tipo_sop
 
         if mode == "elementos":
             # Regla BD: si elemento_set_id != NULL => kit_id y receta_id deben ser NULL
@@ -2165,7 +2348,7 @@ def sop_detalles(sop_id):
                 ).first()
                 if not es_ok:
                     flash("Elemento Set inválido para esta subárea/fracción/nivel.", "warning")
-                    return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+                    return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf_actual.sop_fraccion_id))  # ✅ AÑADIR tipo_sop
 
             detalle.elemento_set_id = es_id
 
@@ -2184,11 +2367,11 @@ def sop_detalles(sop_id):
             # Si quieres ver el error real en consola:
             print("💥 ERROR COMMIT sop_detalles:", repr(e))
             flash("Error guardando detalle (revisa consola).", "error")
-            return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+            return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf_actual.sop_fraccion_id))  # ✅ AÑADIR tipo_sop
 
         flash("✅ Detalle guardado.", "success")
         # ✅ Importante: aquí verás POST 302 en logs (y luego GET 200)
-        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, sop_fraccion_id=sf_actual.sop_fraccion_id))
+        return redirect(url_for("main.sop_detalles", sop_id=sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf_actual.sop_fraccion_id))  # ✅ AÑADIR tipo_sop
 
     # GET
     return render_template(
@@ -2198,6 +2381,7 @@ def sop_detalles(sop_id):
         nivel=nivel,
         nivel_id=nivel_id,
         nivel_obj=nivel_obj,
+        tipo_sop=tipo_sop,  # ✅ AÑADIR
         sop_fracciones=sop_fracciones,
         sf_actual=sf_actual,
         detalle=detalle,
@@ -2210,13 +2394,20 @@ def sop_detalles(sop_id):
         hide_nav=True,
     )
 
-
+# ============================================================
+# SOP FRACCIONES EDIT
+# ============================================================
 @main_bp.route("/sop/<sop_id>/fracciones")
 @admin_required
 def sop_fracciones_edit(sop_id):
     nivel = (request.args.get("nivel") or "media").strip().lower()
-    if nivel not in ("basica", "media", "profundo"):
+    if nivel not in ("basica", "media", "profundo", "extraordinario"):
         nivel = "media"
+
+    # ✅ AÑADIR: Capturar tipo_sop
+    tipo_sop = (request.args.get("tipo_sop") or "regular").strip()
+    if tipo_sop not in ("regular", "consecuente"):
+        tipo_sop = "regular"
 
     nivel_id = nivel_to_id(nivel) or 2
 
@@ -2224,8 +2415,9 @@ def sop_fracciones_edit(sop_id):
     if not sop:
         flash("SOP no encontrado.", "error")
         return redirect(url_for("main.sop_panel"))
+    
+    tipo_sop = sop.tipo_sop
 
-    # ✅ ¿Existe AL MENOS un detalle para este nivel?
     has_level = (
         db.session.query(SopFraccionDetalle.sop_fraccion_detalle_id)
         .join(SopFraccion, SopFraccion.sop_fraccion_id == SopFraccionDetalle.sop_fraccion_id)
@@ -2238,10 +2430,9 @@ def sop_fracciones_edit(sop_id):
     )
 
     if not has_level:
-        # ir a seleccionar fracciones para ese nivel
-        return redirect(url_for("main.sop_crear", subarea_id=sop.subarea_id, nivel=nivel))
+        # ✅ CORREGIDO: Añadir tipo_sop
+        return redirect(url_for("main.sop_crear", subarea_id=sop.subarea_id, nivel=nivel, tipo_sop=tipo_sop))
 
-    # si sí hay nivel, manda a la primera fracción de ese nivel
     first_sf = (
         SopFraccion.query
         .join(SopFraccionDetalle, SopFraccionDetalle.sop_fraccion_id == SopFraccion.sop_fraccion_id)
@@ -2253,14 +2444,14 @@ def sop_fracciones_edit(sop_id):
         .first()
     )
 
+    # ✅ CORREGIDO: Añadir tipo_sop
     return redirect(url_for(
         "main.sop_detalles",
         sop_id=sop_id,
         nivel=nivel,
+        tipo_sop=tipo_sop,  # ← NUEVO
         sop_fraccion_id=first_sf.sop_fraccion_id
     ))
-
-
 
 # =========================
 # SOP: crear (seleccionar fracciones por nivel)
@@ -2268,7 +2459,11 @@ def sop_fracciones_edit(sop_id):
 @main_bp.route("/sop/crear/<subarea_id>", methods=["GET", "POST"])
 @admin_required
 def sop_crear(subarea_id):
-    # nivel viene del panel o query
+    # tipo_sop y nivel vienen del panel o query
+    tipo_sop = (request.args.get("tipo_sop") or request.form.get("tipo_sop") or "regular").strip()
+    if tipo_sop not in ("regular", "consecuente"):
+        tipo_sop = "regular"
+
     nivel = canon_nivel(request.args.get("nivel")) or canon_nivel(request.form.get("nivel")) or "basica"
     nivel_id = nivel_to_id(nivel) or 1
 
@@ -2278,19 +2473,40 @@ def sop_crear(subarea_id):
         .first_or_404()
     )
 
-    sop_id = make_sop_id(subarea_id)
-    sop = SOP.query.filter_by(subarea_id=subarea_id).first()
+    # Obtener grupo_area del área padre
+    grupo_area = subarea.area.grupo_area if subarea.area else None
 
-    # ✅ Fracciones disponibles SOLO si tienen metodología para ese nivel
-    fracciones = (
+    # Generar sop_id esperado
+    sop_id = make_sop_id(subarea_id, tipo_sop)
+    
+    # Buscar SOP existente
+    sop = SOP.query.filter_by(sop_id=sop_id).first()
+
+    if sop:
+        tipo_sop = sop.tipo_sop
+
+    if nivel_id == 4:  # Extraordinario
+        # Mostrar fracciones con metodología Profundo (3) O Extraordinario (4)
+        niveles_validos = [3, 4]
+    else:
+        # Para otros niveles, solo ese nivel específico
+        niveles_validos = [nivel_id]
+
+    # Fracciones disponibles: filtrar por grupo_area Y que tengan metodología para ese nivel
+    fracciones_query = (
         Fraccion.query
         .join(Metodologia, Metodologia.fraccion_id == Fraccion.fraccion_id)
-        .filter(Metodologia.nivel_limpieza_id == nivel_id)
-        .order_by(Fraccion.fraccion_id.asc())
-        .all()
+        .filter(Metodologia.nivel_limpieza_id.in_(niveles_validos))  # ← Usar IN
+        .distinct()
     )
+        
+    # Filtrar por grupo_area si existe
+    if grupo_area:
+        fracciones_query = fracciones_query.filter(Fraccion.grupo_area == grupo_area)
+    
+    fracciones = fracciones_query.order_by(Fraccion.fraccion_id.asc()).all()
 
-    # ====== SELECTED + ORDEN MAP para este nivel ======
+    # SELECTED + ORDEN MAP para este nivel
     selected_ids = set()
     orden_map = {}
 
@@ -2307,22 +2523,25 @@ def sop_crear(subarea_id):
         selected_ids = {sf.fraccion_id for sf in sfs_nivel}
         orden_map = {sf.fraccion_id: (sf.orden or 1000) for sf in sfs_nivel}
 
-    # =========================
     # POST: guardar cambios del nivel
-    # =========================
     if request.method == "POST":
         selected = request.form.getlist("fraccion_id")
         selected_set = set(selected)
 
         if not selected:
             flash("Selecciona al menos 1 fracción.", "warning")
-            return redirect(url_for("main.sop_crear", subarea_id=subarea_id, nivel=nivel))
+            return redirect(url_for("main.sop_crear", subarea_id=subarea_id, nivel=nivel, tipo_sop=tipo_sop))
 
         # 1) crear SOP si no existe
         if not sop:
-            sop = SOP(sop_id=sop_id, subarea_id=subarea_id)
+            sop = SOP(
+                sop_id=sop_id,
+                subarea_id=subarea_id,
+                tipo_sop=tipo_sop
+            )
             db.session.add(sop)
             db.session.flush()
+            tipo_sop = sop.tipo_sop
 
         # 2) calcular qué se removió (solo para este nivel)
         prev_selected = selected_ids.copy() if selected_ids else set()
@@ -2371,7 +2590,7 @@ def sop_crear(subarea_id):
                 db.session.add(sf)
                 db.session.flush()
             else:
-                sf.orden = orden  # ✅ importantísimo: actualiza orden
+                sf.orden = orden
 
             sd = SopFraccionDetalle.query.filter_by(
                 sop_fraccion_id=sf.sop_fraccion_id,
@@ -2389,7 +2608,7 @@ def sop_crear(subarea_id):
 
         db.session.commit()
         flash(f"✅ Fracciones guardadas para nivel {nivel}.", "success")
-        return redirect(url_for("main.sop_fracciones_edit", sop_id=sop.sop_id, nivel=nivel))
+        return redirect(url_for("main.sop_fracciones_edit", sop_id=sop.sop_id, nivel=nivel, tipo_sop=tipo_sop))
 
     # GET
     return render_template(
@@ -2399,9 +2618,10 @@ def sop_crear(subarea_id):
         sop_id=sop_id,
         nivel=nivel,
         nivel_id=nivel_id,
+        tipo_sop=tipo_sop,
         fracciones=fracciones,
-        selected_ids=selected_ids,   # ✅ coincide con tu template
-        orden_map=orden_map,         # ✅ coincide con tu template
+        selected_ids=selected_ids,
+        orden_map=orden_map,
     )
 
 
@@ -2627,3 +2847,49 @@ def desmarcar_tarea_check(tarea_id):
     db.session.commit()
     
     return {"success": True}, 200
+
+
+# ============================================================
+# 3. NUEVOS ENDPOINTS AJAX (agregar al final del archivo)
+# ============================================================
+@main_bp.route("/api/verificar_sop/<subarea_id>/<tipo_sop>")
+@admin_required
+def verificar_sop_existe(subarea_id, tipo_sop):
+    """
+    Verifica si existe un SOP del tipo especificado.
+    
+    ✅ NOTA: "extraordinario" se mapea a "regular" en el frontend,
+    por lo que aquí tipo_sop será "regular" o "consecuente".
+    """
+    if tipo_sop not in ("regular", "consecuente"):
+        return jsonify({"existe": False, "sop_id": None, "error": "Tipo SOP inválido"})
+    
+    sop = SOP.query.filter_by(subarea_id=subarea_id, tipo_sop=tipo_sop).first()
+    
+    return jsonify({
+        "existe": sop is not None,
+        "sop_id": sop.sop_id if sop else None
+    })
+
+@main_bp.route("/api/subareas_con_sop/<area_id>")
+@admin_required
+def subareas_con_sop(area_id):
+    """
+    Retorna subáreas con información de SOPs disponibles.
+    Para el box ADICIONAL (sin bloqueo de ocupadas).
+    """
+    subareas = SubArea.query.filter_by(area_id=area_id).order_by(SubArea.orden_subarea.asc()).all()
+    
+    result = []
+    for s in subareas:
+        sop_regular = SOP.query.filter_by(subarea_id=s.subarea_id, tipo_sop="regular").first()
+        sop_consecuente = SOP.query.filter_by(subarea_id=s.subarea_id, tipo_sop="consecuente").first()
+        
+        result.append({
+            "id": s.subarea_id,
+            "nombre": s.subarea_nombre,
+            "tiene_regular": sop_regular is not None,
+            "tiene_consecuente": sop_consecuente is not None,
+        })
+    
+    return jsonify(result)
