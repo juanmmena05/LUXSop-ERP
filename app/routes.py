@@ -721,25 +721,39 @@ def ruta_dia(fecha):
 @main_bp.route("/reporte/<fecha>/<personal_id>")
 @login_required
 def reporte_persona_dia(fecha, personal_id):
-    
+    from sqlalchemy.orm import selectinload
+
     # Determinar si el usuario puede hacer checks (solo operativo, solo hoy, solo sus tareas)
     puede_hacer_check = False
     es_hoy = (fecha == date.today().strftime("%Y-%m-%d"))
-    
+
     if current_user.role != "admin":
         if current_user.personal_id != personal_id:
             abort(403)
         if not es_hoy:
             abort(403)
-        puede_hacer_check = True  # Operativo viendo su reporte de hoy
-    
+        puede_hacer_check = True
+
     fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
 
     dia = LanzamientoDia.query.filter_by(fecha=fecha_obj).first()
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
 
-    tareas = LanzamientoTarea.query.filter_by(dia_id=dia.dia_id, personal_id=personal_id).all()
+    # ✅ OPTIMIZACIÓN 1: Cargar tareas con sus relaciones de una vez
+    tareas = (
+        LanzamientoTarea.query
+        .filter_by(dia_id=dia.dia_id, personal_id=personal_id)
+        .options(
+            joinedload(LanzamientoTarea.personal),
+            joinedload(LanzamientoTarea.area),
+            joinedload(LanzamientoTarea.subarea),
+            joinedload(LanzamientoTarea.sop)
+        )
+        .order_by(LanzamientoTarea.orden, LanzamientoTarea.tarea_id)
+        .all()
+    )
+
     if not tareas:
         persona = Personal.query.filter_by(personal_id=personal_id).first()
         nombre = persona.nombre if persona else personal_id
@@ -752,89 +766,68 @@ def reporte_persona_dia(fecha, personal_id):
         checks = TareaCheck.query.filter(TareaCheck.tarea_id.in_(tarea_ids)).all()
         checks_map = {c.tarea_id: c.checked_at.strftime("%H:%M") for c in checks}
 
-    persona = getattr(tareas[0], "personal", None) or Personal.query.filter_by(personal_id=personal_id).first()
-    detalles = []
+    persona = tareas[0].personal
 
+    # ✅ OPTIMIZACIÓN 2: Obtener todos los sop_ids únicos y cargarlos de una vez
+    sop_ids = list({t.sop_id for t in tareas if t.sop_id})
+
+    if not sop_ids:
+        return "No hay SOPs asignados a estas tareas.", 404
+
+    # ✅ OPTIMIZACIÓN 3: Cargar todos los SOPs con sus relaciones en UNA sola query
+    sops_full = (
+        SOP.query
+        .filter(SOP.sop_id.in_(sop_ids))
+        .options(
+            # Usar selectinload en lugar de joinedload para relaciones "many"
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.fraccion),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.consumo),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.elemento),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
+            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.consumo),
+        )
+        .all()
+    )
+
+    # Crear diccionario para acceso rápido
+    sops_dict = {sop.sop_id: sop for sop in sops_full}
+
+    # ✅ OPTIMIZACIÓN 4: Obtener todas las fracciones únicas y cargar metodologías de una vez
+    all_fraccion_ids = set()
+    all_nivel_ids = set()
+
+    for t in tareas:
+        nivel_id = nivel_to_id(canon_nivel(t.nivel_limpieza_asignado))
+        if nivel_id:
+            all_nivel_ids.add(nivel_id)
+
+    for sop in sops_full:
+        for sf in sop.sop_fracciones or []:
+            all_fraccion_ids.add(sf.fraccion_id)
+
+    # Cargar todas las metodologías de una vez
+    met_map = build_met_map(all_fraccion_ids, all_nivel_ids)
+
+    # ✅ OPTIMIZACIÓN 5: Procesar tareas sin queries adicionales
+    detalles = []
     for t in tareas:
         area = t.area
         subarea = t.subarea
         if not area or not subarea:
             continue
 
-        # ✅ CAMBIO CRÍTICO: Usar sop_id de la tarea
-        sop_id = getattr(t, 'sop_id', None)
-        print(f"DEBUG: tarea_id={t.tarea_id}, sop_id de tarea={sop_id}")  # ← AGREGAR
-        if sop_id:
-            sop = SOP.query.filter_by(sop_id=sop_id).first()
-        else:
-            # Fallback para tareas antiguas sin sop_id
-            sop = SOP.query.filter_by(subarea_id=subarea.subarea_id, tipo_sop="regular").first()
-        
-        if not sop:
+        sop_id = t.sop_id
+        sop_full = sops_dict.get(sop_id)
+        if not sop_full:
             continue
 
         nivel_asignado = canon_nivel(t.nivel_limpieza_asignado)
         nivel_id = nivel_to_id(nivel_asignado)
         if not nivel_id:
             continue
-
-        sop_full = (
-            SOP.query.options(
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.fraccion),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.kit)
-                    .joinedload(Kit.detalles)
-                    .joinedload(KitDetalle.herramienta),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.receta)
-                    .joinedload(Receta.detalles)
-                    .joinedload(RecetaDetalle.quimico),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.consumo),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.elemento_set)
-                    .joinedload(ElementoSet.detalles)
-                    .joinedload(ElementoDetalle.elemento),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.elemento_set)
-                    .joinedload(ElementoSet.detalles)
-                    .joinedload(ElementoDetalle.receta)
-                    .joinedload(Receta.detalles)
-                    .joinedload(RecetaDetalle.quimico),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.elemento_set)
-                    .joinedload(ElementoSet.detalles)
-                    .joinedload(ElementoDetalle.kit)
-                    .joinedload(Kit.detalles)
-                    .joinedload(KitDetalle.herramienta),
-
-                joinedload(SOP.sop_fracciones)
-                    .joinedload(SopFraccion.detalles)
-                    .joinedload(SopFraccionDetalle.elemento_set)
-                    .joinedload(ElementoSet.detalles)
-                    .joinedload(ElementoDetalle.consumo),
-            )
-            .filter_by(sop_id=sop.sop_id)
-            .first()
-        )
-        if not sop_full:
-            continue
-
-        fraccion_ids = {sf.fraccion_id for sf in (sop_full.sop_fracciones or [])}
-        met_map = build_met_map(fraccion_ids, {nivel_id})
 
         fracciones_filtradas = []
         tiempo_total_min = 0.0
@@ -845,7 +838,6 @@ def reporte_persona_dia(fecha, personal_id):
                 continue
 
             fr = sf.fraccion
-
             metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
             if not metodologia:
                 continue
@@ -853,10 +845,9 @@ def reporte_persona_dia(fecha, personal_id):
             receta = sd.receta
             kit = sd.kit
             elemento_set = sd.elemento_set
-            consumo_sd = getattr(sd, "consumo", None)
+            consumo_sd = sd.consumo
 
             tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
-
             if tiempo_min is not None:
                 tiempo_total_min += tiempo_min
 
@@ -867,15 +858,14 @@ def reporte_persona_dia(fecha, personal_id):
                 rows = []
 
                 for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
-                    elemento = getattr(ed, "elemento", None)
-
-                    q_str, r_str = fmt_quimico_y_receta(getattr(ed, "receta", None))
-                    c_str = fmt_consumo(getattr(ed, "consumo", None))
-                    h_str = fmt_herramientas_list(getattr(ed, "kit", None))
+                    elemento = ed.elemento
+                    q_str, r_str = fmt_quimico_y_receta(ed.receta)
+                    c_str = fmt_consumo(ed.consumo)
+                    h_str = fmt_herramientas_list(ed.kit)
 
                     rows.append([
-                        na(getattr(elemento, "descripcion", None)),
-                        na(str(getattr(elemento, "cantidad", None) or "")),
+                        na(elemento.descripcion if elemento else None),
+                        na(str(elemento.cantidad if elemento else "")),
                         q_str,
                         r_str,
                         c_str,
@@ -883,13 +873,11 @@ def reporte_persona_dia(fecha, personal_id):
                     ])
 
                 tabla = {"headers": headers, "rows": rows}
-
             else:
                 headers = ["Químico", "Receta", "Consumo", "Herramienta"]
                 q_str, r_str = fmt_quimico_y_receta(receta)
                 c_str = fmt_consumo(consumo_sd)
                 h_str = fmt_herramientas_list(kit)
-
                 tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
 
             fracciones_filtradas.append({
@@ -909,13 +897,12 @@ def reporte_persona_dia(fecha, personal_id):
             "subarea": subarea.subarea_nombre,
             "nivel": nivel_asignado,
             "tiempo_total_min": round(tiempo_total_min, 2),
-            "observacion_critica": sop.observacion_critica_sop,
+            "observacion_critica": sop_full.observacion_critica_sop,
             "fracciones": fracciones_filtradas,
             "orden": t.orden if t.orden is not None else 0,
             "orden_area": area.orden_area if area.orden_area is not None else 9999,
             "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
-            # ✅ NUEVOS CAMPOS para el template
-            "es_adicional": getattr(t, 'es_adicional', False),
+            "es_adicional": t.es_adicional if hasattr(t, 'es_adicional') else False,
             "sop_id": sop_id,
         })
 
