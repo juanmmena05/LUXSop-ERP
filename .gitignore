@@ -24,3 +24,18 @@ Thumbs.db
 
 # Ignorar PDFs y reportes generados
 *.pdf
+
+# Ignorar archivos de desarrollo/seed
+data/
+imports/
+instance/
+import_excels.py
+manage.py
+report_validate.json
+seed_data.py
+seed_users.py
+validate_excels.py
+reset_azure_db.py
+
+# Archivo de variables de entorno (IMPORTANTE: nunca subir credenciales)
+.env
