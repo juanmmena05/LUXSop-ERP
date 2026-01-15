@@ -88,7 +88,7 @@ CFG = {
                  "required": ["personal_id", "nombre"]},
 
     "Area": {"sheet": "Area", "pk": "area_id",
-             "required": ["area_id", "area_nombre", "tipo_area", "cantidad_subareas", "orden_area"]},
+             "required": ["area_id", "area_nombre", "division", "cantidad_subareas", "orden_area"]},
 
     "SubArea": {"sheet": "SubArea", "pk": "subarea_id",
                 "required": ["subarea_id", "area_id", "subarea_nombre", "superficie_subarea", "frecuencia", "orden_subarea"]},

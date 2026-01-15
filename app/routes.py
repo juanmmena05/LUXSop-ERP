@@ -464,13 +464,13 @@ def nueva_area():
     if request.method == "POST":
         area_id = request.form.get("area_id")
         area_nombre = request.form.get("area_nombre")
-        tipo_area = request.form.get("tipo_area")
+        division = request.form.get("division")
         cantidad_subareas = int(request.form.get("cantidad_subareas") or 0)
 
         db.session.add(Area(
             area_id=area_id,
             area_nombre=area_nombre,
-            tipo_area=tipo_area,
+            division=division,
             cantidad_subareas=cantidad_subareas,
         ))
         db.session.commit()
@@ -2473,8 +2473,8 @@ def sop_crear(subarea_id):
         .first_or_404()
     )
 
-    # Obtener grupo_area del área padre
-    grupo_area = subarea.area.grupo_area if subarea.area else None
+    # Obtener grupo_fracciones del área padre
+    grupo_fracciones = subarea.area.grupo_fracciones if subarea.area else None
 
     # Generar sop_id esperado
     sop_id = make_sop_id(subarea_id, tipo_sop)
@@ -2492,7 +2492,7 @@ def sop_crear(subarea_id):
         # Para otros niveles, solo ese nivel específico
         niveles_validos = [nivel_id]
 
-    # Fracciones disponibles: filtrar por grupo_area Y que tengan metodología para ese nivel
+    # Fracciones disponibles: filtrar por grupo_fracciones Y que tengan metodología para ese nivel
     fracciones_query = (
         Fraccion.query
         .join(Metodologia, Metodologia.fraccion_id == Fraccion.fraccion_id)
@@ -2500,9 +2500,9 @@ def sop_crear(subarea_id):
         .distinct()
     )
         
-    # Filtrar por grupo_area si existe
-    if grupo_area:
-        fracciones_query = fracciones_query.filter(Fraccion.grupo_area == grupo_area)
+    # Filtrar por grupo_fracciones si existe
+    if grupo_fracciones:
+        fracciones_query = fracciones_query.filter(Fraccion.grupo_fracciones == grupo_fracciones)
     
     fracciones = fracciones_query.order_by(Fraccion.fraccion_id.asc()).all()
 
