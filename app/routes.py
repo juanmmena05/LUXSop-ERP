@@ -481,6 +481,12 @@ def asignar_ruta(personal_id):
 @admin_required
 def borrar_tarea(fecha, tarea_id):
     tarea = LanzamientoTarea.query.get_or_404(tarea_id)
+
+    # Eliminar check asociado explícitamente (por si el CASCADE no funciona en Azure)
+    check = TareaCheck.query.filter_by(tarea_id=tarea_id).first()
+    if check:
+        db.session.delete(check)
+
     db.session.delete(tarea)
     db.session.commit()
     return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
@@ -771,13 +777,22 @@ def reporte_persona_dia(fecha, personal_id):
     # ✅ OPTIMIZACIÓN 2: Obtener todos los sop_ids únicos y cargarlos de una vez
     sop_ids = list({t.sop_id for t in tareas if t.sop_id})
 
-    if not sop_ids:
+    # ✅ FIX: Si hay tareas sin sop_id, buscar SOPs por subarea_id
+    subarea_ids_sin_sop = list({t.subarea_id for t in tareas if not t.sop_id and t.subarea_id})
+
+    if not sop_ids and not subarea_ids_sin_sop:
         return "No hay SOPs asignados a estas tareas.", 404
 
     # ✅ OPTIMIZACIÓN 3: Cargar todos los SOPs con sus relaciones en UNA sola query
+    query_filters = []
+    if sop_ids:
+        query_filters.append(SOP.sop_id.in_(sop_ids))
+    if subarea_ids_sin_sop:
+        query_filters.append(and_(SOP.subarea_id.in_(subarea_ids_sin_sop), SOP.tipo_sop == "regular"))
+
     sops_full = (
         SOP.query
-        .filter(SOP.sop_id.in_(sop_ids))
+        .filter(or_(*query_filters))
         .options(
             # Usar selectinload en lugar de joinedload para relaciones "many"
             selectinload(SOP.sop_fracciones).selectinload(SopFraccion.fraccion),
@@ -792,8 +807,9 @@ def reporte_persona_dia(fecha, personal_id):
         .all()
     )
 
-    # Crear diccionario para acceso rápido
+    # Crear diccionarios para acceso rápido (por sop_id Y por subarea_id)
     sops_dict = {sop.sop_id: sop for sop in sops_full}
+    sops_por_subarea = {sop.subarea_id: sop for sop in sops_full if sop.tipo_sop == "regular"}
 
     # ✅ OPTIMIZACIÓN 4: Obtener todas las fracciones únicas y cargar metodologías de una vez
     all_fraccion_ids = set()
@@ -819,8 +835,16 @@ def reporte_persona_dia(fecha, personal_id):
         if not area or not subarea:
             continue
 
+        # Buscar SOP: primero por sop_id, luego por subarea_id (fallback para tareas antiguas)
         sop_id = t.sop_id
-        sop_full = sops_dict.get(sop_id)
+        sop_full = sops_dict.get(sop_id) if sop_id else None
+
+        if not sop_full and subarea:
+            # Fallback: buscar por subarea_id
+            sop_full = sops_por_subarea.get(subarea.subarea_id)
+            if sop_full:
+                sop_id = sop_full.sop_id
+
         if not sop_full:
             continue
 
