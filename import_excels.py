@@ -151,7 +151,7 @@ CFG: Dict[str, Dict[str, Any]] = {
     "Area": {
         "file": "Area-SubArea.xlsx", "sheet": "Area", "model": Area,
         "pk": ["area_id"],
-        "fields": ["area_id", "area_nombre", "tipo_area", "cantidad_subareas", "orden_area"],
+        "fields": ["area_id", "area_nombre", "division", "cantidad_subareas", "orden_area"],
         "casters": {"cantidad_subareas": to_int, "orden_area": to_int},
     },
     "SubArea": {

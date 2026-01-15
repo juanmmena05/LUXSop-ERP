@@ -12,8 +12,8 @@ class Area(db.Model):
 
     area_id = db.Column(db.String(50), primary_key=True)
     area_nombre = db.Column(db.String(100))
-    tipo_area = db.Column(db.String(50))
-    grupo_area = db.Column(db.String(20), nullable=True)  # ← NUEVO
+    division = db.Column(db.String(50))
+    grupo_fracciones = db.Column(db.String(20), nullable=True)  # ← NUEVO
     cantidad_subareas = db.Column(db.Integer)
     orden_area = db.Column(db.Integer, nullable=True)
     subareas = db.relationship("SubArea", back_populates="area")
@@ -98,7 +98,7 @@ class Fraccion(db.Model):
     fraccion_id = db.Column(db.String, primary_key=True)  # FR-XX-###
     fraccion_nombre = db.Column(db.String, nullable=False)
     nota_tecnica = db.Column(db.Text)
-    grupo_area = db.Column(db.String(20), nullable=True)  # ← NUEVO
+    grupo_fracciones = db.Column(db.String(20), nullable=True)  # ← NUEVO
 
     metodologias = db.relationship(
         "Metodologia",

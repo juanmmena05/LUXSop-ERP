@@ -105,7 +105,7 @@ with app.app_context():
     area1 = Area(
         area_id="AD-DI",
         area_nombre="Direccion",
-        tipo_area="Administracion",
+        division="Administracion",
         cantidad_subareas=4,
         orden_area=1
     )
