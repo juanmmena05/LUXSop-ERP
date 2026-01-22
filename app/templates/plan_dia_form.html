@@ -171,6 +171,33 @@
     .asig-item.drag-over { border-top: 3px solid var(--accent); margin-top: -3px; }
     .drag-handle { cursor: grab; padding: 0 8px; color: #aaa; font-size: 1.1rem; }
     .drag-handle:hover { color: #666; }
+    
+    /* ===== COLORES TAREAS FIJAS Y EVENTOS (NUEVO) ===== */
+    .asig-item.tipo-inicio { 
+      background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+      border-left: 4px solid #2196F3;
+    }
+    .asig-item.tipo-receso { 
+      background: linear-gradient(135deg, #FFF9C4 0%, #FFF59D 100%);
+      border-left: 4px solid #FBC02D;
+    }
+    .asig-item.tipo-limpieza_equipo { 
+      background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+      border-left: 4px solid #66BB6A;
+    }
+    .asig-item.tipo-evento { 
+      background: linear-gradient(135deg, #FFE0B2 0%, #FFCC80 100%);
+      border-left: 4px solid #FF9800;
+    }
+    /* Tareas no arrastrables */
+    .asig-item.no-arrastrable {
+      cursor: default;
+      opacity: 0.95;
+    }
+    .asig-item.no-arrastrable .drag-handle {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
 
     /* ===== Drawer (☰) ===== */
     .burger{
@@ -393,11 +420,28 @@
         </h2>
         <div class="tareas-lista" data-persona-id="{{ persona_id }}">
           {% for t in grupo.subtareas %}
-            <div class="asig-item" draggable="true" data-tarea-id="{{ t.tarea_id }}">
+            <div class="asig-item tipo-{{ t.tipo_tarea|replace('_', '-') }} {% if not t.es_arrastrable %}no-arrastrable{% endif %}" 
+                 draggable="{% if t.es_arrastrable %}true{% else %}false{% endif %}" 
+                 data-tarea-id="{{ t.tarea_id }}">
               <span class="drag-handle">⋮⋮</span>
               <!-- ✅ CAMBIAR: -->
               <div class="asig-meta">
-                <strong>{{ t.area.area_nombre if t.area else t.area_id }}</strong> — {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
+                {% if t.tipo_tarea == 'inicio' %}
+                  <strong>INICIO</strong><br>
+                  <small>Marca el inicio de tu jornada</small>
+                {% elif t.tipo_tarea == 'receso' %}
+                  <strong>RECESO</strong><br>
+                  <small>{{ tiempos_por_tarea.get(t.tarea_id, 0)|round(1) }} min</small>
+                {% elif t.tipo_tarea == 'limpieza_equipo' %}
+                  <strong>LIMPIEZA DE EQUIPO</strong><br>
+                  <small>{{ tiempos_por_tarea.get(t.tarea_id, 0)|round(1) }} min</small>  
+                {% elif t.tipo_tarea == 'evento' %}
+                  <strong>{{ t.sop_evento.caso_catalogo.nombre if t.sop_evento and t.sop_evento.caso_catalogo else 'EVENTO' }}</strong> 
+                  — {{ t.area.area_nombre if t.area else t.area_id }}<br>
+                  <small>{{ (t.sop_evento.detalles | map(attribute='tiempo_estimado') | sum) if t.sop_evento else 0 }} min</small>
+                {% else %}
+                  {# SOPs normales #}
+                  <strong>{{ t.area.area_nombre if t.area else t.area_id }}</strong> — {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
                 
                 <!-- ✅ Solo mostrar badge de tipo si NO es Extraordinario -->
                 {% if t.nivel_limpieza_asignado|lower != 'extraordinario' %}
@@ -416,6 +460,7 @@
                   {{ etiquetas.get(t.nivel_limpieza_asignado, t.nivel_limpieza_asignado|capitalize) }}
                 </span>
                 <br><small>{{ tiempos_por_tarea.get(t.tarea_id, 0)|round(1) }} min</small>
+                {% endif %} {# Cierre del if tipo_tarea #}
               </div>
               <form method="post" action="{{ url_for('main.borrar_tarea', fecha=fecha.strftime('%Y-%m-%d'), tarea_id=t.tarea_id) }}">
                 <button class="btn-delete" title="Eliminar" onclick="return confirm('¿Borrar esta tarea?');">✖</button>
@@ -581,6 +626,11 @@
 
     lista.addEventListener('dragstart', (e) => {
       if (e.target.classList.contains('asig-item')) {
+        // ✅ Prevenir drag si es no-arrastrable
+        if (e.target.classList.contains('no-arrastrable')) {
+          e.preventDefault();
+          return;
+        }
         draggedItem = e.target;
         e.target.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';

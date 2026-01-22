@@ -12,6 +12,8 @@ from flask_login import login_user, logout_user, login_required, current_user
 from .models import User
 from functools import wraps
 
+from functools import lru_cache
+
 import os
 import pdfkit
 import shutil
@@ -31,6 +33,12 @@ from .models import (
     AsignacionPersonal,
     PlantillaSemanal, PlantillaItem, PlantillaSemanaAplicada,
     TareaCheck,
+
+    # Eventos y Tareas Especiales (NUEVO)
+    EventoCatalogo, CasoCatalogo, SopEventoFraccion, 
+    MetodologiaEventoFraccion, 
+    MetodologiaEventoFraccionPaso,
+    SopEvento, SopEventoDetalle,
 
     # Recursos / elementos
     Elemento, ElementoSet, ElementoDetalle,
@@ -102,6 +110,68 @@ def get_or_create_dia(fecha_obj: date):
         db.session.add(dia)
         db.session.commit()
     return dia
+
+
+def crear_tareas_fijas(dia_id: int, personal_id: str):
+    """
+    Crea las 3 tareas fijas para un operario en un día:
+    - Inicio (orden -1)
+    - Receso (orden 50)
+    - Limpieza de Equipo (orden 999) - vinculada a SOP de evento
+    """
+    
+    inicio = LanzamientoTarea(
+        dia_id=dia_id,
+        personal_id=personal_id,
+        tipo_tarea='inicio',
+        orden=-1,
+        es_arrastrable=False
+    )
+    
+    receso = LanzamientoTarea(
+        dia_id=dia_id,
+        personal_id=personal_id,
+        tipo_tarea='receso',
+        orden=50,
+        es_arrastrable=False
+    )
+    
+    # ✅ Limpieza de Equipo vinculada al SOP de evento
+    limpieza = LanzamientoTarea(
+        dia_id=dia_id,
+        personal_id=personal_id,
+        tipo_tarea='limpieza_equipo',
+        sop_evento_id='SP-LI-EQ-001',  # ← AGREGAR ESTA LÍNEA
+        orden=999,
+        es_arrastrable=False
+    )
+    
+    db.session.add(inicio)
+    db.session.add(receso)
+    db.session.add(limpieza)
+    db.session.commit()
+
+def asegurar_tareas_fijas(dia_id: int, personal_id: str):
+    """
+    Verifica si un operario tiene tareas fijas en un día.
+    Si NO las tiene, las crea automáticamente.
+    
+    Retorna True si se crearon tareas fijas, False si ya existían.
+    """
+    
+    # Verificar si ya tiene tarea de inicio (indicador de que ya tiene fijas)
+    tiene_inicio = LanzamientoTarea.query.filter_by(
+        dia_id=dia_id,
+        personal_id=personal_id,
+        tipo_tarea='inicio'
+    ).first()
+    
+    if not tiene_inicio:
+        crear_tareas_fijas(dia_id, personal_id)
+        return True  # Se crearon las tareas fijas
+    
+    return False  # Ya existían
+
 
 # --- Helper: set etiqueta plantilla activa para una semana ---
 def set_plantilla_activa(lunes_semana: date, plantilla_id: Optional[int]):
@@ -177,7 +247,6 @@ def existe_tarea(fecha_obj: date, personal_id, subarea_id) -> bool:
         subarea_id=subarea_id
     ).first() is not None
 
-
 def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel, orden=0):
     dia = upsert_dia(fecha_obj)
     t = LanzamientoTarea(
@@ -188,8 +257,10 @@ def crear_tarea(fecha_obj: date, personal_id, area_id, subarea_id, nivel, orden=
         nivel_limpieza_asignado=canon_nivel(nivel) or "basica",
         orden=orden
     )
-    db.session.add(t)   
-
+    db.session.add(t)
+    
+    # ✅ Crear tareas fijas si no existen
+    asegurar_tareas_fijas(dia.dia_id, personal_id)
 
 # ====== APLICADORES ======
 def aplicar_ruta_base_personal(lunes_destino: date, overwrite: bool):
@@ -253,6 +324,7 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
             if existe:
                 continue
         
+
         t = LanzamientoTarea(
             dia_id=dia.dia_id,
             personal_id=it.personal_id,
@@ -264,6 +336,9 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
             orden=it.orden or 0
         )
         db.session.add(t)
+        
+        # ✅ Crear tareas fijas si el operador no las tiene en este día
+        asegurar_tareas_fijas(dia.dia_id, it.personal_id)
     
     db.session.commit()
 
@@ -373,10 +448,31 @@ def fmt_quimico_y_receta(receta) -> tuple[str, str]:
     return quimico_str, receta_str
 
 
+# Cache que expira cada 5 minutos
+_cache_timestamp = {}
 
-# =========================
-# HOME (panel semanal)
-# =========================
+def get_cached_or_query(cache_key, query_func, timeout_minutes=5):
+    now = datetime.now()
+    
+    if cache_key in _cache_timestamp:
+        cached_time, cached_data = _cache_timestamp[cache_key]
+        if now - cached_time < timedelta(minutes=timeout_minutes):
+            return cached_data
+    
+    # Query fresh data
+    data = query_func()
+    _cache_timestamp[cache_key] = (now, data)
+    return data
+
+# Uso:
+def get_all_areas():
+    return get_cached_or_query(
+        'areas_list',
+        lambda: Area.query.order_by(Area.orden_area).all(),
+        timeout_minutes=10
+    )
+
+
 # =========================
 # HOME (router)
 # =========================
@@ -480,16 +576,31 @@ def asignar_ruta(personal_id):
 @main_bp.route("/plan/<fecha>/borrar/<int:tarea_id>", methods=["POST"])
 @admin_required
 def borrar_tarea(fecha, tarea_id):
-    tarea = LanzamientoTarea.query.get_or_404(tarea_id)
-
-    # Eliminar check asociado explícitamente (por si el CASCADE no funciona en Azure)
-    check = TareaCheck.query.filter_by(tarea_id=tarea_id).first()
-    if check:
-        db.session.delete(check)
-
-    db.session.delete(tarea)
-    db.session.commit()
-    return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
+    try:
+        tarea = LanzamientoTarea.query.get_or_404(tarea_id)
+        
+        # Eliminar check asociado
+        check = TareaCheck.query.filter_by(tarea_id=tarea_id).first()
+        if check:
+            db.session.delete(check)
+        
+        db.session.delete(tarea)
+        db.session.commit()
+        
+        # Si es AJAX, retornar JSON
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Tarea eliminada'})
+        
+        # Si no es AJAX, redirect tradicional
+        flash("Tarea eliminada correctamente.", "success")
+        return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
+        
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': str(e)}), 500
+        flash(f"Error al eliminar: {str(e)}", "danger")
+        return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
 
 # =========================
 # AJAX: subáreas por área (pintar ocupadas)
@@ -591,7 +702,7 @@ def plan_dia_asignar(fecha):
                 else:
                     flash(f"Ya existe una tarea Regular para esta subárea en este día.", "warning")
                 return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
-
+            
         # Crear tarea
         t = LanzamientoTarea(
             dia_id=dia.dia_id,
@@ -600,15 +711,37 @@ def plan_dia_asignar(fecha):
             subarea_id=subarea_id,
             nivel_limpieza_asignado=nivel_limpieza_asignado,
             sop_id=sop.sop_id,
-            es_adicional=es_adicional
+            es_adicional=es_adicional,
+            tipo_tarea='sop',  # ← Marcar explícitamente como SOP
+            es_arrastrable=True  # ← SOPs son arrastrables
         )
         db.session.add(t)
+        asegurar_tareas_fijas(dia.dia_id, personal_id)
+        
         db.session.commit()
         
         return redirect(url_for("main.plan_dia_asignar", fecha=fecha))
+    # ========== GET ========= (OPTIMIZADO)
+    tareas_del_dia = (
+        LanzamientoTarea.query
+        .filter_by(dia_id=dia.dia_id)
+        .options(
+            # Cargar relaciones básicas
+            joinedload(LanzamientoTarea.personal),
+            joinedload(LanzamientoTarea.area),
+            joinedload(LanzamientoTarea.subarea),
+            # SOPs con fracciones y detalles
+            joinedload(LanzamientoTarea.sop)
+                .selectinload(SOP.sop_fracciones)
+                .selectinload(SopFraccion.detalles),
+            # Eventos con todos sus datos
+            joinedload(LanzamientoTarea.sop_evento)
+                .selectinload(SopEvento.detalles)
+        )
+        .all()
+    )
 
-    # ========== GET ==========
-    tareas_del_dia = LanzamientoTarea.query.filter(LanzamientoTarea.dia_id == dia.dia_id).all()
+
     tiempos_por_tarea = {t.tarea_id: calcular_tiempo_tarea(t) for t in tareas_del_dia}
 
     # Separar tareas
@@ -656,48 +789,55 @@ def plan_dia_asignar(fecha):
 # =========================
 # Calcular Tiempo Tarea (v2) - CORREGIDO
 # =========================
-def calcular_tiempo_tarea(tarea) -> float:
+def calcular_tiempo_tarea(tarea):
     """
-    Tiempo total = suma de SopFraccionDetalle.tiempo_unitario_min
-    filtrado por el nivel asignado.
+    Calcula el tiempo estimado de una tarea según su tipo.
     
-    ✅ CORREGIDO: Usa tarea.sop_id en lugar de buscar por subarea_id
+    OPTIMIZADO: No hace queries adicionales, usa relaciones ya cargadas.
     """
-    nivel_text = canon_nivel(tarea.nivel_limpieza_asignado) or "basica"
-    nivel_id = nivel_to_id(nivel_text) or 1
-
-    # ✅ Usar sop_id de la tarea directamente
-    sop_id = getattr(tarea, 'sop_id', None)
     
-    if not sop_id:
-        # Fallback para tareas antiguas sin sop_id
-        subarea = getattr(tarea, "subarea", None) or SubArea.query.get(tarea.subarea_id)
-        if not subarea:
-            return 0.0
-        sop = SOP.query.filter_by(subarea_id=subarea.subarea_id, tipo_sop="regular").first()
-        if not sop:
-            return 0.0
-        sop_id = sop.sop_id
-
-    # Precarga fracciones/detalles
-    sop_full = (
-        SOP.query.options(
-            joinedload(SOP.sop_fracciones)
-                .joinedload(SopFraccion.detalles),
-        )
-        .filter_by(sop_id=sop_id)
-        .first()
-    )
-    if not sop_full:
-        return 0.0
-
-    total = 0.0
-    for sf in sop_full.sop_fracciones or []:
-        sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
-        if sd and sd.tiempo_unitario_min is not None:
-            total += float(sd.tiempo_unitario_min)
-
-    return round(total, 2)
+    # Tareas fijas con tiempos hardcoded
+    if tarea.tipo_tarea == 'inicio':
+        return 0
+    elif tarea.tipo_tarea == 'receso':
+        return 45
+    elif tarea.tipo_tarea == 'limpieza_equipo':
+        # Si tiene sop_evento, calcular tiempo real
+        if tarea.sop_evento and tarea.sop_evento.detalles:
+            return sum(detalle.tiempo_estimado for detalle in tarea.sop_evento.detalles)
+        return 60  # Fallback
+    
+    # Eventos: calcular de las fracciones del SopEvento
+    elif tarea.tipo_tarea == 'evento':
+        if tarea.sop_evento and tarea.sop_evento.detalles:
+            return sum(detalle.tiempo_estimado for detalle in tarea.sop_evento.detalles)
+        return 0
+    
+    # SOPs regulares: calcular de las fracciones
+    elif tarea.tipo_tarea == 'sop':
+        if not tarea.sop or not tarea.nivel_limpieza_asignado:
+            return 0
+        
+        # ✅ OPTIMIZACIÓN: Usar tarea.sop en vez de query.get()
+        sop = tarea.sop
+        
+        nivel_id = nivel_to_id(canon_nivel(tarea.nivel_limpieza_asignado))
+        if not nivel_id:
+            return 0
+        
+        tiempo_total = 0
+        for sop_fraccion in sop.sop_fracciones or []:
+            detalle = next(
+                (d for d in (sop_fraccion.detalles or []) if d.nivel_limpieza_id == nivel_id),
+                None
+            )
+            if detalle and detalle.tiempo_unitario_min:
+                tiempo_total += float(detalle.tiempo_unitario_min)
+        
+        return tiempo_total
+    
+    # Tipo desconocido
+    return 0
 
 
 # =========================
@@ -729,7 +869,7 @@ def ruta_dia(fecha):
 def reporte_persona_dia(fecha, personal_id):
     from sqlalchemy.orm import selectinload
 
-    # Determinar si el usuario puede hacer checks (solo operativo, solo hoy, solo sus tareas)
+    # Determinar si el usuario puede hacer checks
     puede_hacer_check = False
     es_hoy = (fecha == date.today().strftime("%Y-%m-%d"))
 
@@ -746,15 +886,23 @@ def reporte_persona_dia(fecha, personal_id):
     if not dia:
         return f"No existe un registro de día para la fecha {fecha}.", 404
 
-    # ✅ OPTIMIZACIÓN 1: Cargar tareas con sus relaciones de una vez
+    # Cargar TODAS las tareas (SOPs + Fijas + Eventos) - OPTIMIZADO
     tareas = (
         LanzamientoTarea.query
         .filter_by(dia_id=dia.dia_id, personal_id=personal_id)
         .options(
+            # Relaciones básicas (joinedload para 1:1)
             joinedload(LanzamientoTarea.personal),
             joinedload(LanzamientoTarea.area),
             joinedload(LanzamientoTarea.subarea),
-            joinedload(LanzamientoTarea.sop)
+            joinedload(LanzamientoTarea.sop),
+            # Eventos (selectinload para 1:many para reducir cartesian product)
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.evento_catalogo),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.caso_catalogo),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.fraccion).selectinload(SopEventoFraccion.metodologia).selectinload(MetodologiaEventoFraccion.pasos),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.kit),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.receta),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.consumo),
         )
         .order_by(LanzamientoTarea.orden, LanzamientoTarea.tarea_id)
         .all()
@@ -774,162 +922,304 @@ def reporte_persona_dia(fecha, personal_id):
 
     persona = tareas[0].personal
 
-    # ✅ OPTIMIZACIÓN 2: Obtener todos los sop_ids únicos y cargarlos de una vez
-    sop_ids = list({t.sop_id for t in tareas if t.sop_id})
+    # ===== SEPARAR TAREAS POR TIPO =====
+    tareas_sop = [t for t in tareas if t.tipo_tarea == 'sop']
+    tareas_fijas = [t for t in tareas if t.tipo_tarea in ('inicio', 'receso', 'limpieza_equipo')]
+    tareas_evento = [t for t in tareas if t.tipo_tarea == 'evento']
 
-    # ✅ FIX: Si hay tareas sin sop_id, buscar SOPs por subarea_id
-    subarea_ids_sin_sop = list({t.subarea_id for t in tareas if not t.sop_id and t.subarea_id})
+    # ===== PROCESAR SOPs (código existente) =====
+    sop_ids = list({t.sop_id for t in tareas_sop if t.sop_id})
+    subarea_ids_sin_sop = list({t.subarea_id for t in tareas_sop if not t.sop_id and t.subarea_id})
 
-    if not sop_ids and not subarea_ids_sin_sop:
-        return "No hay SOPs asignados a estas tareas.", 404
-
-    # ✅ OPTIMIZACIÓN 3: Cargar todos los SOPs con sus relaciones en UNA sola query
-    query_filters = []
-    if sop_ids:
-        query_filters.append(SOP.sop_id.in_(sop_ids))
-    if subarea_ids_sin_sop:
-        query_filters.append(and_(SOP.subarea_id.in_(subarea_ids_sin_sop), SOP.tipo_sop == "regular"))
-
-    sops_full = (
-        SOP.query
-        .filter(or_(*query_filters))
-        .options(
-            # Usar selectinload en lugar de joinedload para relaciones "many"
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.fraccion),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.consumo),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.elemento),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
-            selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.consumo),
-        )
-        .all()
-    )
-
-    # Crear diccionarios para acceso rápido (por sop_id Y por subarea_id)
-    sops_dict = {sop.sop_id: sop for sop in sops_full}
-    sops_por_subarea = {sop.subarea_id: sop for sop in sops_full if sop.tipo_sop == "regular"}
-
-    # ✅ OPTIMIZACIÓN 4: Obtener todas las fracciones únicas y cargar metodologías de una vez
-    all_fraccion_ids = set()
-    all_nivel_ids = set()
-
-    for t in tareas:
-        nivel_id = nivel_to_id(canon_nivel(t.nivel_limpieza_asignado))
-        if nivel_id:
-            all_nivel_ids.add(nivel_id)
-
-    for sop in sops_full:
-        for sf in sop.sop_fracciones or []:
-            all_fraccion_ids.add(sf.fraccion_id)
-
-    # Cargar todas las metodologías de una vez
-    met_map = build_met_map(all_fraccion_ids, all_nivel_ids)
-
-    # ✅ OPTIMIZACIÓN 5: Procesar tareas sin queries adicionales
     detalles = []
-    for t in tareas:
-        area = t.area
-        subarea = t.subarea
-        if not area or not subarea:
-            continue
 
-        # Buscar SOP: primero por sop_id, luego por subarea_id (fallback para tareas antiguas)
-        sop_id = t.sop_id
-        sop_full = sops_dict.get(sop_id) if sop_id else None
+    # Solo procesar SOPs si existen
+    if sop_ids or subarea_ids_sin_sop:
+        query_filters = []
+        if sop_ids:
+            query_filters.append(SOP.sop_id.in_(sop_ids))
+        if subarea_ids_sin_sop:
+            query_filters.append(and_(SOP.subarea_id.in_(subarea_ids_sin_sop), SOP.tipo_sop == "regular"))
 
-        if not sop_full and subarea:
-            # Fallback: buscar por subarea_id
-            sop_full = sops_por_subarea.get(subarea.subarea_id)
-            if sop_full:
-                sop_id = sop_full.sop_id
+        sops_full = (
+            SOP.query
+            .filter(or_(*query_filters))
+            .options(
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.fraccion),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.consumo),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.elemento),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
+                selectinload(SOP.sop_fracciones).selectinload(SopFraccion.detalles).selectinload(SopFraccionDetalle.elemento_set).selectinload(ElementoSet.detalles).selectinload(ElementoDetalle.consumo),
+            )
+            .all()
+        )
 
-        if not sop_full:
-            continue
+        sops_dict = {sop.sop_id: sop for sop in sops_full}
+        sops_por_subarea = {sop.subarea_id: sop for sop in sops_full if sop.tipo_sop == "regular"}
 
-        nivel_asignado = canon_nivel(t.nivel_limpieza_asignado)
-        nivel_id = nivel_to_id(nivel_asignado)
-        if not nivel_id:
-            continue
+        all_fraccion_ids = set()
+        all_nivel_ids = set()
 
-        fracciones_filtradas = []
-        tiempo_total_min = 0.0
+        for t in tareas_sop:
+            nivel_id = nivel_to_id(canon_nivel(t.nivel_limpieza_asignado))
+            if nivel_id:
+                all_nivel_ids.add(nivel_id)
 
-        for sf in sop_full.sop_fracciones or []:
-            sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
-            if not sd:
+        for sop in sops_full:
+            for sf in sop.sop_fracciones or []:
+                all_fraccion_ids.add(sf.fraccion_id)
+
+        met_map = build_met_map(all_fraccion_ids, all_nivel_ids)
+
+        # Procesar SOPs (código existente)
+        for t in tareas_sop:
+            area = t.area
+            subarea = t.subarea
+            if not area or not subarea:
                 continue
 
-            fr = sf.fraccion
-            metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
-            if not metodologia:
+            sop_id = t.sop_id
+            sop_full = sops_dict.get(sop_id) if sop_id else None
+
+            if not sop_full and subarea:
+                sop_full = sops_por_subarea.get(subarea.subarea_id)
+                if sop_full:
+                    sop_id = sop_full.sop_id
+
+            if not sop_full:
                 continue
 
-            receta = sd.receta
-            kit = sd.kit
-            elemento_set = sd.elemento_set
-            consumo_sd = sd.consumo
+            nivel_asignado = canon_nivel(t.nivel_limpieza_asignado)
+            nivel_id = nivel_to_id(nivel_asignado)
+            if not nivel_id:
+                continue
 
-            tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
-            if tiempo_min is not None:
-                tiempo_total_min += tiempo_min
+            fracciones_filtradas = []
+            tiempo_total_min = 0.0
 
+            for sf in sop_full.sop_fracciones or []:
+                sd = next((d for d in (sf.detalles or []) if d.nivel_limpieza_id == nivel_id), None)
+                if not sd:
+                    continue
+
+                fr = sf.fraccion
+                metodologia = met_map.get((sf.fraccion_id, sd.nivel_limpieza_id))
+                if not metodologia:
+                    continue
+
+                receta = sd.receta
+                kit = sd.kit
+                elemento_set = sd.elemento_set
+                consumo_sd = sd.consumo
+
+                tiempo_min = float(sd.tiempo_unitario_min) if sd.tiempo_unitario_min is not None else None
+                if tiempo_min is not None:
+                    tiempo_total_min += tiempo_min
+
+                tabla = None
+
+                if elemento_set:
+                    headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
+                    rows = []
+
+                    for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
+                        elemento = ed.elemento
+                        q_str, r_str = fmt_quimico_y_receta(ed.receta)
+                        c_str = fmt_consumo(ed.consumo)
+                        h_str = fmt_herramientas_list(ed.kit)
+
+                        rows.append([
+                            na(elemento.descripcion if elemento else None),
+                            na(str(elemento.cantidad if elemento else "")),
+                            q_str,
+                            r_str,
+                            c_str,
+                            h_str,
+                        ])
+
+                    tabla = {"headers": headers, "rows": rows}
+                else:
+                    headers = ["Químico", "Receta", "Consumo", "Herramienta"]
+                    q_str, r_str = fmt_quimico_y_receta(receta)
+                    c_str = fmt_consumo(consumo_sd)
+                    h_str = fmt_herramientas_list(kit)
+                    tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
+
+                fracciones_filtradas.append({
+                    "orden": sf.orden,
+                    "fraccion_nombre": fr.fraccion_nombre if fr else "",
+                    "descripcion": metodologia.descripcion or "",
+                    "nivel_limpieza": nivel_asignado,
+                    "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
+                    "metodologia": metodologia,
+                    "tabla": tabla,
+                    "observacion_critica": (fr.nota_tecnica if fr else None),
+                })
+
+            detalles.append({
+                "tarea_id": t.tarea_id,
+                "tipo_tarea": "sop",
+                "area": area.area_nombre,
+                "subarea": subarea.subarea_nombre,
+                "nivel": nivel_asignado,
+                "tiempo_total_min": round(tiempo_total_min, 2),
+                "observacion_critica": sop_full.observacion_critica_sop,
+                "fracciones": fracciones_filtradas,
+                "orden": t.orden if t.orden is not None else 0,
+                "orden_area": area.orden_area if area.orden_area is not None else 9999,
+                "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
+                "es_adicional": t.es_adicional if hasattr(t, 'es_adicional') else False,
+                "sop_id": sop_id,
+            })
+    # ===== PROCESAR TAREAS FIJAS (NUEVO) =====
+    # ===== PROCESAR TAREAS FIJAS (NUEVO - CORREGIDO) =====
+    for t in tareas_fijas:
+        tipo_nombre = {
+            'inicio': 'INICIO',
+            'receso': 'RECESO',
+            'limpieza_equipo': 'LIMPIEZA DE EQUIPO'
+        }.get(t.tipo_tarea, t.tipo_tarea.upper())
+
+        # Si la tarea fija tiene sop_evento_id (caso limpieza_equipo), procesarla como evento
+        if t.sop_evento_id and t.sop_evento:
+            sop_evento = t.sop_evento
+            
+            # Calcular tiempo total sumando fracciones
+            tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+            
+            # Construir fracciones para el reporte
+            fracciones_evento = []
+            for detalle in sop_evento.detalles:
+                fraccion = detalle.fraccion
+                metodologia = fraccion.metodologia if fraccion else None
+                
+                # Construir tabla de recursos
+                tabla = None
+                if detalle.kit or detalle.receta or detalle.consumo:
+                    headers = ["Recurso", "Detalle"]
+                    rows = []
+                    
+                    if detalle.kit:
+                        rows.append(["Kit", detalle.kit.nombre])
+                    if detalle.receta:
+                        rows.append(["Receta", detalle.receta.nombre])
+                    if detalle.consumo:
+                        rows.append(["Consumo", detalle.consumo.nombre])
+                    
+                    tabla = {"headers": headers, "rows": rows}
+                
+                fracciones_evento.append({
+                    "orden": detalle.orden,
+                    "fraccion_nombre": fraccion.nombre if fraccion else "",
+                    "descripcion": metodologia.descripcion if metodologia else "",
+                    "nivel_limpieza": "—",
+                    "tiempo_min": detalle.tiempo_estimado,
+                    "metodologia": metodologia,
+                    "tabla": tabla,
+                    "observacion_critica": detalle.observaciones,
+                })
+            
+            detalles.append({
+                "tarea_id": t.tarea_id,
+                "tipo_tarea": t.tipo_tarea,
+                "area": "—",
+                "subarea": tipo_nombre,
+                "nivel": "—",
+                "tiempo_total_min": tiempo_total,
+                "observacion_critica": sop_evento.descripcion,
+                "fracciones": fracciones_evento,  # ✅ Ahora con fracciones reales
+                "orden": t.orden if t.orden is not None else 0,
+                "orden_area": 0,
+                "orden_subarea": 0,
+                "es_adicional": False,
+                "sop_id": None,
+            })
+        else:
+            # Tareas fijas sin sop_evento_id (inicio, receso)
+            tiempo_fijo = {
+                'receso': 45,
+                'limpieza_equipo': 60  # fallback si no hay sop_evento_id
+            }.get(t.tipo_tarea, 0)
+
+            detalles.append({
+                "tarea_id": t.tarea_id,
+                "tipo_tarea": t.tipo_tarea,
+                "area": "—",
+                "subarea": tipo_nombre,
+                "nivel": "—",
+                "tiempo_total_min": tiempo_fijo,
+                "observacion_critica": None,
+                "fracciones": [],  # Sin fracciones para inicio/receso
+                "orden": t.orden if t.orden is not None else 0,
+                "orden_area": 0,
+                "orden_subarea": 0,
+                "es_adicional": False,
+                "sop_id": None,
+            })
+    # ===== PROCESAR EVENTOS (NUEVO) =====
+    for t in tareas_evento:
+        sop_evento = t.sop_evento
+        if not sop_evento:
+            continue  # Skip si no tiene SOP de evento asignado
+        
+        caso_nombre = sop_evento.caso_catalogo.nombre
+        evento_nombre = sop_evento.evento_catalogo.nombre
+        area_nombre = t.area.area_nombre if t.area else "Sin área"
+        
+        # Calcular tiempo total sumando fracciones
+        tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+        
+        # Construir fracciones para el reporte (igual que SOPs)
+        fracciones_evento = []
+        for detalle in sop_evento.detalles:
+            fraccion = detalle.fraccion
+            metodologia = fraccion.metodologia if fraccion else None
+            
+            # Construir tabla de recursos (igual que SOPs)
             tabla = None
-
-            if elemento_set:
-                headers = ["Elemento", "Cantidad", "Químico", "Receta", "Consumo", "Herramienta"]
+            if detalle.kit or detalle.receta or detalle.consumo:
+                headers = ["Recurso", "Detalle"]
                 rows = []
-
-                for ed in sorted((elemento_set.detalles or []), key=lambda x: (x.orden or 9999, x.elemento_id)):
-                    elemento = ed.elemento
-                    q_str, r_str = fmt_quimico_y_receta(ed.receta)
-                    c_str = fmt_consumo(ed.consumo)
-                    h_str = fmt_herramientas_list(ed.kit)
-
-                    rows.append([
-                        na(elemento.descripcion if elemento else None),
-                        na(str(elemento.cantidad if elemento else "")),
-                        q_str,
-                        r_str,
-                        c_str,
-                        h_str,
-                    ])
-
+                
+                if detalle.kit:
+                    rows.append(["Kit", detalle.kit.nombre])
+                if detalle.receta:
+                    rows.append(["Receta", detalle.receta.nombre])
+                if detalle.consumo:
+                    rows.append(["Consumo", detalle.consumo.nombre])
+                
                 tabla = {"headers": headers, "rows": rows}
-            else:
-                headers = ["Químico", "Receta", "Consumo", "Herramienta"]
-                q_str, r_str = fmt_quimico_y_receta(receta)
-                c_str = fmt_consumo(consumo_sd)
-                h_str = fmt_herramientas_list(kit)
-                tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
-
-            fracciones_filtradas.append({
-                "orden": sf.orden,
-                "fraccion_nombre": fr.fraccion_nombre if fr else "",
-                "descripcion": metodologia.descripcion or "",
-                "nivel_limpieza": nivel_asignado,
-                "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
+            
+            fracciones_evento.append({
+                "orden": detalle.orden,
+                "fraccion_nombre": fraccion.nombre if fraccion else "",
+                "descripcion": metodologia.descripcion if metodologia else "",
+                "nivel_limpieza": "—",
+                "tiempo_min": detalle.tiempo_estimado,
                 "metodologia": metodologia,
                 "tabla": tabla,
-                "observacion_critica": (fr.nota_tecnica if fr else None),
+                "observacion_critica": detalle.observaciones,
             })
-
+        
         detalles.append({
             "tarea_id": t.tarea_id,
-            "area": area.area_nombre,
-            "subarea": subarea.subarea_nombre,
-            "nivel": nivel_asignado,
-            "tiempo_total_min": round(tiempo_total_min, 2),
-            "observacion_critica": sop_full.observacion_critica_sop,
-            "fracciones": fracciones_filtradas,
+            "tipo_tarea": "evento",
+            "area": area_nombre,
+            "subarea": f"EVENTO: {evento_nombre} - {caso_nombre}",
+            "nivel": "—",
+            "tiempo_total_min": tiempo_total,
+            "observacion_critica": sop_evento.descripcion,
+            "fracciones": fracciones_evento,  # ← Ahora con datos reales
             "orden": t.orden if t.orden is not None else 0,
-            "orden_area": area.orden_area if area.orden_area is not None else 9999,
-            "orden_subarea": subarea.orden_subarea if subarea.orden_subarea is not None else 9999,
-            "es_adicional": t.es_adicional if hasattr(t, 'es_adicional') else False,
-            "sop_id": sop_id,
+            "orden_area": t.area.orden_area if t.area and t.area.orden_area is not None else 9999,
+            "orden_subarea": t.subarea.orden_subarea if t.subarea and t.subarea.orden_subarea is not None else 9999,
+            "es_adicional": False,
+            "sop_id": None,
         })
-
+    # Ordenar todos los detalles
     detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
     # Calcular progreso
@@ -949,7 +1239,6 @@ def reporte_persona_dia(fecha, personal_id):
         progreso_pct=progreso_pct,
         hide_nav=True
     )
-
 
 
 # =========================
@@ -2460,9 +2749,16 @@ def mi_ruta():
     checks_map = {}  # {tarea_id: "HH:MM"}
 
     if dia:
+        # ✅ CAMBIO: Cargar relaciones para eventos y casos
         tareas = (
             LanzamientoTarea.query
             .filter_by(dia_id=dia.dia_id, personal_id=current_user.personal_id)
+            .options(
+                joinedload(LanzamientoTarea.area),
+                joinedload(LanzamientoTarea.subarea),
+                joinedload(LanzamientoTarea.sop_evento).joinedload(SopEvento.evento_catalogo),
+                joinedload(LanzamientoTarea.sop_evento).joinedload(SopEvento.caso_catalogo),
+            )
             .order_by(LanzamientoTarea.orden)
             .all()
         )
@@ -2495,6 +2791,7 @@ def mi_ruta():
         completadas=completadas,
         progreso_pct=progreso_pct,
     )
+
 
 # =========================
 # API: Reordenar tareas (drag & drop)
@@ -2674,3 +2971,1293 @@ def subareas_con_sop(area_id):
         })
     
     return jsonify(result)
+
+
+@main_bp.route('/api/sop-evento-fracciones', methods=['GET'])
+def listar_fracciones_evento():
+    """
+    GET /api/sop-evento-fracciones
+    
+    Retorna todas las fracciones de evento con su metodología y pasos.
+    """
+    try:
+        fracciones = SopEventoFraccion.query.all()
+        
+        resultado = []
+        for fraccion in fracciones:
+            # Obtener metodología y pasos
+            metodologia = fraccion.metodologia
+            
+            fraccion_data = {
+                'fraccion_evento_id': fraccion.fraccion_evento_id,
+                'nombre': fraccion.nombre,
+                'descripcion': fraccion.descripcion,
+                'metodologia': None
+            }
+            
+            # Agregar metodología si existe
+            if metodologia:
+                pasos = [{
+                    'paso_id': paso.paso_id,
+                    'numero_paso': paso.numero_paso,
+                    'descripcion': paso.descripcion
+                } for paso in metodologia.pasos]
+                
+                fraccion_data['metodologia'] = {
+                    'metodologia_fraccion_id': metodologia.metodologia_fraccion_id,
+                    'nombre': metodologia.nombre,
+                    'descripcion': metodologia.descripcion,
+                    'pasos': pasos,
+                    'total_pasos': len(pasos)
+                }
+            
+            resultado.append(fraccion_data)
+        
+        return jsonify({
+            'success': True,
+            'data': resultado,
+            'total': len(resultado)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al listar fracciones: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 2. OBTENER DETALLE DE UNA FRACCIÓN
+# ============================================================================
+@main_bp.route('/api/sop-evento-fracciones/<fraccion_id>', methods=['GET'])
+def obtener_fraccion_evento(fraccion_id):
+    """
+    GET /api/sop-evento-fracciones/<fraccion_id>
+    
+    Retorna el detalle completo de una fracción con su metodología y pasos.
+    """
+    try:
+        fraccion = SopEventoFraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({
+                'success': False,
+                'message': 'Fracción no encontrada'
+            }), 404
+        
+        metodologia = fraccion.metodologia
+        
+        fraccion_data = {
+            'fraccion_evento_id': fraccion.fraccion_evento_id,
+            'nombre': fraccion.nombre,
+            'descripcion': fraccion.descripcion,
+            'metodologia': None
+        }
+        
+        # Agregar metodología si existe
+        if metodologia:
+            pasos = [{
+                'paso_id': paso.paso_id,
+                'numero_paso': paso.numero_paso,
+                'descripcion': paso.descripcion
+            } for paso in metodologia.pasos]
+            
+            fraccion_data['metodologia'] = {
+                'metodologia_fraccion_id': metodologia.metodologia_fraccion_id,
+                'nombre': metodologia.nombre,
+                'descripcion': metodologia.descripcion,
+                'pasos': pasos,
+                'total_pasos': len(pasos)
+            }
+        
+        return jsonify({
+            'success': True,
+            'data': fraccion_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener fracción: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 3. CREAR NUEVA FRACCIÓN CON METODOLOGÍA Y PASOS
+# ============================================================================
+@main_bp.route('/api/sop-evento-fracciones', methods=['POST'])
+def crear_fraccion_evento():
+    """
+    POST /api/sop-evento-fracciones
+    
+    Crea una nueva fracción de evento con su metodología y pasos.
+    
+    Body:
+    {
+        "fraccion_evento_id": "FE-TR-001",
+        "nombre": "Trapear área afectada",
+        "descripcion": "Trapear y desinfectar el área",
+        "metodologia": {
+            "metodologia_fraccion_id": "MEF-TR-001",
+            "nombre": "Metodología de Trapeo",
+            "descripcion": "Proceso completo de trapeo",
+            "pasos": [
+                {
+                    "numero_paso": 1,
+                    "descripcion": "Preparar solución desinfectante"
+                },
+                {
+                    "numero_paso": 2,
+                    "descripcion": "Trapear en movimientos circulares"
+                }
+            ]
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones básicas
+        if not data.get('fraccion_evento_id'):
+            return jsonify({
+                'success': False,
+                'message': 'fraccion_evento_id es requerido'
+            }), 400
+        
+        if not data.get('nombre'):
+            return jsonify({
+                'success': False,
+                'message': 'nombre es requerido'
+            }), 400
+        
+        # Verificar que no exista la fracción
+        if SopEventoFraccion.query.get(data['fraccion_evento_id']):
+            return jsonify({
+                'success': False,
+                'message': 'Ya existe una fracción con ese ID'
+            }), 400
+        
+        # Crear fracción
+        nueva_fraccion = SopEventoFraccion(
+            fraccion_evento_id=data['fraccion_evento_id'],
+            nombre=data['nombre'],
+            descripcion=data.get('descripcion')
+        )
+        
+        db.session.add(nueva_fraccion)
+        
+        # Crear metodología si viene en el request
+        metodologia_data = data.get('metodologia')
+        if metodologia_data:
+            if not metodologia_data.get('metodologia_fraccion_id'):
+                return jsonify({
+                    'success': False,
+                    'message': 'metodologia_fraccion_id es requerido'
+                }), 400
+            
+            # Verificar que no exista la metodología
+            if MetodologiaEventoFraccion.query.get(metodologia_data['metodologia_fraccion_id']):
+                return jsonify({
+                    'success': False,
+                    'message': 'Ya existe una metodología con ese ID'
+                }), 400
+            
+            nueva_metodologia = MetodologiaEventoFraccion(
+                metodologia_fraccion_id=metodologia_data['metodologia_fraccion_id'],
+                fraccion_evento_id=data['fraccion_evento_id'],
+                nombre=metodologia_data.get('nombre', data['nombre']),
+                descripcion=metodologia_data.get('descripcion')
+            )
+            
+            db.session.add(nueva_metodologia)
+            
+            # Crear pasos si vienen en el request
+            pasos = metodologia_data.get('pasos', [])
+            for paso_data in pasos:
+                nuevo_paso = MetodologiaEventoFraccionPaso(
+                    metodologia_fraccion_id=metodologia_data['metodologia_fraccion_id'],
+                    numero_paso=paso_data['numero_paso'],
+                    descripcion=paso_data['descripcion']
+                )
+                db.session.add(nuevo_paso)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fracción creada exitosamente',
+            'data': {
+                'fraccion_evento_id': nueva_fraccion.fraccion_evento_id,
+                'nombre': nueva_fraccion.nombre
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al crear fracción: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 4. EDITAR FRACCIÓN CON METODOLOGÍA Y PASOS
+# ============================================================================
+@main_bp.route('/api/sop-evento-fracciones/<fraccion_id>', methods=['PUT'])
+def editar_fraccion_evento(fraccion_id):
+    """
+    PUT /api/sop-evento-fracciones/<fraccion_id>
+    
+    Edita una fracción existente con su metodología y pasos.
+    
+    Body: (mismo formato que POST)
+    """
+    try:
+        fraccion = SopEventoFraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({
+                'success': False,
+                'message': 'Fracción no encontrada'
+            }), 404
+        
+        data = request.get_json()
+        
+        # Actualizar fracción
+        if 'nombre' in data:
+            fraccion.nombre = data['nombre']
+        if 'descripcion' in data:
+            fraccion.descripcion = data['descripcion']
+        
+        # Actualizar metodología si viene en el request
+        metodologia_data = data.get('metodologia')
+        if metodologia_data:
+            metodologia = fraccion.metodologia
+            
+            if metodologia:
+                # Actualizar metodología existente
+                if 'nombre' in metodologia_data:
+                    metodologia.nombre = metodologia_data['nombre']
+                if 'descripcion' in metodologia_data:
+                    metodologia.descripcion = metodologia_data['descripcion']
+                
+                # Actualizar pasos si vienen
+                if 'pasos' in metodologia_data:
+                    # Eliminar pasos existentes
+                    MetodologiaEventoFraccionPaso.query.filter_by(
+                        metodologia_fraccion_id=metodologia.metodologia_fraccion_id
+                    ).delete()
+                    
+                    # Crear nuevos pasos
+                    for paso_data in metodologia_data['pasos']:
+                        nuevo_paso = MetodologiaEventoFraccionPaso(
+                            metodologia_fraccion_id=metodologia.metodologia_fraccion_id,
+                            numero_paso=paso_data['numero_paso'],
+                            descripcion=paso_data['descripcion']
+                        )
+                        db.session.add(nuevo_paso)
+            else:
+                # Crear metodología si no existe
+                if not metodologia_data.get('metodologia_fraccion_id'):
+                    return jsonify({
+                        'success': False,
+                        'message': 'metodologia_fraccion_id es requerido'
+                    }), 400
+                
+                nueva_metodologia = MetodologiaEventoFraccion(
+                    metodologia_fraccion_id=metodologia_data['metodologia_fraccion_id'],
+                    fraccion_evento_id=fraccion_id,
+                    nombre=metodologia_data.get('nombre', fraccion.nombre),
+                    descripcion=metodologia_data.get('descripcion')
+                )
+                db.session.add(nueva_metodologia)
+                
+                # Crear pasos
+                for paso_data in metodologia_data.get('pasos', []):
+                    nuevo_paso = MetodologiaEventoFraccionPaso(
+                        metodologia_fraccion_id=metodologia_data['metodologia_fraccion_id'],
+                        numero_paso=paso_data['numero_paso'],
+                        descripcion=paso_data['descripcion']
+                    )
+                    db.session.add(nuevo_paso)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fracción actualizada exitosamente',
+            'data': {
+                'fraccion_evento_id': fraccion.fraccion_evento_id,
+                'nombre': fraccion.nombre
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al editar fracción: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 5. ELIMINAR FRACCIÓN
+# ============================================================================
+@main_bp.route('/api/sop-evento-fracciones/<fraccion_id>', methods=['DELETE'])
+def eliminar_fraccion_evento(fraccion_id):
+    """
+    DELETE /api/sop-evento-fracciones/<fraccion_id>
+    
+    Elimina una fracción de evento.
+    ⚠️ Solo se puede eliminar si NO está siendo usada en ningún SopEvento.
+    """
+    try:
+        fraccion = SopEventoFraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({
+                'success': False,
+                'message': 'Fracción no encontrada'
+            }), 404
+        
+        # Verificar si está siendo usada en algún SOP de evento
+        if len(fraccion.detalles_sop) > 0:
+            return jsonify({
+                'success': False,
+                'message': 'No se puede eliminar la fracción porque está siendo usada en SOPs de evento',
+                'sops_usando': len(fraccion.detalles_sop)
+            }), 400
+        
+        # Eliminar fracción (cascade eliminará metodología y pasos)
+        db.session.delete(fraccion)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fracción eliminada exitosamente'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al eliminar fracción: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 1. LISTAR TODOS LOS SOPs DE EVENTO
+# ============================================================================
+@main_bp.route('/api/sop-eventos', methods=['GET'])
+def listar_sop_eventos():
+    """
+    GET /api/sop-eventos
+    
+    Retorna todos los SOPs de evento configurados.
+    Opcionalmente filtrar por evento_tipo_id o caso_id
+    
+    Query params:
+    - evento_tipo_id: Filtrar por tipo de evento
+    - caso_id: Filtrar por caso específico
+    """
+    try:
+        query = SopEvento.query
+        
+        # Filtros opcionales
+        evento_tipo_id = request.args.get('evento_tipo_id')
+        caso_id = request.args.get('caso_id')
+        
+        if evento_tipo_id:
+            query = query.filter_by(evento_tipo_id=evento_tipo_id)
+        if caso_id:
+            query = query.filter_by(caso_id=caso_id)
+        
+        sop_eventos = query.all()
+        
+        resultado = []
+        for sop_evento in sop_eventos:
+            # Calcular tiempo total sumando todas las fracciones
+            tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+            
+            sop_data = {
+                'sop_evento_id': sop_evento.sop_evento_id,
+                'evento_tipo_id': sop_evento.evento_tipo_id,
+                'evento_nombre': sop_evento.evento_catalogo.nombre,
+                'caso_id': sop_evento.caso_id,
+                'caso_nombre': sop_evento.caso_catalogo.nombre,
+                'nombre': sop_evento.nombre,
+                'descripcion': sop_evento.descripcion,
+                'total_fracciones': len(sop_evento.detalles),
+                'tiempo_total_minutos': tiempo_total
+            }
+            
+            resultado.append(sop_data)
+        
+        return jsonify({
+            'success': True,
+            'data': resultado,
+            'total': len(resultado)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al listar SOPs de evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 2. OBTENER DETALLE DE UN SOP DE EVENTO
+# ============================================================================
+@main_bp.route('/api/sop-eventos/<sop_evento_id>', methods=['GET'])
+def obtener_sop_evento(sop_evento_id):
+    """
+    GET /api/sop-eventos/<sop_evento_id>
+    
+    Retorna el detalle completo de un SOP de evento con todas sus fracciones configuradas.
+    """
+    try:
+        sop_evento = SopEvento.query.get(sop_evento_id)
+        
+        if not sop_evento:
+            return jsonify({
+                'success': False,
+                'message': 'SOP de evento no encontrado'
+            }), 404
+        
+        # Construir detalles de fracciones
+        fracciones = []
+        tiempo_total = 0
+        
+        for detalle in sop_evento.detalles:
+            tiempo_total += detalle.tiempo_estimado
+            
+            fraccion_data = {
+                'detalle_id': detalle.detalle_id,
+                'fraccion_evento_id': detalle.fraccion_evento_id,
+                'fraccion_nombre': detalle.fraccion.nombre,
+                'orden': detalle.orden,
+                'tiempo_estimado': detalle.tiempo_estimado,
+                'kit_id': detalle.kit_id,
+                'kit_nombre': detalle.kit.nombre if detalle.kit else None,
+                'receta_id': detalle.receta_id,
+                'receta_nombre': detalle.receta.nombre if detalle.receta else None,
+                'consumo_id': detalle.consumo_id,
+                'consumo_nombre': detalle.consumo.nombre if detalle.consumo else None,
+                'observaciones': detalle.observaciones,
+                # Incluir pasos de metodología
+                'metodologia': {
+                    'nombre': detalle.fraccion.metodologia.nombre if detalle.fraccion.metodologia else None,
+                    'pasos': [
+                        {
+                            'numero_paso': paso.numero_paso,
+                            'descripcion': paso.descripcion
+                        } for paso in detalle.fraccion.metodologia.pasos
+                    ] if detalle.fraccion.metodologia else []
+                }
+            }
+            
+            fracciones.append(fraccion_data)
+        
+        sop_data = {
+            'sop_evento_id': sop_evento.sop_evento_id,
+            'evento_tipo_id': sop_evento.evento_tipo_id,
+            'evento_nombre': sop_evento.evento_catalogo.nombre,
+            'caso_id': sop_evento.caso_id,
+            'caso_nombre': sop_evento.caso_catalogo.nombre,
+            'nombre': sop_evento.nombre,
+            'descripcion': sop_evento.descripcion,
+            'tiempo_total_minutos': tiempo_total,
+            'fracciones': fracciones,
+            'total_fracciones': len(fracciones)
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': sop_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener SOP de evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 3. CREAR NUEVO SOP DE EVENTO
+# ============================================================================
+@main_bp.route('/api/sop-eventos', methods=['POST'])
+def crear_sop_evento():
+    """
+    POST /api/sop-eventos
+    
+    Crea un nuevo SOP de evento con sus fracciones configuradas.
+    
+    Body:
+    {
+        "sop_evento_id": "SE-IN-VO-001",
+        "evento_tipo_id": "EV-IN-001",
+        "caso_id": "CA-IN-VO-001",
+        "nombre": "SOP Incidencia - Vómito",
+        "descripcion": "Procedimiento completo para limpieza de vómito",
+        "fracciones": [
+            {
+                "fraccion_evento_id": "FE-SE-001",
+                "orden": 1,
+                "tiempo_estimado": 3,
+                "kit_id": "KT-SE-001",
+                "receta_id": null,
+                "consumo_id": null,
+                "observaciones": "Colocar inmediatamente"
+            },
+            {
+                "fraccion_evento_id": "FE-TR-001",
+                "orden": 2,
+                "tiempo_estimado": 15,
+                "kit_id": "KT-TR-001",
+                "receta_id": "RE-DE-001",
+                "consumo_id": "CO-VO-001",
+                "observaciones": null
+            }
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones básicas
+        if not data.get('sop_evento_id'):
+            return jsonify({'success': False, 'message': 'sop_evento_id es requerido'}), 400
+        
+        if not data.get('evento_tipo_id'):
+            return jsonify({'success': False, 'message': 'evento_tipo_id es requerido'}), 400
+        
+        if not data.get('caso_id'):
+            return jsonify({'success': False, 'message': 'caso_id es requerido'}), 400
+        
+        if not data.get('nombre'):
+            return jsonify({'success': False, 'message': 'nombre es requerido'}), 400
+        
+        # Verificar que no exista
+        if SopEvento.query.get(data['sop_evento_id']):
+            return jsonify({'success': False, 'message': 'Ya existe un SOP de evento con ese ID'}), 400
+        
+        # Verificar que existan evento y caso
+        evento = EventoCatalogo.query.get(data['evento_tipo_id'])
+        if not evento:
+            return jsonify({'success': False, 'message': 'Evento no encontrado'}), 404
+        
+        caso = CasoCatalogo.query.get(data['caso_id'])
+        if not caso:
+            return jsonify({'success': False, 'message': 'Caso no encontrado'}), 404
+        
+        # Verificar que el caso pertenezca al evento
+        if caso.evento_tipo_id != data['evento_tipo_id']:
+            return jsonify({'success': False, 'message': 'El caso no pertenece a ese tipo de evento'}), 400
+        
+        # Crear SOP de evento
+        nuevo_sop = SopEvento(
+            sop_evento_id=data['sop_evento_id'],
+            evento_tipo_id=data['evento_tipo_id'],
+            caso_id=data['caso_id'],
+            nombre=data['nombre'],
+            descripcion=data.get('descripcion')
+        )
+        
+        db.session.add(nuevo_sop)
+        
+        # Crear detalles de fracciones
+        fracciones_data = data.get('fracciones', [])
+        
+        if not fracciones_data:
+            return jsonify({'success': False, 'message': 'Debe incluir al menos una fracción'}), 400
+        
+        for fraccion_data in fracciones_data:
+            # Validar que exista la fracción
+            fraccion = SopEventoFraccion.query.get(fraccion_data['fraccion_evento_id'])
+            if not fraccion:
+                return jsonify({
+                    'success': False,
+                    'message': f"Fracción {fraccion_data['fraccion_evento_id']} no encontrada"
+                }), 404
+            
+            # Validar kit, receta, consumo si vienen
+            if fraccion_data.get('kit_id'):
+                if not Kit.query.get(fraccion_data['kit_id']):
+                    return jsonify({'success': False, 'message': f"Kit {fraccion_data['kit_id']} no encontrado"}), 404
+            
+            if fraccion_data.get('receta_id'):
+                if not Receta.query.get(fraccion_data['receta_id']):
+                    return jsonify({'success': False, 'message': f"Receta {fraccion_data['receta_id']} no encontrada"}), 404
+            
+            if fraccion_data.get('consumo_id'):
+                if not Consumo.query.get(fraccion_data['consumo_id']):
+                    return jsonify({'success': False, 'message': f"Consumo {fraccion_data['consumo_id']} no encontrado"}), 404
+            
+            # Crear detalle
+            detalle = SopEventoDetalle(
+                sop_evento_id=data['sop_evento_id'],
+                fraccion_evento_id=fraccion_data['fraccion_evento_id'],
+                orden=fraccion_data['orden'],
+                tiempo_estimado=fraccion_data['tiempo_estimado'],
+                kit_id=fraccion_data.get('kit_id'),
+                receta_id=fraccion_data.get('receta_id'),
+                consumo_id=fraccion_data.get('consumo_id'),
+                observaciones=fraccion_data.get('observaciones')
+            )
+            
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'SOP de evento creado exitosamente',
+            'data': {
+                'sop_evento_id': nuevo_sop.sop_evento_id,
+                'nombre': nuevo_sop.nombre,
+                'total_fracciones': len(fracciones_data)
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al crear SOP de evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 4. EDITAR SOP DE EVENTO
+# ============================================================================
+@main_bp.route('/api/sop-eventos/<sop_evento_id>', methods=['PUT'])
+def editar_sop_evento(sop_evento_id):
+    """
+    PUT /api/sop-eventos/<sop_evento_id>
+    
+    Edita un SOP de evento existente.
+    Permite actualizar nombre, descripción y fracciones completas.
+    
+    Body: (mismo formato que POST)
+    """
+    try:
+        sop_evento = SopEvento.query.get(sop_evento_id)
+        
+        if not sop_evento:
+            return jsonify({'success': False, 'message': 'SOP de evento no encontrado'}), 404
+        
+        data = request.get_json()
+        
+        # Actualizar campos básicos
+        if 'nombre' in data:
+            sop_evento.nombre = data['nombre']
+        if 'descripcion' in data:
+            sop_evento.descripcion = data['descripcion']
+        
+        # Actualizar fracciones si vienen
+        if 'fracciones' in data:
+            # Eliminar detalles existentes
+            SopEventoDetalle.query.filter_by(sop_evento_id=sop_evento_id).delete()
+            
+            # Crear nuevos detalles
+            for fraccion_data in data['fracciones']:
+                # Validaciones (igual que en crear)
+                fraccion = SopEventoFraccion.query.get(fraccion_data['fraccion_evento_id'])
+                if not fraccion:
+                    return jsonify({
+                        'success': False,
+                        'message': f"Fracción {fraccion_data['fraccion_evento_id']} no encontrada"
+                    }), 404
+                
+                detalle = SopEventoDetalle(
+                    sop_evento_id=sop_evento_id,
+                    fraccion_evento_id=fraccion_data['fraccion_evento_id'],
+                    orden=fraccion_data['orden'],
+                    tiempo_estimado=fraccion_data['tiempo_estimado'],
+                    kit_id=fraccion_data.get('kit_id'),
+                    receta_id=fraccion_data.get('receta_id'),
+                    consumo_id=fraccion_data.get('consumo_id'),
+                    observaciones=fraccion_data.get('observaciones')
+                )
+                
+                db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'SOP de evento actualizado exitosamente',
+            'data': {
+                'sop_evento_id': sop_evento.sop_evento_id,
+                'nombre': sop_evento.nombre
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al editar SOP de evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 5. ELIMINAR SOP DE EVENTO
+# ============================================================================
+@main_bp.route('/api/sop-eventos/<sop_evento_id>', methods=['DELETE'])
+def eliminar_sop_evento(sop_evento_id):
+    """
+    DELETE /api/sop-eventos/<sop_evento_id>
+    
+    Elimina un SOP de evento.
+    ⚠️ Solo se puede eliminar si NO tiene lanzamientos asociados.
+    """
+    try:
+        sop_evento = SopEvento.query.get(sop_evento_id)
+        
+        if not sop_evento:
+            return jsonify({'success': False, 'message': 'SOP de evento no encontrado'}), 404
+        
+        # Verificar si tiene lanzamientos
+        if len(sop_evento.lanzamientos) > 0:
+            return jsonify({
+                'success': False,
+                'message': 'No se puede eliminar el SOP porque tiene lanzamientos asociados',
+                'lanzamientos_count': len(sop_evento.lanzamientos)
+            }), 400
+        
+        # Eliminar SOP (cascade eliminará los detalles)
+        db.session.delete(sop_evento)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'SOP de evento eliminado exitosamente'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al eliminar SOP de evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 6. OBTENER FRACCIONES DISPONIBLES PARA CONFIGURAR
+# ============================================================================
+@main_bp.route('/api/sop-eventos/fracciones-disponibles', methods=['GET'])
+def obtener_fracciones_disponibles():
+    """
+    GET /api/sop-eventos/fracciones-disponibles
+    
+    Retorna todas las fracciones de evento disponibles para configurar un SOP.
+    Útil para el selector de fracciones en el frontend.
+    """
+    try:
+        fracciones = SopEventoFraccion.query.all()
+        
+        resultado = []
+        for fraccion in fracciones:
+            fraccion_data = {
+                'fraccion_evento_id': fraccion.fraccion_evento_id,
+                'nombre': fraccion.nombre,
+                'descripcion': fraccion.descripcion,
+                'tiene_metodologia': fraccion.metodologia is not None,
+                'total_pasos': len(fraccion.metodologia.pasos) if fraccion.metodologia else 0
+            }
+            
+            resultado.append(fraccion_data)
+        
+        return jsonify({
+            'success': True,
+            'data': resultado,
+            'total': len(resultado)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener fracciones: {str(e)}'
+        }), 500
+
+
+
+# ============================================================================
+# 1. LANZAR EVENTO A OPERADOR
+# ============================================================================
+@main_bp.route('/api/lanzamiento-evento', methods=['POST'])
+def lanzar_evento():
+    """
+    POST /api/lanzamiento-evento
+    
+    Lanza un evento a un operador en un día específico.
+    
+    Body:
+    {
+        "dia_id": 16,
+        "personal_id": "L0212",
+        "area_id": "AD-CA-001",
+        "subarea_id": "AD-CA-OF-001",
+        "sop_evento_id": "SE-IN-VO-001",
+        "orden": 100  // opcional, por defecto se coloca al final
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones básicas
+        if not data.get('dia_id'):
+            return jsonify({'success': False, 'message': 'dia_id es requerido'}), 400
+        
+        if not data.get('personal_id'):
+            return jsonify({'success': False, 'message': 'personal_id es requerido'}), 400
+        
+        if not data.get('area_id'):
+            return jsonify({'success': False, 'message': 'area_id es requerido'}), 400
+        
+        if not data.get('subarea_id'):
+            return jsonify({'success': False, 'message': 'subarea_id es requerido'}), 400
+        
+        if not data.get('sop_evento_id'):
+            return jsonify({'success': False, 'message': 'sop_evento_id es requerido'}), 400
+        
+        # Verificar que existan los registros
+        dia = LanzamientoDia.query.get(data['dia_id'])
+        if not dia:
+            return jsonify({'success': False, 'message': 'Día no encontrado'}), 404
+        
+        personal = Personal.query.get(data['personal_id'])
+        if not personal:
+            return jsonify({'success': False, 'message': 'Personal no encontrado'}), 404
+        
+        area = Area.query.get(data['area_id'])
+        if not area:
+            return jsonify({'success': False, 'message': 'Área no encontrada'}), 404
+        
+        subarea = SubArea.query.get(data['subarea_id'])
+        if not subarea:
+            return jsonify({'success': False, 'message': 'Subárea no encontrada'}), 404
+        
+        sop_evento = SopEvento.query.get(data['sop_evento_id'])
+        if not sop_evento:
+            return jsonify({'success': False, 'message': 'SOP de evento no encontrado'}), 404
+        
+        # Verificar que la subárea pertenezca al área
+        if subarea.area_id != data['area_id']:
+            return jsonify({'success': False, 'message': 'La subárea no pertenece a esa área'}), 400
+        
+        # Determinar orden (si no viene, colocar al final)
+        orden = data.get('orden')
+        if orden is None:
+            # Obtener el orden máximo actual para ese día/personal
+            max_orden = db.session.query(db.func.max(LanzamientoTarea.orden))\
+                .filter_by(dia_id=data['dia_id'], personal_id=data['personal_id'])\
+                .scalar() or 0
+            orden = max_orden + 1
+        
+        # Crear lanzamiento de tarea
+        nueva_tarea = LanzamientoTarea(
+            dia_id=data['dia_id'],
+            personal_id=data['personal_id'],
+            area_id=data['area_id'],
+            subarea_id=data['subarea_id'],
+            sop_evento_id=data['sop_evento_id'],
+            tipo_tarea='evento',
+            orden=orden,
+            es_adicional=data.get('es_adicional', False),
+            es_arrastrable=False  # Los eventos NO son arrastrables
+        )
+        
+        db.session.add(nueva_tarea)
+        asegurar_tareas_fijas(data['dia_id'], data['personal_id'])
+        db.session.commit()
+        
+        # Calcular tiempo total del evento
+        tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Evento lanzado exitosamente',
+            'data': {
+                'tarea_id': nueva_tarea.tarea_id,
+                'personal_nombre': personal.nombre,
+                'area_nombre': area.nombre,
+                'subarea_nombre': subarea.nombre,
+                'evento_nombre': sop_evento.evento_catalogo.nombre,
+                'caso_nombre': sop_evento.caso_catalogo.nombre,
+                'sop_evento_nombre': sop_evento.nombre,
+                'tiempo_estimado_minutos': tiempo_total,
+                'total_fracciones': len(sop_evento.detalles)
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al lanzar evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 2. OBTENER EVENTOS ASIGNADOS A UN OPERADOR
+# ============================================================================
+@main_bp.route('/api/operador/<personal_id>/eventos', methods=['GET'])
+def obtener_eventos_operador(personal_id):
+    """
+    GET /api/operador/<personal_id>/eventos
+    
+    Retorna todos los eventos asignados a un operador.
+    
+    Query params:
+    - dia_id: Filtrar por día específico
+    - completado: Filtrar por completado (true/false)
+    """
+    try:
+        query = LanzamientoTarea.query.filter_by(
+            personal_id=personal_id,
+            tipo_tarea='evento'
+        )
+        
+        # Filtros opcionales
+        dia_id = request.args.get('dia_id')
+        completado = request.args.get('completado')
+        
+        if dia_id:
+            query = query.filter_by(dia_id=int(dia_id))
+        
+        tareas = query.order_by(LanzamientoTarea.orden).all()
+        
+        # Filtrar por completado si viene el parámetro
+        if completado is not None:
+            completado_bool = completado.lower() == 'true'
+            tareas = [t for t in tareas if (t.check is not None) == completado_bool]
+        
+        resultado = []
+        for tarea in tareas:
+            sop_evento = tarea.sop_evento
+            tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+            
+            tarea_data = {
+                'tarea_id': tarea.tarea_id,
+                'dia_id': tarea.dia_id,
+                'fecha': tarea.dia.fecha.isoformat(),
+                'area_id': tarea.area_id,
+                'area_nombre': tarea.area.nombre,
+                'subarea_id': tarea.subarea_id,
+                'subarea_nombre': tarea.subarea.nombre,
+                'sop_evento_id': tarea.sop_evento_id,
+                'evento_nombre': sop_evento.evento_catalogo.nombre,
+                'caso_nombre': sop_evento.caso_catalogo.nombre,
+                'sop_evento_nombre': sop_evento.nombre,
+                'tiempo_estimado_minutos': tiempo_total,
+                'total_fracciones': len(sop_evento.detalles),
+                'orden': tarea.orden,
+                'completado': tarea.check is not None,
+                'fecha_completado': tarea.check.checked_at.isoformat() if tarea.check else None,
+                'completado_por': tarea.check.user_id if tarea.check else None
+            }
+            
+            resultado.append(tarea_data)
+        
+        return jsonify({
+            'success': True,
+            'data': resultado,
+            'total': len(resultado),
+            'completados': sum(1 for t in resultado if t['completado']),
+            'pendientes': sum(1 for t in resultado if not t['completado'])
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener eventos: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 3. OBTENER DETALLE DE EVENTO PARA EJECUCIÓN
+# ============================================================================
+@main_bp.route('/api/evento-ejecucion/<tarea_id>', methods=['GET'])
+def obtener_evento_ejecucion(tarea_id):
+    """
+    GET /api/evento-ejecucion/<tarea_id>
+    
+    Retorna el detalle completo del evento para que el operador lo ejecute.
+    Incluye todas las fracciones con sus metodologías, pasos, kits, etc.
+    """
+    try:
+        tarea = LanzamientoTarea.query.get(tarea_id)
+        
+        if not tarea:
+            return jsonify({'success': False, 'message': 'Tarea no encontrada'}), 404
+        
+        if tarea.tipo_tarea != 'evento':
+            return jsonify({'success': False, 'message': 'Esta tarea no es un evento'}), 400
+        
+        sop_evento = tarea.sop_evento
+        
+        # Construir fracciones con todos los detalles
+        fracciones = []
+        tiempo_total = 0
+        
+        for detalle in sop_evento.detalles:
+            tiempo_total += detalle.tiempo_estimado
+            
+            # Obtener pasos de metodología
+            pasos = []
+            if detalle.fraccion.metodologia:
+                pasos = [{
+                    'numero_paso': paso.numero_paso,
+                    'descripcion': paso.descripcion
+                } for paso in detalle.fraccion.metodologia.pasos]
+            
+            fraccion_data = {
+                'detalle_id': detalle.detalle_id,
+                'fraccion_evento_id': detalle.fraccion_evento_id,
+                'fraccion_nombre': detalle.fraccion.nombre,
+                'fraccion_descripcion': detalle.fraccion.descripcion,
+                'orden': detalle.orden,
+                'tiempo_estimado': detalle.tiempo_estimado,
+                'observaciones': detalle.observaciones,
+                # Kit
+                'kit': {
+                    'kit_id': detalle.kit_id,
+                    'nombre': detalle.kit.nombre if detalle.kit else None,
+                    'descripcion': detalle.kit.descripcion if detalle.kit else None
+                } if detalle.kit_id else None,
+                # Receta
+                'receta': {
+                    'receta_id': detalle.receta_id,
+                    'nombre': detalle.receta.nombre if detalle.receta else None,
+                    'descripcion': detalle.receta.descripcion if detalle.receta else None
+                } if detalle.receta_id else None,
+                # Consumo
+                'consumo': {
+                    'consumo_id': detalle.consumo_id,
+                    'nombre': detalle.consumo.nombre if detalle.consumo else None,
+                    'descripcion': detalle.consumo.descripcion if detalle.consumo else None
+                } if detalle.consumo_id else None,
+                # Metodología con pasos
+                'metodologia': {
+                    'nombre': detalle.fraccion.metodologia.nombre if detalle.fraccion.metodologia else None,
+                    'descripcion': detalle.fraccion.metodologia.descripcion if detalle.fraccion.metodologia else None,
+                    'pasos': pasos
+                }
+            }
+            
+            fracciones.append(fraccion_data)
+        
+        evento_data = {
+            'tarea_id': tarea.tarea_id,
+            'area_nombre': tarea.area.nombre,
+            'subarea_nombre': tarea.subarea.nombre,
+            'evento_tipo': sop_evento.evento_catalogo.nombre,
+            'caso': sop_evento.caso_catalogo.nombre,
+            'sop_nombre': sop_evento.nombre,
+            'sop_descripcion': sop_evento.descripcion,
+            'tiempo_total_minutos': tiempo_total,
+            'fracciones': fracciones,
+            'total_fracciones': len(fracciones),
+            'completado': tarea.check is not None,
+            'fecha_completado': tarea.check.checked_at.isoformat() if tarea.check else None
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': evento_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 4. MARCAR EVENTO COMO COMPLETADO
+# ============================================================================
+@main_bp.route('/api/evento-completar/<tarea_id>', methods=['POST'])
+def completar_evento(tarea_id):
+    """
+    POST /api/evento-completar/<tarea_id>
+    
+    Marca un evento como completado por el operador.
+    
+    Body:
+    {
+        "user_id": 1  // ID del usuario que completa (puede ser el operador o supervisor)
+    }
+    """
+    try:
+        tarea = LanzamientoTarea.query.get(tarea_id)
+        
+        if not tarea:
+            return jsonify({'success': False, 'message': 'Tarea no encontrada'}), 404
+        
+        if tarea.tipo_tarea != 'evento':
+            return jsonify({'success': False, 'message': 'Esta tarea no es un evento'}), 400
+        
+        # Verificar si ya está completado
+        if tarea.check:
+            return jsonify({
+                'success': False,
+                'message': 'Este evento ya está completado',
+                'fecha_completado': tarea.check.checked_at.isoformat()
+            }), 400
+        
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({'success': False, 'message': 'user_id es requerido'}), 400
+        
+        # Crear check
+        nuevo_check = TareaCheck(
+            tarea_id=tarea_id,
+            checked_at=datetime.utcnow(),
+            user_id=user_id
+        )
+        
+        db.session.add(nuevo_check)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Evento completado exitosamente',
+            'data': {
+                'tarea_id': tarea_id,
+                'check_id': nuevo_check.check_id,
+                'checked_at': nuevo_check.checked_at.isoformat(),
+                'user_id': user_id
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al completar evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 5. CANCELAR/ELIMINAR EVENTO ASIGNADO
+# ============================================================================
+@main_bp.route('/api/evento-cancelar/<tarea_id>', methods=['DELETE'])
+def cancelar_evento(tarea_id):
+    """
+    DELETE /api/evento-cancelar/<tarea_id>
+    
+    Cancela/elimina un evento asignado.
+    Solo se puede cancelar si NO está completado.
+    """
+    try:
+        tarea = LanzamientoTarea.query.get(tarea_id)
+        
+        if not tarea:
+            return jsonify({'success': False, 'message': 'Tarea no encontrada'}), 404
+        
+        if tarea.tipo_tarea != 'evento':
+            return jsonify({'success': False, 'message': 'Esta tarea no es un evento'}), 400
+        
+        # Verificar si está completado
+        if tarea.check:
+            return jsonify({
+                'success': False,
+                'message': 'No se puede cancelar un evento completado'
+            }), 400
+        
+        # Eliminar tarea (cascade eliminará el check si existiera)
+        db.session.delete(tarea)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Evento cancelado exitosamente'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al cancelar evento: {str(e)}'
+        }), 500
+
+
+# ============================================================================
+# 6. OBTENER EVENTOS POR DÍA (PARA SUPERVISOR)
+# ============================================================================
+@main_bp.route('/api/eventos-dia/<int:dia_id>', methods=['GET'])
+def obtener_eventos_dia(dia_id):
+    """
+    GET /api/eventos-dia/<dia_id>
+    
+    Retorna todos los eventos lanzados en un día específico.
+    Útil para vista de supervisor.
+    
+    Query params:
+    - area_id: Filtrar por área
+    - completado: Filtrar por estado (true/false)
+    """
+    try:
+        query = LanzamientoTarea.query.filter_by(
+            dia_id=dia_id,
+            tipo_tarea='evento'
+        )
+        
+        # Filtros opcionales
+        area_id = request.args.get('area_id')
+        completado = request.args.get('completado')
+        
+        if area_id:
+            query = query.filter_by(area_id=area_id)
+        
+        tareas = query.order_by(LanzamientoTarea.personal_id, LanzamientoTarea.orden).all()
+        
+        # Filtrar por completado si viene el parámetro
+        if completado is not None:
+            completado_bool = completado.lower() == 'true'
+            tareas = [t for t in tareas if (t.check is not None) == completado_bool]
+        
+        resultado = []
+        for tarea in tareas:
+            sop_evento = tarea.sop_evento
+            tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
+            
+            tarea_data = {
+                'tarea_id': tarea.tarea_id,
+                'personal_id': tarea.personal_id,
+                'personal_nombre': tarea.personal.nombre,
+                'area_id': tarea.area_id,
+                'area_nombre': tarea.area.nombre,
+                'subarea_id': tarea.subarea_id,
+                'subarea_nombre': tarea.subarea.nombre,
+                'evento_tipo': sop_evento.evento_catalogo.nombre,
+                'caso': sop_evento.caso_catalogo.nombre,
+                'sop_evento_nombre': sop_evento.nombre,
+                'tiempo_estimado_minutos': tiempo_total,
+                'orden': tarea.orden,
+                'completado': tarea.check is not None,
+                'fecha_completado': tarea.check.checked_at.isoformat() if tarea.check else None
+            }
+            
+            resultado.append(tarea_data)
+        
+        return jsonify({
+            'success': True,
+            'data': resultado,
+            'total': len(resultado),
+            'completados': sum(1 for t in resultado if t['completado']),
+            'pendientes': sum(1 for t in resultado if not t['completado'])
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al obtener eventos del día: {str(e)}'
+        }), 500

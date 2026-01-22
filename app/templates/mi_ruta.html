@@ -204,6 +204,45 @@
     .tipo-regular { background: #d1fae5; color: #065f46; }
     .tipo-extraordinario { background: #ede9fe; color: #5b21b6; }
     .tipo-consecuente { background: #dbeafe; color: #1e40af; }
+    
+    /* ✅ Estilos para tareas fijas y eventos (NUEVO) */
+    .task-item.tipo-inicio {
+      border-left: 4px solid #2196F3;
+      background: #E3F2FD;
+    }
+    /* ✅ Estilos para tareas fijas y eventos - COLORES SUAVES */
+    .task-item.tipo-inicio {
+      border-left: 4px solid #90CAF9;
+      background: #F1F8FF;
+    }
+    .task-item.tipo-inicio.is-checked {
+      background: #E3F2FD;
+      border-color: #64B5F6;
+    }
+    .task-item.tipo-receso {
+      border-left: 4px solid #FFD54F;
+      background: #FFFEF7;
+    }
+    .task-item.tipo-receso.is-checked {
+      background: #FFF9E6;
+      border-color: #FFCA28;
+    }
+    .task-item.tipo-limpieza_equipo {
+      border-left: 4px solid #81C784;
+      background: #F1F8F4;
+    }
+    .task-item.tipo-limpieza_equipo.is-checked {
+      background: #E8F5E9;
+      border-color: #66BB6A;
+    }
+    .task-item.tipo-evento {
+      border-left: 4px solid #FFB74D;
+      background: #FFF8F0;
+    }
+    .task-item.tipo-evento.is-checked {
+      background: #FFF3E0;
+      border-color: #FFA726;
+    }
 
     /* Botón grande Ver Ruta */
     .btn-ruta {
@@ -308,36 +347,61 @@
         {% for t in tareas %}
           {% set is_checked = t.tarea_id in checks_map %}
           {% set check_time = checks_map.get(t.tarea_id, '') %}
-          
-          <div class="task-item {% if is_checked %}is-checked{% endif %}">
+          {% set task_type = t.tipo_tarea|default('sop') %}
+          <div class="task-item tipo-{{ task_type|replace('_', '-') }} {% if is_checked %}is-checked{% endif %}">
             <div class="task-status {% if is_checked %}done{% else %}pending{% endif %}">
               {% if is_checked %}✓{% else %}○{% endif %}
             </div>
             
             <div class="task-info">
               <div class="task-title">
-                {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
-                
-                <!-- ✅ Badge de tipo -->
-                {% if t.es_adicional %}
-                  {% if t.sop_id and '-C' in t.sop_id %}
-                    <span class="tipo-badge tipo-consecuente">Consecuente</span>
-                  {% else %}
-                    <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
-                  {% endif %}
+                {% if task_type == 'inicio' %}
+                  INICIO
+                {% elif task_type == 'receso' %}
+                  RECESO
+                {% elif task_type == 'limpieza_equipo' %}
+                  LIMPIEZA DE EQUIPO
+                {% elif task_type == 'evento' %}
+                  EVENTO: {{ t.sop_evento.caso_catalogo.nombre if t.sop_evento and t.sop_evento.caso_catalogo else 'Sin especificar' }}
                 {% else %}
-                  <span class="tipo-badge tipo-regular">Regular</span>
+                  {# SOPs normales #}
+                  {{ t.subarea.subarea_nombre if t.subarea else t.subarea_id }}
+                  
+                  <!-- ✅ Badge de tipo (solo SOPs) -->
+                  {% if t.es_adicional %}
+                    {% if t.sop_id and '-C' in t.sop_id %}
+                      <span class="tipo-badge tipo-consecuente">Consecuente</span>
+                    {% else %}
+                      <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="tipo-badge tipo-regular">Regular</span>
+                  {% endif %}
+                  
+                  {% if t.nivel_limpieza_asignado %}
+                    <span class="nivel-badge {{ nivel_clases.get(t.nivel_limpieza_asignado|lower, 'nivel-basica') }}">
+                      {{ nivel_labels.get(t.nivel_limpieza_asignado|lower, t.nivel_limpieza_asignado) }}
+                    </span>
+                  {% endif %}
                 {% endif %}
-                
-                <span class="nivel-badge {{ nivel_clases.get(t.nivel_limpieza_asignado|lower, 'nivel-basica') }}">
-                  {{ nivel_labels.get(t.nivel_limpieza_asignado|lower, t.nivel_limpieza_asignado) }}
-                </span>
               </div>
-              <div class="task-meta">
-                {{ t.area.area_nombre if t.area else t.area_id }}
-              </div>
+              
+              <!-- ✅ Metadata según tipo -->
+              {% if task_type == 'sop' %}
+                <div class="task-meta">
+                  {{ t.area.area_nombre if t.area else t.area_id }}
+                </div>
+              {% elif task_type == 'evento' %}
+                <div class="task-meta">
+                  {{ t.area.area_nombre if t.area else 'Sin área' }} · 
+                  {{ (t.sop_evento.detalles | map(attribute='tiempo_estimado') | sum) if t.sop_evento else 0 }} min
+                </div>
+              {% elif task_type in ['inicio', 'receso', 'limpieza_equipo'] %}
+                <div class="task-meta">
+                  {{ t.tiempo_estimado or 0 }} min estimados
+                </div>
+              {% endif %}
             </div>
-            
             {% if is_checked %}
               <div class="task-time">{{ check_time }}</div>
             {% endif %}
