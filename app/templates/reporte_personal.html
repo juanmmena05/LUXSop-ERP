@@ -261,6 +261,36 @@
     .tipo-regular { background: #d1fae5; color: #065f46; }
     .tipo-extraordinario { background: #ede9fe; color: #5b21b6; }
     .tipo-consecuente { background: #dbeafe; color: #1e40af; }
+    
+    /* ✅ Estilos para tareas fijas y eventos - COLORES SUAVES */
+    .acc-item.tipo-inicio {
+      border-left: 4px solid #90CAF9;
+      background: #F1F8FF;
+    }
+    .acc-item.tipo-inicio .acc-head {
+      background: #E3F2FD;
+    }
+    .acc-item.tipo-receso {
+      border-left: 4px solid #FFD54F;
+      background: #FFFEF7;
+    }
+    .acc-item.tipo-receso .acc-head {
+      background: #FFF9E6;
+    }
+    .acc-item.tipo-limpieza_equipo {
+      border-left: 4px solid #81C784;
+      background: #F1F8F4;
+    }
+    .acc-item.tipo-limpieza_equipo .acc-head {
+      background: #E8F5E9;
+    }
+    .acc-item.tipo-evento {
+      border-left: 4px solid #FFB74D;
+      background: #FFF8F0;
+    }
+    .acc-item.tipo-evento .acc-head {
+      background: #FFF3E0;
+    }
 
     /* Checkbox de completado al final de cada subárea */
     .check-section {
@@ -395,23 +425,31 @@
           {% set is_checked = d.tarea_id in checks_map %}
           {% set check_time = checks_map.get(d.tarea_id, '') %}
           
-          <div class="acc-item {% if is_checked %}is-checked{% endif %}" id="micro-{{ loop.index }}" data-tarea-id="{{ d.tarea_id }}">
+          <div class="acc-item tipo-{{ d.tipo_tarea|default("sop")|replace("_", "-") }} {% if is_checked %}is-checked{% endif %}" id="micro-{{ loop.index }}" data-tarea-id="{{ d.tarea_id }}">
             <div class="acc-head" data-acc-toggle="micro-{{ loop.index }}">
               <h3>
                 {{ d.subarea }}
                 
-                <!-- ✅ Badge de tipo -->
-                {% if d.es_adicional %}
-                  {% if d.sop_id and '-C' in d.sop_id %}
-                    <span class="tipo-badge tipo-consecuente">Consecuente</span>
+                <!-- ✅ Badge de tipo (solo para SOPs) -->
+                {% if d.tipo_tarea == 'sop' %}
+                  {% if d.es_adicional %}
+                    {% if d.sop_id and '-C' in d.sop_id %}
+                      <span class="tipo-badge tipo-consecuente">Consecuente</span>
+                    {% else %}
+                      <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
+                    {% endif %}
                   {% else %}
-                    <span class="tipo-badge tipo-extraordinario">Extraordinario</span>
+                    <span class="tipo-badge tipo-regular">Regular</span>
                   {% endif %}
-                {% else %}
-                  <span class="tipo-badge tipo-regular">Regular</span>
                 {% endif %}
               </h3>
-              <span class="acc-meta">({{ d.area }}) – Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
+              
+              <!-- ✅ Solo mostrar área/nivel para SOPs y Eventos -->
+              {% if d.tipo_tarea == 'sop' %}
+                <span class="acc-meta">({{ d.area }}) – Nivel: <strong>{{ d.nivel|capitalize }}</strong></span>
+              {% elif d.tipo_tarea == 'evento' %}
+                <span class="acc-meta">({{ d.area }})</span>
+              {% endif %}
               <div class="spacer"></div>
 
               {% if is_checked %}
@@ -428,7 +466,6 @@
                 <p><strong>⚠ Observaciones críticas:</strong><br>{{ d.observacion_critica }}</p>
                 <div class="section-line"></div>
               {% endif %}
-
               {% if d.fracciones and d.fracciones|length > 0 %}
                 <ol class="list">
                   {% for f in d.fracciones %}
@@ -445,7 +482,7 @@
                           <strong>🧼 Metodología:</strong>
                           <ol>
                             {% for paso in f.metodologia.pasos %}
-                              <li>{{ paso.instruccion }}</li>
+                              <li>{{ paso.instruccion if paso.instruccion is defined else paso.descripcion }}</li>
                             {% endfor %}
                           </ol>
                         </div>
@@ -495,10 +532,10 @@
                     </li>
                   {% endfor %}
                 </ol>
-              {% else %}
+              {% elif d.tipo_tarea == 'sop' %}
+                {# Solo mostrar mensaje para SOPs sin fracciones #}
                 <p class="muted">Sin fracciones para el nivel asignado.</p>
               {% endif %}
-
               <!-- CHECK DE COMPLETADO AL FINAL DE CADA SUBÁREA -->
               {% if puede_hacer_check %}
                 <div class="check-section" data-tarea-id="{{ d.tarea_id }}">
