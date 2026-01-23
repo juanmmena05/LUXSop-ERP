@@ -133,7 +133,7 @@ def crear_tareas_fijas(dia_id: int, personal_id: str):
         personal_id=personal_id,
         tipo_tarea='receso',
         orden=50,
-        es_arrastrable=False
+        es_arrastrable=True
     )
     
     # ✅ Limpieza de Equipo vinculada al SOP de evento
