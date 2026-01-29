@@ -900,9 +900,11 @@ def reporte_persona_dia(fecha, personal_id):
             selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.evento_catalogo),
             selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.caso_catalogo),
             selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.fraccion).selectinload(SopEventoFraccion.metodologia).selectinload(MetodologiaEventoFraccion.pasos),
-            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.kit),
-            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.receta),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.kit).selectinload(Kit.detalles).selectinload(KitDetalle.herramienta),
+            selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.receta).selectinload(Receta.detalles).selectinload(RecetaDetalle.quimico),
             selectinload(LanzamientoTarea.sop_evento).selectinload(SopEvento.detalles).selectinload(SopEventoDetalle.consumo),
+
+
         )
         .order_by(LanzamientoTarea.orden, LanzamientoTarea.tarea_id)
         .all()
@@ -1096,20 +1098,14 @@ def reporte_persona_dia(fecha, personal_id):
                 fraccion = detalle.fraccion
                 metodologia = fraccion.metodologia if fraccion else None
                 
-                # Construir tabla de recursos
+                # Construir tabla de recursos (formato eventos: 4 columnas)
                 tabla = None
                 if detalle.kit or detalle.receta or detalle.consumo:
-                    headers = ["Recurso", "Detalle"]
-                    rows = []
-                    
-                    if detalle.kit:
-                        rows.append(["Kit", detalle.kit.nombre])
-                    if detalle.receta:
-                        rows.append(["Receta", detalle.receta.nombre])
-                    if detalle.consumo:
-                        rows.append(["Consumo", detalle.consumo.nombre])
-                    
-                    tabla = {"headers": headers, "rows": rows}
+                    headers = ["Químico", "Receta", "Consumo", "Herramienta"]
+                    q_str, r_str = fmt_quimico_y_receta(detalle.receta)
+                    c_str = fmt_consumo(detalle.consumo)
+                    h_str = fmt_herramientas_list(detalle.kit)
+                    tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
                 
                 fracciones_evento.append({
                     "orden": detalle.orden,
@@ -1177,21 +1173,14 @@ def reporte_persona_dia(fecha, personal_id):
         for detalle in sop_evento.detalles:
             fraccion = detalle.fraccion
             metodologia = fraccion.metodologia if fraccion else None
-            
-            # Construir tabla de recursos (igual que SOPs)
+            # Construir tabla de recursos (formato eventos: 4 columnas)
             tabla = None
             if detalle.kit or detalle.receta or detalle.consumo:
-                headers = ["Recurso", "Detalle"]
-                rows = []
-                
-                if detalle.kit:
-                    rows.append(["Kit", detalle.kit.nombre])
-                if detalle.receta:
-                    rows.append(["Receta", detalle.receta.nombre])
-                if detalle.consumo:
-                    rows.append(["Consumo", detalle.consumo.nombre])
-                
-                tabla = {"headers": headers, "rows": rows}
+                headers = ["Químico", "Receta", "Consumo", "Herramienta"]
+                q_str, r_str = fmt_quimico_y_receta(detalle.receta)
+                c_str = fmt_consumo(detalle.consumo)
+                h_str = fmt_herramientas_list(detalle.kit)
+                tabla = {"headers": headers, "rows": [[q_str, r_str, c_str, h_str]]}
             
             fracciones_evento.append({
                 "orden": detalle.orden,
