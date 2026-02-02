@@ -113,75 +113,87 @@ def get_or_create_dia(fecha_obj: date):
 
 
 def crear_tareas_fijas(dia_id: int, personal_id: str):
-    """
-    Crea las 3 tareas fijas para un operario en un día:
-    - Inicio (orden -1)
-    - Receso (orden 50)
-    - Limpieza de Equipo (orden 999) - vinculada a SOP de evento
-    """
+    """Crea las 3 tareas fijas para un operario"""
+    tareas_fijas = [
+        {
+            'tipo_tarea': 'inicio', 
+            'orden': -3,
+            'sop_evento_id': None,
+            'es_arrastrable': False  # ✅ Nunca se mueve
+        },
+        {
+            'tipo_tarea': 'receso', 
+            'orden': 50,
+            'sop_evento_id': None,
+            'es_arrastrable': True  # ✅ Se puede mover
+        },
+        {
+            'tipo_tarea': 'limpieza_equipo', 
+            'orden': 999,
+            'sop_evento_id': 'SP-LI-EQ-001',  # ✅ Evento configurado
+            'es_arrastrable': False  # ✅ Siempre al final (o True si quieres permitir moverlo)
+        }
+    ]
     
-    inicio = LanzamientoTarea(
-        dia_id=dia_id,
-        personal_id=personal_id,
-        tipo_tarea='inicio',
-        orden=-1,
-        es_arrastrable=False
-    )
+    for tarea in tareas_fijas:
+        t = LanzamientoTarea(
+            dia_id=dia_id,
+            personal_id=personal_id,
+            tipo_tarea=tarea['tipo_tarea'],
+            orden=tarea['orden'],
+            sop_evento_id=tarea['sop_evento_id'],
+            es_arrastrable=tarea['es_arrastrable']
+        )
+        db.session.add(t)
     
-    receso = LanzamientoTarea(
-        dia_id=dia_id,
-        personal_id=personal_id,
-        tipo_tarea='receso',
-        orden=50,
-        es_arrastrable=True
-    )
-    
-    # ✅ Limpieza de Equipo vinculada al SOP de evento
-    limpieza = LanzamientoTarea(
-        dia_id=dia_id,
-        personal_id=personal_id,
-        tipo_tarea='limpieza_equipo',
-        sop_evento_id='SP-LI-EQ-001',  # ← AGREGAR ESTA LÍNEA
-        orden=999,
-        es_arrastrable=False
-    )
-    
-    db.session.add(inicio)
-    db.session.add(receso)
-    db.session.add(limpieza)
     db.session.commit()
 
 def asegurar_tareas_fijas(dia_id: int, personal_id: str):
     """
     Verifica si un operario tiene tareas fijas en un día.
     Si NO las tiene, las crea automáticamente.
-    
-    Retorna True si se crearon tareas fijas, False si ya existían.
     """
     
-    # Verificar si ya tiene tarea de inicio (indicador de que ya tiene fijas)
-    tiene_inicio = LanzamientoTarea.query.filter_by(
-        dia_id=dia_id,
-        personal_id=personal_id,
-        tipo_tarea='inicio'
-    ).first()
+    # ✅ Verificar con una sola query si ya tiene CUALQUIER tarea fija
+    tiene_fijas = db.session.query(
+        db.exists().where(
+            db.and_(
+                LanzamientoTarea.dia_id == dia_id,
+                LanzamientoTarea.personal_id == personal_id,
+                LanzamientoTarea.tipo_tarea.in_(['inicio', 'receso', 'limpieza_equipo'])
+            )
+        )
+    ).scalar()
     
-    if not tiene_inicio:
+    if not tiene_fijas:
         crear_tareas_fijas(dia_id, personal_id)
-        return True  # Se crearon las tareas fijas
+        return True
     
-    return False  # Ya existían
+    return False
 
 
 # --- Helper: set etiqueta plantilla activa para una semana ---
-def set_plantilla_activa(lunes_semana: date, plantilla_id: Optional[int]):
-    fila = PlantillaSemanaAplicada.query.get(lunes_semana)
-    if not fila:
-        fila = PlantillaSemanaAplicada(semana_lunes=lunes_semana, plantilla_id=plantilla_id)
-        db.session.add(fila)
+def set_plantilla_activa(lunes: date, plantilla_id: int = None):
+    """Marca o desmarca la plantilla activa de una semana"""
+    marca = PlantillaSemanaAplicada.query.get(lunes)
+    
+    if plantilla_id is None:
+        # Remover marca
+        if marca:
+            db.session.delete(marca)
     else:
-        fila.plantilla_id = plantilla_id
-        fila.aplicada_en = datetime.utcnow()
+        # Crear o actualizar marca
+        if marca:
+            marca.plantilla_id = plantilla_id
+            marca.aplicada_en = datetime.now()  # ✅ Cambiar a "aplicada_en"
+        else:
+            marca = PlantillaSemanaAplicada(
+                semana_lunes=lunes,  # ✅ Cambiar de "lunes" a "semana_lunes"
+                plantilla_id=plantilla_id,
+                aplicada_en=datetime.now()  # ✅ Cambiar de "fecha_aplicacion" a "aplicada_en"
+            )
+            db.session.add(marca)
+    
     db.session.commit()
 
 # =========================
@@ -226,6 +238,7 @@ def rango_lunes_a_sabado(lunes: date):
     return [lunes + timedelta(days=i) for i in range(6)]
 
 def borrar_asignaciones_semana(lunes_destino: date):
+    """Borra todas las tareas de la semana"""
     dias = [lunes_destino + timedelta(days=i) for i in range(6)]
     for d in dias:
         dia = LanzamientoDia.query.filter_by(fecha=d).first()
@@ -293,40 +306,109 @@ def aplicar_desde_semana(origen_lunes: date, destino_lunes: date, overwrite: boo
 
 
 def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite: bool):
+    """Versión optimizada con bulk operations"""
     if overwrite:
         borrar_asignaciones_semana(destino_lunes)
 
-    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+    plantilla = PlantillaSemanal.query.options(
+        db.joinedload(PlantillaSemanal.items)
+    ).get_or_404(plantilla_id)
+    
+    if not plantilla.items:
+        db.session.commit()
+        return
+
+    # ✅ 1. Pre-crear SEMANA y TODOS los días necesarios
+    dias_map = {}  # {fecha: dia_id}
+    fechas_necesarias = set()
+    
     for it in plantilla.items:
         fecha_dest = destino_lunes + timedelta(days=it.dia_index)
+        fechas_necesarias.add(fecha_dest)
+    
+    # Crear o buscar la semana
+    semana = LanzamientoSemana.query.filter_by(fecha_inicio=destino_lunes).first()
+    if not semana:
+        semana = LanzamientoSemana(
+            nombre=f"Semana {destino_lunes.isocalendar()[1]}",
+            fecha_inicio=destino_lunes
+        )
+        db.session.add(semana)
+        db.session.flush()  # Para obtener semana_id
+    
+    # Cargar días existentes
+    dias_existentes = LanzamientoDia.query.filter(
+        LanzamientoDia.fecha.in_(fechas_necesarias),
+        LanzamientoDia.semana_id == semana.semana_id
+    ).all()
+    
+    for dia in dias_existentes:
+        dias_map[dia.fecha] = dia.dia_id
+    
+    # Crear días faltantes
+    for fecha in fechas_necesarias:
+        if fecha not in dias_map:
+            nuevo_dia = LanzamientoDia(
+                semana_id=semana.semana_id,
+                fecha=fecha
+            )
+            db.session.add(nuevo_dia)
+            db.session.flush()  # Para obtener el dia_id
+            dias_map[fecha] = nuevo_dia.dia_id
+
+    # ✅ 2. Pre-cargar tareas existentes para evitar duplicados
+    dia_ids = list(dias_map.values())
+    tareas_existentes = set()
+    
+    if dia_ids:
+        tareas_actuales = db.session.query(
+            LanzamientoTarea.dia_id,
+            LanzamientoTarea.subarea_id,
+            LanzamientoTarea.sop_id
+        ).filter(
+            LanzamientoTarea.dia_id.in_(dia_ids)
+        ).all()
         
-        # ✅ Copiar sop_id y es_adicional desde PlantillaItem
+        for t in tareas_actuales:
+            tareas_existentes.add((t.dia_id, t.subarea_id, t.sop_id))
+
+    # ✅ 3. Pre-cargar SOPs para items viejos (sin sop_id)
+    subareas_sin_sop = [it.subarea_id for it in plantilla.items if not getattr(it, 'sop_id', None)]
+    sops_map = {}
+    
+    if subareas_sin_sop:
+        sops = SOP.query.filter(
+            SOP.subarea_id.in_(subareas_sin_sop),
+            SOP.tipo_sop == "regular"
+        ).all()
+        for sop in sops:
+            sops_map[sop.subarea_id] = sop.sop_id
+
+    # ✅ 4. Trackear operarios únicos por día para tareas fijas
+    operarios_por_dia = {}  # {dia_id: set(personal_ids)}
+
+    # ✅ 5. Crear todas las tareas en batch
+    tareas_a_insertar = []
+    
+    for it in plantilla.items:
+        fecha_dest = destino_lunes + timedelta(days=it.dia_index)
+        dia_id = dias_map[fecha_dest]
+        
+        # Obtener sop_id
         sop_id = getattr(it, 'sop_id', None)
+        if not sop_id:
+            sop_id = sops_map.get(it.subarea_id)
+        
         es_adicional = getattr(it, 'es_adicional', False)
         
-        # Si no tiene sop_id (items viejos), calcularlo
-        if not sop_id:
-            sop = SOP.query.filter_by(subarea_id=it.subarea_id, tipo_sop="regular").first()
-            sop_id = sop.sop_id if sop else None
-        
-        dia = upsert_dia(fecha_dest)
-        
-        # Verificar si ya existe (para evitar duplicados)
-        if es_adicional and sop_id and '-C' in sop_id:
-            # Consecuentes: no validar duplicados
-            pass
-        else:
-            existe = LanzamientoTarea.query.filter_by(
-                dia_id=dia.dia_id,
-                subarea_id=it.subarea_id,
-                sop_id=sop_id
-            ).first()
-            if existe:
+        # Verificar duplicados
+        if not (es_adicional and sop_id and '-C' in sop_id):
+            if (dia_id, it.subarea_id, sop_id) in tareas_existentes:
                 continue
         
-
+        # Crear tarea
         t = LanzamientoTarea(
-            dia_id=dia.dia_id,
+            dia_id=dia_id,
             personal_id=it.personal_id,
             area_id=it.area_id,
             subarea_id=it.subarea_id,
@@ -335,12 +417,24 @@ def aplicar_plantilla_guardada(plantilla_id: int, destino_lunes: date, overwrite
             es_adicional=es_adicional,
             orden=it.orden or 0
         )
-        db.session.add(t)
+        tareas_a_insertar.append(t)
         
-        # ✅ Crear tareas fijas si el operador no las tiene en este día
-        asegurar_tareas_fijas(dia.dia_id, it.personal_id)
+        # Registrar operario para tareas fijas
+        if dia_id not in operarios_por_dia:
+            operarios_por_dia[dia_id] = set()
+        operarios_por_dia[dia_id].add(it.personal_id)
+    
+    # ✅ 6. Bulk insert de tareas
+    if tareas_a_insertar:
+        db.session.bulk_save_objects(tareas_a_insertar)
+    
+    # ✅ 7. Crear tareas fijas para operarios únicos (una sola vez por operario/día)
+    for dia_id, personal_ids in operarios_por_dia.items():
+        for personal_id in personal_ids:
+            asegurar_tareas_fijas(dia_id, personal_id)
     
     db.session.commit()
+
 
 # =========================
 # Helpers Tablas HTML
@@ -1528,30 +1622,56 @@ def guardar_semana_como_plantilla_simple():
 @main_bp.route("/plantillas/aplicar_simple", methods=["POST"])
 @admin_required
 def aplicar_plantilla_guardada_simple():
+    """Aplica plantilla con confirmación"""
     lunes_destino_str = request.form.get("lunes_destino")
-    plantilla_id_str = request.form.get("plantilla_id")  # none | id
+    plantilla_id_str = request.form.get("plantilla_id")
+    confirmar = request.form.get("confirmar", type=int, default=0)
 
-    if not lunes_destino_str or plantilla_id_str is None:
-        return "Faltan datos", 400
+    if not lunes_destino_str or not plantilla_id_str:
+        flash("Faltan datos", "warning")
+        return redirect(url_for("main.home_admin_panel"))
 
     lunes_destino = datetime.strptime(lunes_destino_str, "%Y-%m-%d").date()
-
-    # 1) Ninguna: vaciar semana y quitar etiqueta
-    if plantilla_id_str == "none":
-        borrar_asignaciones_semana(lunes_destino)
-        set_plantilla_activa(lunes_destino, None)
-        flash("Semana vaciada. Plantilla activa: Ninguna.", "success")
-        return redirect(url_for("main.home"))
-
-    # 2) Plantilla: reemplazo total
     plantilla_id = int(plantilla_id_str)
+    
+    plantilla = PlantillaSemanal.query.get_or_404(plantilla_id)
+    plantilla_activa = PlantillaSemanaAplicada.query.get(lunes_destino)
 
+    # Si no ha confirmado, mostrar modal
+    if not confirmar:
+        # Determinar tipo de confirmación
+        if plantilla_activa and plantilla_activa.plantilla:
+            # Caso 2: Cambio de plantilla
+            mensaje = f"¿Estás seguro de cambiar a <strong>{plantilla.nombre}</strong>?"
+            detalle = "Esto borrará todas las tareas actuales y aplicará la nueva plantilla desde cero."
+        else:
+            # Caso 1: Primera plantilla
+            mensaje = f"¿Estás seguro de aplicar la plantilla <strong>{plantilla.nombre}</strong>?"
+            detalle = f"Se agregarán las tareas programadas a la semana."
+        
+        return render_template(
+            "confirmacion_modal.html",
+            titulo="Confirmar Aplicación",
+            mensaje=mensaje,
+            detalle=detalle,
+            form_action=url_for("main.aplicar_plantilla_guardada_simple"),
+            form_data={
+                "lunes_destino": lunes_destino_str,
+                "plantilla_id": plantilla_id,
+                "confirmar": 1
+            },
+            cancelar_url=url_for("main.home_admin_panel")
+        )
+
+    # Confirmado: aplicar plantilla
     borrar_asignaciones_semana(lunes_destino)
     aplicar_plantilla_guardada(plantilla_id, lunes_destino, overwrite=False)
     set_plantilla_activa(lunes_destino, plantilla_id)
 
-    flash("Plantilla aplicada. La semana fue reemplazada por completo.", "success")
-    return redirect(url_for("main.home"))
+    flash(f"Plantilla '{plantilla.nombre}' aplicada correctamente.", "success")
+    return redirect(url_for("main.home_admin_panel"))
+
+
 
 @main_bp.route("/plantillas/borrar/<int:plantilla_id>", methods=["POST"])
 @admin_required
@@ -1816,22 +1936,42 @@ def plantillas_panel():
     )
 
 # =========================
-# REMOVER plantilla activa (NO borra tareas)
+# REMOVER plantilla activa
 # =========================
-@main_bp.route("/plantillas/remover_semana", methods=["POST"])
+@main_bp.route("/plantillas/vaciar_semana", methods=["POST"])
 @admin_required
-def remover_plantilla_semana():
+def vaciar_semana():
+    """Borra todas las tareas de la semana"""
     lunes_destino_str = request.form.get("lunes_destino")
+    confirmar = request.form.get("confirmar", type=int, default=0)
+
     if not lunes_destino_str:
-        return "Falta lunes_destino", 400
+        flash("Falta fecha", "warning")
+        return redirect(url_for("main.home_admin_panel"))
 
     lunes_destino = datetime.strptime(lunes_destino_str, "%Y-%m-%d").date()
 
-    # Solo desvincula plantilla activa, NO toca LanzamientoTarea
-    set_plantilla_activa(lunes_destino, None)
-    flash("Plantilla removida (no se borraron tareas).", "success")
-    return redirect(url_for("main.home"))
+    # Si no ha confirmado, mostrar modal
+    if not confirmar:
+        return render_template(
+            "confirmacion_modal.html",
+            titulo="Confirmar Vaciado",
+            mensaje="¿Estás seguro de vaciar la semana?",
+            detalle="Esto borrará todas las tareas y desactivará la plantilla.",
+            form_action=url_for("main.vaciar_semana"),
+            form_data={
+                "lunes_destino": lunes_destino_str,
+                "confirmar": 1
+            },
+            cancelar_url=url_for("main.home_admin_panel")
+        )
 
+    # Confirmado: vaciar todo
+    borrar_asignaciones_semana(lunes_destino)
+    set_plantilla_activa(lunes_destino, None)
+
+    flash("Semana vaciada. Plantilla desactivada.", "success")
+    return redirect(url_for("main.home_admin_panel"))
 
 # =========================
 # Crear plantilla vacía (desde cero)

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
   <title>LuxSOP ERP — Semana</title>
   <style>
     :root {
@@ -17,7 +18,15 @@
       --card: #fff;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+    }
+
+    * { box-sizing: border-box;   }
+
+    html {
+      background: var(--bg);
+    }
 
     body {
       font-family: system-ui, sans-serif;
@@ -25,8 +34,15 @@
       background: var(--bg);
       margin: 0;
       padding: 2rem;
+      padding-left: 70px; /* ✅ Espacio para burger */
       max-width: 1200px;
       margin-inline: auto;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding-left: 2rem; /* En móvil el burger no estorba tanto */
+      }
     }
 
     /* Encabezado */
@@ -106,15 +122,21 @@
       font-size:16px;
       cursor:pointer;
       line-height: 1;
+      transition: all 0.2s ease;
     }
     .btn-trash:hover{ background: var(--red-d); }
 
-    .btn-trash.is-disabled{
-      opacity: .45;
+    /* ✅ Estado deshabilitado: gris */
+    .btn-trash:disabled{
+      background: #e0e0e0;
+      border-color: #bbb;
+      color: #999;
       cursor: not-allowed;
+      opacity: 1;
     }
-    .btn-trash.is-disabled:hover{ background: var(--red); }
-
+    .btn-trash:disabled:hover{ 
+      background: #e0e0e0;
+    }
     /* Caja unificada */
     .plantilla-box {
       background: #fff;
@@ -230,8 +252,6 @@
     /* ======================================================
        ✅ MENÚ LATERAL (OFF-CANVAS) + HAMBURGUESA PEGADA IZQ
        ====================================================== */
-
-    /* Botón hamburguesa fijo pegado a la izquierda */
     .burger {
       position: fixed;
       top: 16px;
@@ -249,26 +269,64 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     .burger:hover { filter: brightness(.98); }
     .burger:focus-visible {
       outline: 2px solid var(--blue);
       outline-offset: 2px;
     }
+    /* Previene estados de focus residuales en iOS */
+    .burger:focus:not(:focus-visible) {
+      outline: none;
+    }
 
     /* Overlay */
     .nav-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.35);
       z-index: 1100;
+
+      /* ✅ Cerrado = neutral para Safari */
+      background: transparent;
+
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
+
+      /* ✅ La opacidad baja, y la visibilidad se oculta al final */
+      transition: opacity .18s ease, visibility 0s linear .18s;
+    }
+
+    .nav-overlay.is-open {
+      /* ✅ Abierto = sí oscurece */
+      background: rgba(0,0,0,.35);
+
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+
       transition: opacity .18s ease;
     }
-    .nav-overlay.is-open {
+
+    /* Top guard: franja blanca arriba para evitar tinte gris en Safari */
+    .top-guard {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top, 44px);
+      background: #fff;
+      z-index: 1103;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .12s ease;
+    }
+    .top-guard.is-on {
       opacity: 1;
-      pointer-events: auto;
     }
 
     /* Sidebar */
@@ -368,6 +426,9 @@
   <!-- ✅ Overlay -->
   <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
 
+  <!-- ✅ Top guard: mantiene Safari blanco arriba -->
+  <div class="top-guard" id="topGuard" aria-hidden="true"></div>
+
   <!-- ✅ Menú lateral completo -->
   <nav class="side-nav" id="sideNav" aria-label="Menú principal">
     <div class="side-nav__head">
@@ -419,33 +480,30 @@
               id="form-aplicar-plantilla" class="form-line">
           <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">
           <span class="label">Plantilla</span>
-
-          <select id="plantilla_id" name="plantilla_id" class="select-sm" style="min-width:160px;">
-            <option value="none"
-              class="opt-muted"
-              {% if not plantilla_activa or not plantilla_activa.plantilla %}selected{% endif %}>
-              Vaciar Semana
-            </option>
-
+          <select id="plantilla_id" name="plantilla_id" class="select-sm" style="min-width:160px;" required>
+            <option value="" selected class="opt-muted">Seleccionar...</option>
             {% for p in plantillas %}
-              <option value="{{ p.plantilla_id }}"
-                {% if plantilla_activa and plantilla_activa.plantilla and p.plantilla_id == plantilla_activa.plantilla.plantilla_id %}selected{% endif %}>
+              <option value="{{ p.plantilla_id }}">
                 {{ p.nombre }}
               </option>
             {% endfor %}
           </select>
-
           <button type="submit" class="btn-sm btn-blue">Aplicar</button>
-
           <button
-            id="btn-remover-plantilla"
-            type="submit"
+            id="btn-vaciar-semana"
+            type="button"
             class="btn-trash"
-            aria-label="Remover plantilla (no borra tareas)"
-            title="Remover plantilla (no borra tareas)"
-            formaction="{{ url_for('main.remover_plantilla_semana') }}"
-            formmethod="post"
+            aria-label="Vaciar semana"
+            title="Vaciar semana y desactivar plantilla"
+            {% if not plantilla_activa or not plantilla_activa.plantilla %}disabled{% endif %}
           >✖</button>
+        </form>
+        <!-- Form oculto para vaciar semana (lo dispara la tachita) -->
+        <form id="form-vaciar-semana" 
+              action="{{ url_for('main.vaciar_semana') }}" 
+              method="POST" 
+              style="display:none;">
+          <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">
         </form>
       </div>
     </div>
@@ -494,18 +552,35 @@
     const btn = document.getElementById('navToggle');
     const closeBtn = document.getElementById('navClose');
     const overlay = document.getElementById('navOverlay');
+    const topGuard = document.getElementById('topGuard');
     if(!nav || !btn || !overlay) return;
 
     function openNav(){
-      nav.classList.add('is-open');
-      overlay.classList.add('is-open');
-      btn.setAttribute('aria-expanded','true');
-      document.body.style.overflow = 'hidden';
+      // 1) Enciende el top-guard primero
+      topGuard?.classList.add('is-on');
+
+      // 2) En el siguiente frame, abre overlay + nav
+      requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        nav.classList.add('is-open');
+
+        btn.setAttribute('aria-expanded','true');
+        overlay.setAttribute('aria-hidden','false');
+        document.body.style.overflow = 'hidden';
+      });
     }
+    
     function closeNav(){
       nav.classList.remove('is-open');
       overlay.classList.remove('is-open');
+
+      // deja el guard un frame más para que Safari no "cace" oscuro
+      requestAnimationFrame(() => {
+        topGuard?.classList.remove('is-on');
+      });
+
       btn.setAttribute('aria-expanded','false');
+      overlay.setAttribute('aria-hidden','true');
       document.body.style.overflow = '';
     }
 
@@ -539,6 +614,8 @@
 
   // ✅ Deshabilita la tacha cuando el select está en "Vaciar semana"
   // ✅ Y pone el select en modo "muted" cuando está en none
+
+
   (function(){
     const select = document.getElementById('plantilla_id');
     const btn = document.getElementById('btn-remover-plantilla');
@@ -556,6 +633,56 @@
     select && select.addEventListener('change', sync);
     sync();
   })();
+
+
+  // ✅ Dispara el form oculto cuando se hace click en la tachita
+  (function(){
+    const btn = document.getElementById('btn-vaciar-semana');
+    const form = document.getElementById('form-vaciar-semana');
+    
+    if(!btn || !form) return;
+
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if(!this.disabled) {
+        form.submit();
+      }
+    });
+  })();
+
+  // ✅ Valida que se seleccione una plantilla antes de aplicar
+  (function(){
+    const form = document.getElementById('form-aplicar-plantilla');
+    const select = document.getElementById('plantilla_id');
+    
+    if(!form || !select) return;
+    
+    form.addEventListener('submit', function(e) {
+      if(!select.value || select.value === '') {
+        e.preventDefault();
+        alert('Por favor selecciona una plantilla');
+      }
+    });
+  })();
+
+  // Limpia estados touch residuales en iOS
+  (function(){
+    const burger = document.getElementById('navToggle');
+    if(!burger) return;
+    
+    setTimeout(function() {
+      burger.blur();
+    }, 50);
+    
+    burger.addEventListener('touchend', function() {
+      setTimeout(() => this.blur(), 10);
+    }, {passive: true});
+    
+    burger.addEventListener('click', function() {
+      setTimeout(() => this.blur(), 200);
+    });
+  })();
+
   </script>
 </body>
 </html>
