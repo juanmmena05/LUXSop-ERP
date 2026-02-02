@@ -25,8 +25,15 @@
       background: var(--bg);
       margin: 0;
       padding: 2rem;
+      padding-left: 70px; /* ✅ Espacio para burger */
       max-width: 1200px;
       margin-inline: auto;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding-left: 2rem; /* En móvil el burger no estorba tanto */
+      }
     }
 
     /* Header */
@@ -178,18 +185,49 @@
     }
     .burger:hover { filter: brightness(.98); }
 
+    /* ✅ Overlay con fix para Safari iOS */
     .nav-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.35);
       z-index: 1100;
+
+      /* ✅ Cerrado = neutral para Safari */
+      background: transparent;
+
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
+
+      /* ✅ La opacidad baja, y la visibilidad se oculta al final */
+      transition: opacity .18s ease, visibility 0s linear .18s;
+    }
+
+    .nav-overlay.is-open {
+      /* ✅ Abierto = sí oscurece */
+      background: rgba(0,0,0,.35);
+
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+
       transition: opacity .18s ease;
     }
-    .nav-overlay.is-open {
+
+    /* ✅ Top guard: franja blanca arriba para evitar tinte gris en Safari */
+    .top-guard {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top, 44px);
+      background: #fff;
+      z-index: 1103;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .12s ease;
+    }
+    .top-guard.is-on {
       opacity: 1;
-      pointer-events: auto;
     }
 
     .side-nav {
@@ -277,6 +315,9 @@
           aria-expanded="false">☰</button>
 
   <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+  <!-- ✅ Top guard: mantiene Safari blanco arriba -->
+  <div class="top-guard" id="topGuard" aria-hidden="true"></div>
 
   <nav class="side-nav" id="sideNav" aria-label="Menú principal">
     
@@ -426,24 +467,41 @@
   {% endif %}
 
   <script>
-    // Sidebar: abrir/cerrar + overlay + ESC + cerrar al navegar
+    // ✅ Sidebar: abrir/cerrar + overlay + ESC + cerrar al navegar + fix Safari iOS
     (function(){
       const nav = document.getElementById('sideNav');
       const btn = document.getElementById('navToggle');
       const closeBtn = document.getElementById('navClose');
       const overlay = document.getElementById('navOverlay');
+      const topGuard = document.getElementById('topGuard');
       if(!nav || !btn || !overlay) return;
 
       function openNav(){
-        nav.classList.add('is-open');
-        overlay.classList.add('is-open');
-        btn.setAttribute('aria-expanded','true');
-        document.body.style.overflow = 'hidden';
+        // 1) Enciende el top-guard primero
+        topGuard?.classList.add('is-on');
+
+        // 2) En el siguiente frame, abre overlay + nav
+        requestAnimationFrame(() => {
+          overlay.classList.add('is-open');
+          nav.classList.add('is-open');
+
+          btn.setAttribute('aria-expanded','true');
+          overlay.setAttribute('aria-hidden','false');
+          document.body.style.overflow = 'hidden';
+        });
       }
+
       function closeNav(){
         nav.classList.remove('is-open');
         overlay.classList.remove('is-open');
+
+        // Deja el guard un frame más para que Safari no "cace" oscuro
+        requestAnimationFrame(() => {
+          topGuard?.classList.remove('is-on');
+        });
+
         btn.setAttribute('aria-expanded','false');
+        overlay.setAttribute('aria-hidden','true');
         document.body.style.overflow = '';
       }
 
