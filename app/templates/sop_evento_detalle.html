@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SOP Evento · Detalles</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --fg:#222; --muted:#777; --line:#ddd; --bg:#f9f9f9;
+      --blue:#0d6efd; --green:#198754; --card:#fff; --red:#dc3545;
+      --h:44px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin:0;
+      padding:2rem;
+      max-width:1200px;
+      margin-inline:auto;
+    }
+
+    .head{
+      display:flex; justify-content:space-between; align-items:flex-end; gap:12px;
+      border-bottom:1px solid var(--line); padding-bottom:.75rem; margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+    h1{ margin:0; font-size:1.25rem; }
+    .sub{ color:var(--muted); font-size:.9rem; margin-top:.25rem; }
+
+    .btn{
+      border:none; border-radius:12px; height:var(--h);
+      padding:.55rem .95rem; font-size:.95rem; cursor:pointer;
+      text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      white-space:nowrap;
+    }
+    .btn-blue{ background: var(--blue); color:#fff; }
+    .btn-green{ background: var(--green); color:#fff; }
+    .btn:hover{ filter: brightness(.95); }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 320px 1fr;
+      gap:14px;
+      align-items:start;
+    }
+    @media (max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      padding:14px;
+    }
+
+    .pill{
+      display:inline-flex; align-items:center;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:.25rem .65rem;
+      font-size:.85rem;
+      gap:8px;
+    }
+
+    /* sidebar fracciones */
+    .sf-list{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+    .sf-link{
+      text-decoration:none; color:var(--fg);
+      border:1px solid #eee;
+      background:#fff;
+      border-radius:14px;
+      padding:10px 12px;
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .sf-link:hover{ background:#f6f6f6; }
+    .sf-link.is-active{ border-color:#cfe2ff; background:#eef5ff; }
+    .sf-link small{ color:var(--muted); }
+
+    /* ✅ Botón Editar Fracciones como "caja" (mismo ancho y compacta) */
+    .sf-action{
+      margin-top:10px;
+    }
+    .sf-action-link{
+      width:100%;
+      border-radius:14px;
+      padding:10px 12px;
+      height:auto;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      background: var(--blue);
+      color:#fff;
+      border:1px solid var(--blue);
+      text-decoration:none;
+      font-size:.92rem;
+      font-weight:600;
+    }
+    .sf-action-link:hover{
+      filter: brightness(.95);
+    }
+
+    /* form */
+    label{ display:block; margin-top:12px; font-size:.85rem; font-weight:600; color:#333; }
+    input[type="number"], select, textarea{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:.5rem .65rem;
+      font-size:.95rem;
+      background:#fff;
+      font-family:inherit;
+    }
+    input[type="number"]{ height:var(--h); }
+    select{ height:var(--h); }
+    textarea{ min-height:80px; resize:vertical; }
+
+    .row{ display:flex; gap:10px; align-items:end; flex-wrap:wrap; }
+    .row > *{ flex: 1 1 220px; }
+
+    .hint{ color:var(--muted); font-size:.9rem; margin-top:8px; }
+
+    /* Flash message */
+    .flash-success{
+      margin-top:14px;
+      padding:12px 16px;
+      border-radius:14px;
+      background:#eef9f0;
+      border:1px solid #cde8d5;
+      color:#226b3d;
+      font-weight:600;
+      opacity:1;
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .flash-success.fade-out{
+      opacity:0;
+      transform: translateY(-6px);
+    }
+
+    /* ===== menú lateral (solo si NO hide_nav) ===== */
+    .burger {
+      position: fixed;
+      top: 16px; left: 16px;
+      z-index: 1101;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .nav-overlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.35);
+      z-index:1100;
+      opacity:0; pointer-events:none;
+      transition: opacity .18s ease;
+    }
+    .nav-overlay.is-open{ opacity:1; pointer-events:auto; }
+    .side-nav{
+      position:fixed; top:0; left:0;
+      height:100vh; width:300px; max-width:84vw;
+      background: var(--card);
+      border-right:1px solid var(--line);
+      box-shadow:0 8px 30px rgba(0,0,0,.14);
+      z-index:1102;
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .side-nav.is-open{ transform: translateX(0); }
+    .side-nav__head{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding-bottom:10px; border-bottom:1px solid var(--line);
+      margin-bottom:6px;
+    }
+    .side-nav__brand{ display:grid; line-height:1.1; }
+    .side-nav__brand strong{ font-size:1rem; }
+    .side-nav__brand span{ font-size:.78rem; color:var(--muted); }
+    .side-nav__close{
+      width:36px; height:36px; border-radius:10px;
+      border:1px solid var(--line); background:#fff; cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    .side-nav__link{
+      text-decoration:none; color:var(--fg);
+      padding:10px 12px; border-radius:12px;
+      display:flex; align-items:center; gap:10px;
+      font-size:.92rem;
+      font-weight:500;
+    }
+    .side-nav__link:hover{ background:#f3f3f3; }
+    .side-nav__link-btn{
+      width: 100%;
+      background: transparent;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- Menú lateral (solo si NO hide_nav) -->
+{% if not hide_nav %}
+<button class="burger" id="navToggle" aria-label="Abrir menú" aria-controls="sideNav" aria-expanded="false">☰</button>
+<div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+
+<nav class="side-nav" id="sideNav" aria-label="Menú principal">
+  <div class="side-nav__head">
+    <div class="side-nav__brand">
+      <strong>LuxSOP</strong>
+      <span>ERP · Limpieza</span>
+    </div>
+    <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+  </div>
+  <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
+  <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+  <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
+  <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+   <button type="submit" class="side-nav__link side-nav__link-btn">🚪 Salir</button>
+  </form>
+</nav>
+{% endif %}
+
+<div class="head">
+  <div>
+    <h1>SOP Evento · Detalles</h1>
+    <div class="sub">
+      SOP: <strong>{{ sop_evento.sop_evento_id }}</strong> · 
+      {{ sop_evento.evento_catalogo.nombre }} · {{ sop_evento.caso_catalogo.nombre }}
+    </div>
+  </div>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <a class="btn btn-blue"
+       href="{{ url_for('main.sop_panel', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
+      ← Volver
+    </a>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Sidebar: lista de fracciones -->
+  <aside class="card">
+    <div class="pill">Fracciones ({{ detalles_list|length }})</div>
+
+    <div class="sf-list">
+      {% for d in detalles_list %}
+        <a class="sf-link {% if d.detalle_id == detalle_actual.detalle_id %}is-active{% endif %}"
+           href="{{ url_for('main.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id, detalle_id=d.detalle_id) }}">
+          <strong>{{ d.orden }}. {{ d.fraccion.nombre }}</strong>
+          <small>{{ d.fraccion.fraccion_evento_id }}</small>
+        </a>
+      {% endfor %}
+    </div>
+
+    <!-- Botón para volver a editar fracciones -->
+    <div class="sf-action">
+      <a class="sf-action-link"
+         href="{{ url_for('main.sop_evento_crear', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
+        Editar Fracciones
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main: form de edición -->
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          {% if category == 'success' %}
+            <div class="flash-success" id="flash-success">{{ message }}</div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <div class="pill">
+        {{ detalle_actual.orden }}. {{ detalle_actual.fraccion.nombre }}
+      </div>
+      <div class="hint">{{ detalle_actual.fraccion.descripcion or '' }}</div>
+
+      <form method="POST" action="{{ url_for('main.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id) }}">
+        <input type="hidden" name="detalle_id" value="{{ detalle_actual.detalle_id }}">
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Tiempo estimado (minutos)</label>
+            <input type="number" min="0" step="1" name="tiempo_estimado"
+                   value="{{ detalle_actual.tiempo_estimado }}">
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Kit</label>
+            <select name="kit_id">
+              <option value="">—</option>
+              {% for k in kits %}
+                <option value="{{ k.kit_id }}" {% if detalle_actual.kit_id == k.kit_id %}selected{% endif %}>
+                  {{ k.kit_id }} — {{ k.nombre }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label>Receta</label>
+            <select name="receta_id">
+              <option value="">—</option>
+              {% for r in recetas %}
+                <option value="{{ r.receta_id }}" {% if detalle_actual.receta_id == r.receta_id %}selected{% endif %}>
+                  {{ r.receta_id }} — {{ r.nombre }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label>Consumo</label>
+            <select name="consumo_id">
+              <option value="">—</option>
+              {% for c in consumos %}
+                <option value="{{ c.consumo_id }}" {% if detalle_actual.consumo_id == c.consumo_id %}selected{% endif %}>
+                  {{ c.consumo_id }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        
+        <div class="row" style="margin-top:14px; justify-content:flex-end;">
+          <button class="btn btn-green" type="submit">Guardar detalle</button>
+        </div>
+      </form>
+
+      {% if metodologia %}
+        <div class="card" style="margin-top:14px;">
+          <div class="pill">Metodología</div>
+          <div class="hint" style="margin-top:8px;">
+            {{ metodologia.nombre if metodologia.nombre else '' }}
+          </div>
+          {% if metodologia.pasos and (metodologia.pasos|length) > 0 %}
+            <ol style="margin-top:10px;">
+              {% for p in metodologia.pasos %}
+                <li style="margin-bottom:6px;">{{ p.descripcion }}</li>
+              {% endfor %}
+            </ol>
+          {% else %}
+            <div class="hint" style="margin-top:10px;">Sin pasos registrados.</div>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </main>
+</div>
+
+<script>
+  // menú lateral (solo si existe)
+  (function(){
+    const nav = document.getElementById('sideNav');
+    const btn = document.getElementById('navToggle');
+    const closeBtn = document.getElementById('navClose');
+    const overlay = document.getElementById('navOverlay');
+    if(!nav || !btn || !overlay) return;
+
+    function openNav(){
+      nav.classList.add('is-open');
+      overlay.classList.add('is-open');
+      btn.setAttribute('aria-expanded','true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNav(){
+      nav.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      btn.setAttribute('aria-expanded','false');
+      document.body.style.overflow = '';
+    }
+
+    btn.addEventListener('click', openNav);
+    overlay.addEventListener('click', closeNav);
+    closeBtn && closeBtn.addEventListener('click', closeNav);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeNav(); });
+    nav.addEventListener('click', (e)=>{ if(e.target.closest('a')) closeNav(); });
+  })();
+
+  // auto-dismiss flash (1.5s)
+  (function(){
+    const flash = document.getElementById('flash-success');
+    if(!flash) return;
+
+    setTimeout(()=>{
+      flash.classList.add('fade-out');
+      setTimeout(()=>{ flash.remove(); }, 350);
+    }, 1500);
+  })();
+</script>
+
+</body>
+</html>

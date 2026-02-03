@@ -250,6 +250,19 @@
         color: var(--muted);
         font-size: .75rem;
     }
+
+    /* ===== Sección title ===== */
+    .section-title{
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 .5rem 0;
+      color: var(--fg);
+    }
+    .section-desc{
+      color: var(--muted);
+      font-size: .9rem;
+      margin: 0 0 1rem 0;
+    }
   </style>
 </head>
 
@@ -284,15 +297,30 @@
 <div class="head">
   <h1>SOP</h1>
   <div class="sub">
-    Selecciona Tipo, Área/Subárea y Nivel. Luego carga para ver/crear/modificar el SOP.
+    Gestiona SOPs Regulares/Consecuentes y SOPs de Evento desde esta interfaz unificada.
   </div>
 </div>
 
 <div class="stack">
 
-  <!-- ===== Card 1: Selección ===== -->
+  <!-- ========================================================================
+       CARD 1: SELECCIÓN SOP REGULAR/CONSECUENTE
+       ======================================================================== -->
   <div class="card">
+    <h2 class="section-title">SOP Regular / Consecuente</h2>
+    <p class="section-desc">
+      Selecciona el tipo, área, subárea y nivel de limpieza.
+    </p>
+
     <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopFilterForm">
+      <!-- ✅ Mantener valores de SOP evento si existen -->
+      {% if evento_tipo_id %}
+        <input type="hidden" name="evento_tipo_id" value="{{ evento_tipo_id }}">
+      {% endif %}
+      {% if caso_id %}
+        <input type="hidden" name="caso_id" value="{{ caso_id }}">
+      {% endif %}
+
       <div class="control-grid">
         
         <div class="field">
@@ -343,7 +371,9 @@
     </form>
   </div>
 
-  <!-- ===== Card 2: Resultado ===== -->
+  <!-- ========================================================================
+       CARD 2: RESULTADO SOP REGULAR/CONSECUENTE
+       ======================================================================== -->
   {% if subarea_id %}
   <div class="card">
     <div class="result-row">
@@ -375,6 +405,116 @@
         <a class="btn btn-green"
             href="{{ url_for('main.sop_crear', subarea_id=subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
             Crear SOP
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ========================================================================
+       CARD 3: SELECCIÓN SOP EVENTO
+       ======================================================================== -->
+  <div class="card">
+    <h2 class="section-title">SOP - Evento</h2>
+    <p class="section-desc">
+      Selecciona el tipo de evento y el caso específico. Los eventos no tienen niveles de limpieza.
+    </p>
+    
+    <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopEventoForm">
+      <!-- ✅ Mantener valores de SOP regular si existen -->
+      {% if tipo_sop %}
+        <input type="hidden" name="tipo_sop" value="{{ tipo_sop }}">
+      {% endif %}
+      {% if area_id %}
+        <input type="hidden" name="area_id" value="{{ area_id }}">
+      {% endif %}
+      {% if subarea_id %}
+        <input type="hidden" name="subarea_id" value="{{ subarea_id }}">
+      {% endif %}
+      {% if nivel %}
+        <input type="hidden" name="nivel" value="{{ nivel }}">
+      {% endif %}
+      
+      <div class="control-grid" style="grid-template-columns: 1fr 1fr auto;">
+        
+        <div class="field">
+          <label for="evento_tipo_id">Tipo de Evento</label>
+          <select name="evento_tipo_id" id="evento_tipo_id">
+            <option value="">— Selecciona —</option>
+            {% for e in eventos %}
+              <option value="{{ e.evento_tipo_id }}" 
+                      {% if evento_tipo_id == e.evento_tipo_id %}selected{% endif %}>
+                {{ e.nombre }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="caso_id">Caso</label>
+          <select name="caso_id" id="caso_id" {% if not evento_tipo_id %}disabled{% endif %}>
+            <option value="">— Selecciona —</option>
+            {% for c in casos %}
+              <option value="{{ c.caso_id }}" 
+                      {% if caso_id == c.caso_id %}selected{% endif %}>
+                {{ c.nombre }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button class="btn btn-blue" type="submit">Cargar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ========================================================================
+       CARD 4: RESULTADO SOP EVENTO
+       ======================================================================== -->
+  {% if caso_id %}
+  <div class="card">
+    <div class="result-row">
+      <div class="stats">
+      <!-- 1) SOP Evento -->
+      {% if sop_evento %}
+      <div class="pill">SOP Evento: <strong>{{ sop_evento.sop_evento_id }}</strong></div>
+      {% else %}
+      <div class="pill pill-warn">SOP Evento: <strong>No creado</strong></div>
+      {% endif %}
+
+      <!-- 2) Tipo -->
+      <div class="pill">Tipo: <strong>
+        {% for e in eventos %}
+          {% if e.evento_tipo_id == evento_tipo_id %}{{ e.nombre }}{% endif %}
+        {% endfor %}
+      </strong></div>
+
+      <!-- 3) Caso -->
+      <div class="pill">Caso: <strong>
+        {% for c in casos %}
+          {% if c.caso_id == caso_id %}{{ c.nombre }}{% endif %}
+        {% endfor %}
+      </strong></div>
+
+      <!-- 4) Estado -->
+      {% if sop_evento %}
+      <div class="pill pill-ok">Estado: <strong>Creado</strong></div>
+      {% else %}
+      <div class="pill pill-warn">Estado: <strong>Sin crear</strong></div>
+      {% endif %}      
+    </div>
+
+      <div class="right-actions">
+        {% if sop_evento and has_fracciones_evento %}
+        <a class="btn btn-green"
+            href="{{ url_for('main.sop_evento_editar', sop_evento_id=sop_evento.sop_evento_id) }}">
+            Modificar SOP Evento
+        </a>
+        {% else %}
+        <a class="btn btn-green"
+            href="{{ url_for('main.sop_evento_crear', evento_tipo_id=evento_tipo_id, caso_id=caso_id) }}">
+            Crear SOP Evento
         </a>
         {% endif %}
       </div>
@@ -430,7 +570,7 @@
     nav.addEventListener('click', function(e){ if(e.target.closest('a')) closeNav(); });
   })();
 
-  // ✅ NUEVO: Filtrar niveles según tipo_sop
+  // ✅ Filtrar niveles según tipo_sop
   (function(){
     var tipoSop = document.getElementById('tipo_sop');
     var nivelSelect = document.getElementById('nivel');
@@ -465,7 +605,7 @@
     tipoSop.addEventListener('change', actualizarNiveles);
   })();
 
-  // UX: recargar al cambiar selectores
+  // ✅ UX: recargar al cambiar selectores SOP REGULAR
   (function(){
     var form = document.getElementById('sopFilterForm');
     var tipoSop = document.getElementById('tipo_sop');
@@ -491,6 +631,47 @@
       form.submit();
     });
   })();
+
+  // ✅ UX: recargar al cambiar selectores SOP EVENTO
+  (function(){
+    var eventoForm = document.getElementById('sopEventoForm');
+    var eventoTipo = document.getElementById('evento_tipo_id');
+    var casoSelect = document.getElementById('caso_id');
+    
+    if(!eventoForm || !eventoTipo) return;
+    
+    eventoTipo.addEventListener('change', function(){
+      // Limpiar caso seleccionado
+      if(casoSelect) casoSelect.value = "";
+      // Recargar para obtener casos del nuevo tipo
+      eventoForm.submit();
+    });
+  })();
+
+  // ✅ Limpiar parámetros del otro formulario al hacer submit
+  (function(){
+    var formRegular = document.getElementById('sopFilterForm');
+    var formEvento = document.getElementById('sopEventoForm');
+    
+    if(!formRegular || !formEvento) return;
+    
+    // Al enviar form Regular → limpiar hidden inputs de Evento
+    formRegular.addEventListener('submit', function(){
+      var hiddenEvento = formRegular.querySelectorAll('input[name="evento_tipo_id"], input[name="caso_id"]');
+      hiddenEvento.forEach(function(input){
+        input.remove();
+      });
+    });
+    
+    // Al enviar form Evento → limpiar hidden inputs de Regular
+    formEvento.addEventListener('submit', function(){
+      var hiddenRegular = formEvento.querySelectorAll('input[name="tipo_sop"], input[name="area_id"], input[name="subarea_id"], input[name="nivel"]');
+      hiddenRegular.forEach(function(input){
+        input.remove();
+      });
+    });
+  })();
+
 </script>
 
 </body>

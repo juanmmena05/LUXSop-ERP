@@ -2257,9 +2257,12 @@ def make_es_id(sop_id: str, fraccion_id: str, nivel_id: int) -> str:
 @main_bp.route("/sop")
 @admin_required
 def sop_panel():
+    # ============================================================================
+    # PARTE 1: SOP REGULAR/CONSECUENTE (EXISTENTE)
+    # ============================================================================
     area_id = (request.args.get("area_id") or "").strip()
     subarea_id = (request.args.get("subarea_id") or "").strip()
-    tipo_sop = (request.args.get("tipo_sop") or "regular").strip()  # ← NUEVO
+    tipo_sop = (request.args.get("tipo_sop") or "regular").strip()
 
     # Validar tipo_sop
     if tipo_sop not in ("regular", "consecuente"):
@@ -2285,7 +2288,6 @@ def sop_panel():
     has_nivel = False
 
     if subarea_id:
-        # ← MODIFICADO: buscar por subarea_id Y tipo_sop
         sop = SOP.query.filter_by(subarea_id=subarea_id, tipo_sop=tipo_sop).first()
 
         if sop and sop.sop_fracciones and len(sop.sop_fracciones) > 0:
@@ -2306,8 +2308,45 @@ def sop_panel():
                 is not None
             )
 
+    # ============================================================================
+    # PARTE 2: SOP EVENTO (NUEVO)
+    # ============================================================================
+    evento_tipo_id = (request.args.get("evento_tipo_id") or "").strip()
+    caso_id = (request.args.get("caso_id") or "").strip()
+
+    # Cargar todos los tipos de evento
+    eventos = EventoCatalogo.query.order_by(EventoCatalogo.nombre.asc()).all()
+
+    # Cargar casos del tipo seleccionado
+    casos = []
+    if evento_tipo_id:
+        casos = (
+            CasoCatalogo.query
+            .filter_by(evento_tipo_id=evento_tipo_id)
+            .order_by(CasoCatalogo.nombre.asc())
+            .all()
+        )
+
+    # Buscar si existe SOP de evento
+    sop_evento = None
+    has_fracciones_evento = False
+
+    if evento_tipo_id and caso_id:
+        sop_evento = SopEvento.query.filter_by(
+            evento_tipo_id=evento_tipo_id,
+            caso_id=caso_id
+        ).first()
+
+        # Verificar si tiene fracciones configuradas
+        if sop_evento and sop_evento.detalles and len(sop_evento.detalles) > 0:
+            has_fracciones_evento = True
+
+    # ============================================================================
+    # RENDER
+    # ============================================================================
     return render_template(
         "sop_panel.html",
+        # Variables SOP Regular
         areas=areas,
         subareas=subareas,
         area_id=area_id,
@@ -2317,7 +2356,15 @@ def sop_panel():
         has_nivel=has_nivel,
         nivel=nivel,
         nivel_id=nivel_id,
-        tipo_sop=tipo_sop,  # ← NUEVO
+        tipo_sop=tipo_sop,
+        
+        # Variables SOP Evento
+        eventos=eventos,
+        casos=casos,
+        evento_tipo_id=evento_tipo_id,
+        caso_id=caso_id,
+        sop_evento=sop_evento,
+        has_fracciones_evento=has_fracciones_evento,
     )
 
 
@@ -4390,3 +4437,272 @@ def obtener_eventos_dia(dia_id):
             'success': False,
             'message': f'Error al obtener eventos del día: {str(e)}'
         }), 500
+    
+
+# ============================================================================
+# 1. CREAR/SELECCIONAR FRACCIONES (TODO EN UNO)
+# ============================================================================
+@main_bp.route('/sop-evento-crear', methods=['GET', 'POST'])
+@admin_required
+def sop_evento_crear():
+    """
+    Crea el SOP de evento (si no existe) y permite seleccionar fracciones.
+    Equivalente a sop_crear de regular.
+    ID es determinístico 1:1 por evento-caso.
+    """
+    evento_tipo_id = request.args.get('evento_tipo_id') or request.form.get('evento_tipo_id')
+    caso_id = request.args.get('caso_id') or request.form.get('caso_id')
+    
+    if not evento_tipo_id or not caso_id:
+        flash('Debe seleccionar tipo de evento y caso', 'error')
+        return redirect(url_for('main.sop_panel'))
+    
+    # Verificar que existan
+    evento = EventoCatalogo.query.get(evento_tipo_id)
+    caso = CasoCatalogo.query.get(caso_id)
+    
+    if not evento or not caso:
+        flash('Evento o caso no encontrado', 'error')
+        return redirect(url_for('main.sop_panel'))
+    
+    # Extraer códigos cortos: CA-IN-VO-001 → IN, VO
+    partes = caso_id.split('-')
+    if len(partes) >= 3:
+        tipo_corto = partes[1]  # IN
+        caso_corto = partes[2]  # VO
+    else:
+        flash('Formato de caso_id inválido', 'error')
+        return redirect(url_for('main.sop_panel'))
+    
+    # ✅ Generar ID determinístico (siempre el mismo para este evento-caso)
+    sop_evento_id = f"SP-{tipo_corto}-{caso_corto}-001"
+    
+    # ✅ Buscar SOP existente por ID
+    sop_evento = SopEvento.query.get(sop_evento_id)
+    
+    # Obtener fracciones disponibles para este tipo de evento
+    fracciones = (
+        SopEventoFraccion.query
+        .filter_by(evento_tipo_id=evento_tipo_id)
+        .order_by(SopEventoFraccion.fraccion_evento_id.asc())
+        .all()
+    )
+    
+    # Obtener fracciones ya seleccionadas (si el SOP existe)
+    selected_ids = set()
+    orden_map = {}
+    
+    if sop_evento and sop_evento.detalles:
+        selected_ids = {d.fraccion_evento_id for d in sop_evento.detalles}
+        orden_map = {d.fraccion_evento_id: d.orden for d in sop_evento.detalles}
+    
+    # POST: guardar selección
+    if request.method == "POST":
+        selected = request.form.getlist("fraccion_evento_id")
+        selected_set = set(selected)
+        
+        if not selected:
+            flash("Selecciona al menos 1 fracción", "warning")
+            return redirect(url_for("main.sop_evento_crear", 
+                                   evento_tipo_id=evento_tipo_id,
+                                   caso_id=caso_id))
+        
+        # 1) Crear SOP si no existe
+        if not sop_evento:
+            sop_evento = SopEvento(
+                sop_evento_id=sop_evento_id,
+                evento_tipo_id=evento_tipo_id,
+                caso_id=caso_id,
+                nombre=f"SOP {evento.nombre} - {caso.nombre}",
+                descripcion=f"SOP para {caso.nombre}"
+            )
+            db.session.add(sop_evento)
+            db.session.flush()
+        
+        # 2) Eliminar fracciones que ya no están seleccionadas
+        prev_selected = selected_ids.copy() if selected_ids else set()
+        to_remove = prev_selected - selected_set
+        
+        if to_remove:
+            SopEventoDetalle.query.filter(
+                SopEventoDetalle.sop_evento_id == sop_evento_id,
+                SopEventoDetalle.fraccion_evento_id.in_(list(to_remove))
+            ).delete(synchronize_session=False)
+        
+        # 3) Crear o actualizar fracciones seleccionadas
+        for fraccion_id in selected:
+            orden_raw = (request.form.get(f"orden_{fraccion_id}") or "").strip()
+            orden = int(orden_raw) if orden_raw.isdigit() else 1000
+            
+            detalle = SopEventoDetalle.query.filter_by(
+                sop_evento_id=sop_evento_id,
+                fraccion_evento_id=fraccion_id
+            ).first()
+            
+            if detalle:
+                # Actualizar orden
+                detalle.orden = orden
+            else:
+                # Crear nuevo
+                nuevo_detalle = SopEventoDetalle(
+                    sop_evento_id=sop_evento_id,
+                    fraccion_evento_id=fraccion_id,
+                    orden=orden,
+                    tiempo_estimado=15  # Default 15 minutos
+                )
+                db.session.add(nuevo_detalle)
+        
+        db.session.commit()
+        flash("✅ Fracciones guardadas exitosamente", "success")
+        
+        # Redirigir a editar fracciones (equivalente a sop_fracciones_edit)
+        return redirect(url_for("main.sop_evento_editar", 
+                               sop_evento_id=sop_evento_id))
+    
+    # GET: mostrar form
+    return render_template(
+        "sop_evento_crear.html",
+        sop_evento=sop_evento,
+        sop_evento_id=sop_evento_id,
+        evento=evento,
+        caso=caso,
+        fracciones=fracciones,
+        selected_ids=selected_ids,
+        orden_map=orden_map
+    )
+
+# ============================================================================
+# 2. EDITAR SOP EVENTO (decide si ir a crear o a detalles)
+# ============================================================================
+@main_bp.route("/sop-evento/<sop_evento_id>/editar")
+@admin_required
+def sop_evento_editar(sop_evento_id):
+    """
+    Punto de entrada para editar un SOP de evento.
+    Equivalente a sop_fracciones_edit de regular.
+    
+    - Si NO tiene fracciones → redirige a sop_evento_crear
+    - Si YA tiene fracciones → redirige a sop_evento_detalle (primera)
+    """
+    sop_evento = SopEvento.query.get_or_404(sop_evento_id)
+    
+    # Verificar si tiene fracciones
+    tiene_fracciones = (
+        db.session.query(SopEventoDetalle.detalle_id)
+        .filter_by(sop_evento_id=sop_evento_id)
+        .first()
+        is not None
+    )
+    
+    if not tiene_fracciones:
+        # No tiene fracciones → ir a seleccionar
+        return redirect(url_for("main.sop_evento_crear",
+                               evento_tipo_id=sop_evento.evento_tipo_id,
+                               caso_id=sop_evento.caso_id))
+    
+    # Ya tiene fracciones → ir a editar la primera
+    primer_detalle = (
+        SopEventoDetalle.query
+        .filter_by(sop_evento_id=sop_evento_id)
+        .order_by(SopEventoDetalle.orden.asc())
+        .first()
+    )
+    
+    return redirect(url_for("main.sop_evento_detalle",
+                           sop_evento_id=sop_evento_id,
+                           detalle_id=primer_detalle.detalle_id))
+
+
+@main_bp.route("/sop-evento/<sop_evento_id>/detalle", methods=["GET", "POST"])
+@admin_required
+def sop_evento_detalle(sop_evento_id):
+    """
+    Edita fracción por fracción de un SOP de evento.
+    Equivalente a sop_detalles pero SIN niveles y SIN elementos.
+    Solo: Kit, Receta, Consumo, Tiempo.
+    """
+    sop_evento = SopEvento.query.get_or_404(sop_evento_id)
+    
+    # Obtener TODOS los detalles del SOP (fracciones asignadas)
+    detalles_list = (
+        SopEventoDetalle.query
+        .filter_by(sop_evento_id=sop_evento_id)
+        .order_by(SopEventoDetalle.orden.asc())
+        .all()
+    )
+    
+    if not detalles_list:
+        flash("Este SOP no tiene fracciones todavía", "warning")
+        return redirect(url_for("main.sop_panel",
+                               evento_tipo_id=sop_evento.evento_tipo_id,
+                               caso_id=sop_evento.caso_id))
+    
+    # Determinar qué detalle estamos editando
+    detalle_id = (request.args.get("detalle_id") or 
+                  request.form.get("detalle_id") or "").strip()
+    
+    if detalle_id:
+        detalle_id = int(detalle_id)
+        detalle_actual = next((d for d in detalles_list if d.detalle_id == detalle_id), 
+                             detalles_list[0])
+    else:
+        detalle_actual = detalles_list[0]
+    
+    # ✅ CORRECCIÓN: filtrar kits por tipo_kit='evento'
+    kits = (
+        Kit.query
+        .filter_by(tipo_kit='evento')
+        .order_by(Kit.nombre.asc())
+        .all()
+    )
+    
+    recetas = Receta.query.order_by(Receta.receta_id.asc()).all()
+    consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
+    
+    # Metodología de la fracción (solo lectura)
+    metodologia = None
+    if detalle_actual.fraccion.metodologia:
+        metodologia = detalle_actual.fraccion.metodologia
+    
+    # POST: Guardar cambios
+    if request.method == "POST":
+        # Tiempo estimado
+        tiempo_raw = (request.form.get("tiempo_estimado") or "").strip()
+        if tiempo_raw:
+            try:
+                detalle_actual.tiempo_estimado = int(tiempo_raw)
+            except ValueError:
+                flash("Tiempo inválido", "warning")
+                return redirect(url_for("main.sop_evento_detalle",
+                                       sop_evento_id=sop_evento_id,
+                                       detalle_id=detalle_actual.detalle_id))
+        
+        # Kit, Receta, Consumo
+        detalle_actual.kit_id = (request.form.get("kit_id") or "").strip() or None
+        detalle_actual.receta_id = (request.form.get("receta_id") or "").strip() or None
+        detalle_actual.consumo_id = (request.form.get("consumo_id") or "").strip() or None
+        
+        try:
+            db.session.commit()
+            flash("✅ Detalle guardado", "success")
+        except Exception as e:
+            db.session.rollback()
+            print("💥 ERROR guardando detalle evento:", repr(e))
+            flash("Error guardando detalle", "error")
+        
+        return redirect(url_for("main.sop_evento_detalle",
+                               sop_evento_id=sop_evento_id,
+                               detalle_id=detalle_actual.detalle_id))
+    
+    # GET: Renderizar
+    return render_template(
+        "sop_evento_detalle.html",
+        sop_evento=sop_evento,
+        detalles_list=detalles_list,
+        detalle_actual=detalle_actual,
+        kits=kits,
+        recetas=recetas,
+        consumos=consumos,
+        metodologia=metodologia,
+        hide_nav=True
+    )
