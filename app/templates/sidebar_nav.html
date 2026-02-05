@@ -1,0 +1,232 @@
+<!-- ===== SIDEBAR NAVIGATION COMPONENT ===== -->
+<!-- Incluir en templates con: {% include 'components/sidebar_nav.html' %} -->
+
+<!-- Burger Button -->
+<button class="burger" id="navToggle" aria-label="Abrir menú">☰</button>
+<div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+<div class="top-guard" id="topGuard" aria-hidden="true"></div>
+
+<!-- Sidebar Navigation -->
+<nav class="side-nav" id="sideNav" aria-label="Menú principal">
+  <div class="side-nav__head" id="navHead">
+    <div class="side-nav__brand">
+      <strong>LuxSOP</strong>
+      <span>ERP · Limpieza</span>
+    </div>
+    <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+  </div>
+  <div class="side-nav__content" id="navContent">
+    <!-- Se llenará dinámicamente con JavaScript -->
+  </div>
+</nav>
+
+<script>
+// =====================================================
+// 🎯 SISTEMA DE NAVEGACIÓN MULTINIVEL EN SIDEBAR
+// =====================================================
+
+(function() {
+  'use strict';
+
+  const nav = document.getElementById('sideNav');
+  const navHead = document.getElementById('navHead');
+  const navContent = document.getElementById('navContent');
+  const burger = document.getElementById('navToggle');
+  const overlay = document.getElementById('navOverlay');
+  const topGuard = document.getElementById('topGuard');
+
+  if (!nav || !navContent) return;
+
+  // ===== CONFIGURACIÓN DE NIVELES =====
+  const NAV_LEVELS = {
+    main: {
+      level: 0,
+      title: 'Menu Principal',
+      showBrand: true,
+      items: [
+        { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
+        { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
+        { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
+        { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
+      ]
+    },
+    catalogos: {
+      level: 1,
+      title: 'Catálogos',
+      parent: 'main',
+      showBrand: false,
+      items: [
+        { icon: '📦', text: 'Regulares', action: 'navigateTo', target: 'regulares' },
+        { icon: '🎯', text: 'Eventos', action: 'alert', message: 'Próximamente disponible' },
+        { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
+      ]
+    },
+    regulares: {
+      level: 2,
+      title: 'Regulares',
+      parent: 'catalogos',
+      showBrand: false,
+      items: [
+        { icon: '🔧', text: 'Herramientas/Kits', action: 'alert', message: 'Próximamente disponible' },
+        { icon: '🧩', text: 'Elementos', action: 'alert', message: 'Próximamente disponible' },
+        { icon: '📊', text: 'Fracciones', action: 'alert', message: 'Próximamente disponible' }
+      ]
+    },
+    compartidos: {
+      level: 2,
+      title: 'Compartidos',
+      parent: 'catalogos',
+      showBrand: false,
+      items: [
+        { icon: '🧪', text: 'Químicos/Recetas', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
+        { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
+      ]
+    }
+  };
+
+  // ===== ESTADO DE NAVEGACIÓN =====
+  let currentLevel = 'main';
+  let navStack = ['main'];
+
+  // ===== NAVEGACIÓN =====
+  function navigateTo(targetLevel) {
+    if (!NAV_LEVELS[targetLevel]) return;
+    navContent.classList.add('is-transitioning');
+    setTimeout(() => {
+      currentLevel = targetLevel;
+      navStack.push(targetLevel);
+      saveNavState();
+      renderNavLevel();
+      requestAnimationFrame(() => {
+        navContent.classList.remove('is-transitioning');
+      });
+    }, 150);
+  }
+
+  function goBack() {
+    if (navStack.length <= 1) return;
+    navContent.classList.add('is-transitioning');
+    setTimeout(() => {
+      navStack.pop();
+      currentLevel = navStack[navStack.length - 1];
+      saveNavState();
+      renderNavLevel();
+      requestAnimationFrame(() => {
+        navContent.classList.remove('is-transitioning');
+      });
+    }, 150);
+  }
+
+  function renderNavLevel() {
+    const levelConfig = NAV_LEVELS[currentLevel];
+    if (!levelConfig) return;
+
+    updateNavHeader(levelConfig);
+
+    let html = '';
+    levelConfig.items.forEach(item => {
+      if (item.url) {
+        html += `<a class="side-nav__link" href="${item.url}">${item.icon} ${item.text}</a>`;
+      } else if (item.action === 'navigateTo') {
+        html += `<button class="side-nav__link" onclick="navSystem.navigateTo('${item.target}')">${item.icon} ${item.text}</button>`;
+      } else if (item.action === 'alert') {
+        html += `<button class="side-nav__link" onclick="alert('${item.message}')">${item.icon} ${item.text}</button>`;
+      }
+    });
+
+    if (currentLevel === 'main') {
+      html += `
+        <div class="side-nav__section">Sesión</div>
+        <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+          <button type="submit" class="side-nav__link">🚪 Salir</button>
+        </form>
+      `;
+    }
+
+    navContent.innerHTML = html;
+  }
+
+  function updateNavHeader(levelConfig) {
+    navHead.innerHTML = '';
+
+    if (levelConfig.showBrand) {
+      navHead.innerHTML = `
+        <div class="side-nav__brand">
+          <strong>LuxSOP</strong>
+          <span>ERP · Limpieza</span>
+        </div>
+        <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+      `;
+    } else {
+      navHead.innerHTML = `
+        <button class="side-nav__back" id="navBack" aria-label="Volver">←</button>
+        <div class="side-nav__brand">
+          <strong>${levelConfig.title}</strong>
+        </div>
+        <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+      `;
+
+      const backBtn = document.getElementById('navBack');
+      if (backBtn) backBtn.addEventListener('click', goBack);
+    }
+
+    const closeBtn = document.getElementById('navClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeNav);
+  }
+
+  function saveNavState() {
+    sessionStorage.setItem('luxsop_nav_level', currentLevel);
+    sessionStorage.setItem('luxsop_nav_stack', JSON.stringify(navStack));
+  }
+
+  function restoreNavState() {
+    currentLevel = 'main';
+    navStack = ['main'];
+    renderNavLevel();
+  }
+
+  function openNav() {
+    topGuard?.classList.add('is-on');
+    requestAnimationFrame(() => {
+      overlay.classList.add('is-open');
+      nav.classList.add('is-open');
+      burger.setAttribute('aria-expanded', 'true');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    });
+  }
+
+  function closeNav() {
+    nav.classList.remove('is-open');
+    overlay.classList.remove('is-open');
+    requestAnimationFrame(() => {
+      topGuard?.classList.remove('is-on');
+    });
+    burger.setAttribute('aria-expanded', 'false');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+
+    currentLevel = 'main';
+    navStack = ['main'];
+    sessionStorage.removeItem('luxsop_nav_level');
+    sessionStorage.removeItem('luxsop_nav_stack');
+    renderNavLevel();
+  }
+
+  burger?.addEventListener('click', openNav);
+  overlay?.addEventListener('click', closeNav);
+  
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeNav();
+  });
+
+  nav.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (link) closeNav();
+  });
+
+  window.navSystem = { navigateTo, goBack };
+  restoreNavState();
+
+})();
+</script>
