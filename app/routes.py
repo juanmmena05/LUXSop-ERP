@@ -4706,3 +4706,974 @@ def sop_evento_detalle(sop_evento_id):
         metodologia=metodologia,
         hide_nav=True
     )
+
+
+# =========================
+# CATÁLOGOS - QUÍMICOS Y RECETAS
+# =========================
+@main_bp.route("/catalogos/quimicos-recetas")
+@admin_required
+def catalogos_quimicos_recetas():
+    """
+    Panel unificado para gestionar Químicos y Recetas
+    Usa tabs para cambiar entre ambas vistas
+    """
+    import json
+    from decimal import Decimal
+    
+    # Obtener todos los químicos ordenados
+    quimicos = Quimico.query.order_by(Quimico.nombre.asc()).all()
+    
+    # Obtener todas las recetas con sus detalles
+    recetas = (
+        Receta.query
+        .options(joinedload(Receta.detalles).joinedload(RecetaDetalle.quimico))
+        .order_by(Receta.nombre.asc())
+        .all()
+    )
+    
+    # ✅ SERIALIZAR RECETAS A JSON STRING (no dict)
+    recetas_list = []
+    for r in recetas:
+        receta_data = {
+            'receta_id': r.receta_id,
+            'nombre': r.nombre,
+            'detalles': []
+        }
+        
+        for d in r.detalles:
+            detalle_data = {
+                'quimico_id': d.quimico_id,
+                'dosis': float(d.dosis) if d.dosis else 0,
+                'unidad_dosis': d.unidad_dosis or '',
+                'volumen_base': float(d.volumen_base) if d.volumen_base else 0,
+                'unidad_volumen': d.unidad_volumen or '',
+                'nota': d.nota or ''
+            }
+            receta_data['detalles'].append(detalle_data)
+        
+        recetas_list.append(receta_data)
+    
+    # ✅ Convertir a JSON string en Python (siempre devuelve algo válido)
+    recetas_json_str = json.dumps(recetas_list, ensure_ascii=False) if recetas_list else '[]'
+    
+    return render_template(
+        "catalogos/compartidos/quimicos_recetas.html",
+        quimicos=quimicos,
+        recetas=recetas,
+        recetas_json_str=recetas_json_str  # ✅ Ya es un string JSON válido
+    )
+
+# =========================
+# API - QUÍMICOS (CRUD)
+# =========================
+
+@main_bp.route("/api/quimicos/catalogos", methods=["GET"])
+@admin_required
+def api_quimicos_catalogos():
+    """
+    Obtiene los catálogos dinámicos para crear/editar químicos:
+    - Grupos disponibles (código + nombre de categoría)
+    - Presentaciones existentes
+    - Unidades base existentes
+    """
+    try:
+        # Extraer grupos únicos (código del ID + categoría)
+        # Query: SELECT DISTINCT SUBSTRING(quimico_id, 4, 2), categoria FROM quimico
+        grupos_raw = db.session.query(
+            db.func.substr(Quimico.quimico_id, 4, 2).label('codigo'),
+            Quimico.categoria
+        ).distinct().all()
+        
+        # Crear diccionario de grupos
+        grupos = [
+            {"codigo": g.codigo, "nombre": g.categoria}
+            for g in grupos_raw
+            if g.codigo and g.categoria
+        ]
+        grupos.sort(key=lambda x: x['codigo'])
+        
+        # Extraer presentaciones existentes
+        presentaciones_raw = db.session.query(
+            Quimico.presentacion
+        ).filter(
+            Quimico.presentacion.isnot(None),
+            Quimico.presentacion != ''
+        ).distinct().all()
+        
+        presentaciones = sorted([p[0] for p in presentaciones_raw if p[0]])
+        
+        # Extraer unidades base existentes
+        unidades_raw = db.session.query(
+            Quimico.unidad_base
+        ).filter(
+            Quimico.unidad_base.isnot(None),
+            Quimico.unidad_base != ''
+        ).distinct().all()
+        
+        unidades = sorted([u[0] for u in unidades_raw if u[0]])
+        
+        return jsonify({
+            "success": True,
+            "grupos": grupos,
+            "presentaciones": presentaciones,
+            "unidades": unidades
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/quimicos/next-id", methods=["GET"])
+@admin_required
+def api_quimicos_next_id():
+    """
+    Genera el próximo ID disponible para un grupo específico.
+    Query param: grupo (ej: DS, AC, SU)
+    Retorna: QU-{grupo}-{número} (ej: QU-DS-003)
+    """
+    grupo = request.args.get("grupo", "").strip().upper()
+    
+    if not grupo:
+        return jsonify({"success": False, "error": "Grupo requerido"}), 400
+    
+    if len(grupo) != 2:
+        return jsonify({"success": False, "error": "Grupo debe tener 2 caracteres"}), 400
+    
+    try:
+        # Buscar el último químico de este grupo
+        # Pattern: QU-{grupo}-%
+        pattern = f"QU-{grupo}-%"
+        ultimo = Quimico.query.filter(
+            Quimico.quimico_id.like(pattern)
+        ).order_by(
+            Quimico.quimico_id.desc()
+        ).first()
+        
+        if ultimo:
+            # Extraer el número del ID (ej: "QU-DS-004" → "004" → 4)
+            partes = ultimo.quimico_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            # Primer químico de este grupo
+            siguiente = 1
+        
+        # Formatear con 3 dígitos (001, 002, ..., 999)
+        nuevo_id = f"QU-{grupo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "quimico_id": nuevo_id,
+            "grupo": grupo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/quimicos", methods=["POST"])
+@admin_required
+def api_quimicos_crear():
+    """
+    Crea un nuevo químico.
+    Body JSON:
+    {
+        "grupo": "DS",
+        "nombre": "Alpha HP",
+        "presentacion": "Liquido",  // opcional
+        "unidad_base": "mL"         // opcional
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones
+        grupo = data.get("grupo", "").strip().upper()
+        nombre = data.get("nombre", "").strip()
+        presentacion = data.get("presentacion", "").strip() or None
+        unidad_base = data.get("unidad_base", "").strip() or None
+        
+        if not grupo or len(grupo) != 2:
+            return jsonify({"success": False, "error": "Grupo inválido (2 caracteres)"}), 400
+        
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # Validar nombre único
+        existe_nombre = Quimico.query.filter(
+            db.func.upper(Quimico.nombre) == nombre.upper()
+        ).first()
+        
+        if existe_nombre:
+            return jsonify({
+                "success": False,
+                "error": f"Ya existe un químico con el nombre '{nombre}'"
+            }), 400
+        
+        # Generar ID
+        pattern = f"QU-{grupo}-%"
+        ultimo = Quimico.query.filter(
+            Quimico.quimico_id.like(pattern)
+        ).order_by(
+            Quimico.quimico_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes = ultimo.quimico_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        quimico_id = f"QU-{grupo}-{siguiente:03d}"
+        
+        # Obtener categoría del grupo (buscar en químicos existentes)
+        categoria_ref = Quimico.query.filter(
+            Quimico.quimico_id.like(pattern)
+        ).first()
+        
+        if categoria_ref:
+            categoria = categoria_ref.categoria
+        else:
+            # Si es un grupo nuevo, usar el código como categoría temporal
+            categoria = grupo
+        
+        # Crear químico
+        nuevo_quimico = Quimico(
+            quimico_id=quimico_id,
+            nombre=nombre,
+            categoria=categoria,
+            presentacion=presentacion,
+            unidad_base=unidad_base
+        )
+        
+        db.session.add(nuevo_quimico)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "quimico": {
+                "quimico_id": nuevo_quimico.quimico_id,
+                "nombre": nuevo_quimico.nombre,
+                "categoria": nuevo_quimico.categoria,
+                "presentacion": nuevo_quimico.presentacion,
+                "unidad_base": nuevo_quimico.unidad_base
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/quimicos/<quimico_id>", methods=["PUT"])
+@admin_required
+def api_quimicos_editar(quimico_id):
+    """
+    Edita un químico existente.
+    Solo permite editar: nombre, presentacion, unidad_base
+    NO permite editar: quimico_id, categoria (viene del grupo)
+    
+    Body JSON:
+    {
+        "nombre": "Nuevo Nombre",
+        "presentacion": "Botella 1L",  // opcional
+        "unidad_base": "L"              // opcional
+    }
+    """
+    try:
+        quimico = Quimico.query.get(quimico_id)
+        
+        if not quimico:
+            return jsonify({"success": False, "error": "Químico no encontrado"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nueva_presentacion = data.get("presentacion", "").strip() or None
+        nueva_unidad = data.get("unidad_base", "").strip() or None
+        
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # Validar nombre único (excluyendo el actual)
+        existe_nombre = Quimico.query.filter(
+            db.func.upper(Quimico.nombre) == nuevo_nombre.upper(),
+            Quimico.quimico_id != quimico_id
+        ).first()
+        
+        if existe_nombre:
+            return jsonify({
+                "success": False,
+                "error": f"Ya existe otro químico con el nombre '{nuevo_nombre}'"
+            }), 400
+        
+        # Actualizar
+        quimico.nombre = nuevo_nombre
+        quimico.presentacion = nueva_presentacion
+        quimico.unidad_base = nueva_unidad
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "quimico": {
+                "quimico_id": quimico.quimico_id,
+                "nombre": quimico.nombre,
+                "categoria": quimico.categoria,
+                "presentacion": quimico.presentacion,
+                "unidad_base": quimico.unidad_base
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/quimicos/<quimico_id>", methods=["DELETE"])
+@admin_required
+def api_quimicos_eliminar(quimico_id):
+    """
+    Elimina un químico.
+    Valida que NO esté siendo usado en ninguna receta.
+    """
+    try:
+        quimico = Quimico.query.get(quimico_id)
+        
+        if not quimico:
+            return jsonify({"success": False, "error": "Químico no encontrado"}), 404
+        
+        # Validar que no esté en recetas
+        en_recetas = RecetaDetalle.query.filter_by(quimico_id=quimico_id).count()
+        
+        if en_recetas > 0:
+            # Obtener nombres de recetas donde está usado
+            recetas_nombres = db.session.query(Receta.nombre).join(
+                RecetaDetalle
+            ).filter(
+                RecetaDetalle.quimico_id == quimico_id
+            ).distinct().all()
+            
+            nombres = [r[0] for r in recetas_nombres]
+            
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Este químico está en {en_recetas} receta(s)",
+                "recetas": nombres
+            }), 400
+        
+        # Eliminar
+        db.session.delete(quimico)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Químico {quimico_id} eliminado correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+
+# =========================
+# API - RECETAS (CRUD)
+# =========================
+
+@main_bp.route("/api/recetas/catalogos", methods=["GET"])
+@admin_required
+def api_recetas_catalogos():
+    """
+    Obtiene los químicos disponibles para crear/editar recetas.
+    Retorna lista de químicos ordenados por ID.
+    """
+    try:
+        quimicos = Quimico.query.order_by(Quimico.quimico_id.asc()).all()
+        
+        quimicos_list = [
+            {
+                "quimico_id": q.quimico_id,
+                "nombre": q.nombre,
+                "categoria": q.categoria,
+                "presentacion": q.presentacion,
+                "unidad_base": q.unidad_base
+            }
+            for q in quimicos
+        ]
+        
+        return jsonify({
+            "success": True,
+            "quimicos": quimicos_list
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/recetas/next-id", methods=["GET"])
+@admin_required
+def api_recetas_next_id():
+    """
+    Genera el próximo ID disponible para un código específico.
+    Query param: codigo (ej: BA, TL, TRA)
+    Retorna: RE-{codigo}-{número} (ej: RE-BA-003)
+    """
+    codigo = request.args.get("codigo", "").strip().upper()
+    
+    if not codigo:
+        return jsonify({"success": False, "error": "Código requerido"}), 400
+    
+    if len(codigo) < 2 or len(codigo) > 3:
+        return jsonify({"success": False, "error": "Código debe tener 2-3 caracteres"}), 400
+    
+    try:
+        # Buscar la última receta de este código
+        # Pattern: RE-{codigo}-%
+        pattern = f"RE-{codigo}-%"
+        ultima = Receta.query.filter(
+            Receta.receta_id.like(pattern)
+        ).order_by(
+            Receta.receta_id.desc()
+        ).first()
+        
+        if ultima:
+            # Extraer el número del ID (ej: "RE-BA-004" → "004" → 4)
+            partes = ultima.receta_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            # Primera receta de este código
+            siguiente = 1
+        
+        # Formatear con 3 dígitos (001, 002, ..., 999)
+        nuevo_id = f"RE-{codigo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "receta_id": nuevo_id,
+            "codigo": codigo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/recetas", methods=["POST"])
+@admin_required
+def api_recetas_crear():
+    """
+    Crea una nueva receta con su detalle.
+    Body JSON:
+    {
+        "codigo": "BA",
+        "nombre": "Tallar Baños",
+        "quimico_id": "QU-AC-001",
+        "dosis": 25,
+        "volumen_base": 1000
+    }
+    
+    Crea:
+    - Receta (receta_id, nombre)
+    - RecetaDetalle (receta_id, quimico_id, dosis, unidad_dosis=mL, volumen_base, unidad_volumen=mL, nota=nombre)
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones
+        codigo = data.get("codigo", "").strip().upper()
+        nombre = data.get("nombre", "").strip()
+        quimico_id = data.get("quimico_id", "").strip()
+        dosis = data.get("dosis")
+        volumen_base = data.get("volumen_base")
+        
+        if not codigo or len(codigo) < 2:
+            return jsonify({"success": False, "error": "Código inválido (mínimo 2 caracteres)"}), 400
+        
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        if not quimico_id:
+            return jsonify({"success": False, "error": "Químico requerido"}), 400
+        
+        if dosis is None or dosis < 0:
+            return jsonify({"success": False, "error": "Dosis debe ser 0 o mayor"}), 400
+        
+        if volumen_base is None or volumen_base < 0:
+            return jsonify({"success": False, "error": "Volumen base debe ser 0 o mayor"}), 400
+        
+        # Validar nombre único
+        existe_nombre = Receta.query.filter(
+            db.func.upper(Receta.nombre) == nombre.upper()
+        ).first()
+        
+        if existe_nombre:
+            return jsonify({
+                "success": False,
+                "error": f"Ya existe una receta con el nombre '{nombre}'"
+            }), 400
+        
+        # Validar que el químico existe
+        quimico = Quimico.query.get(quimico_id)
+        if not quimico:
+            return jsonify({"success": False, "error": "Químico no encontrado"}), 404
+        
+        # Generar ID
+        pattern = f"RE-{codigo}-%"
+        ultima = Receta.query.filter(
+            Receta.receta_id.like(pattern)
+        ).order_by(
+            Receta.receta_id.desc()
+        ).first()
+        
+        if ultima:
+            partes = ultima.receta_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        receta_id = f"RE-{codigo}-{siguiente:03d}"
+        
+        # Crear Receta
+        nueva_receta = Receta(
+            receta_id=receta_id,
+            nombre=nombre
+        )
+        db.session.add(nueva_receta)
+        db.session.flush()  # Para obtener el ID antes del commit
+        
+        # Crear RecetaDetalle
+        detalle = RecetaDetalle(
+            receta_id=receta_id,
+            quimico_id=quimico_id,
+            dosis=dosis,
+            unidad_dosis="mL",  # Fijo
+            volumen_base=volumen_base,
+            unidad_volumen="mL",  # Fijo
+            nota=nombre  # ✅ Mismo valor que el nombre
+        )
+        db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "receta": {
+                "receta_id": nueva_receta.receta_id,
+                "nombre": nueva_receta.nombre,
+                "detalle": {
+                    "quimico_id": detalle.quimico_id,
+                    "dosis": detalle.dosis,
+                    "unidad_dosis": detalle.unidad_dosis,
+                    "volumen_base": detalle.volumen_base,
+                    "unidad_volumen": detalle.unidad_volumen,
+                    "nota": detalle.nota
+                }
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/recetas/<receta_id>", methods=["PUT"])
+@admin_required
+def api_recetas_editar(receta_id):
+    """
+    Edita una receta existente y su detalle.
+    Permite cambiar: nombre, quimico_id, dosis, volumen_base
+    NO permite cambiar: receta_id (código + número)
+    
+    Body JSON:
+    {
+        "nombre": "Tallar Baños Profundo",
+        "quimico_id": "QU-DS-001",
+        "dosis": 30,
+        "volumen_base": 1500
+    }
+    """
+    try:
+        receta = Receta.query.get(receta_id)
+        
+        if not receta:
+            return jsonify({"success": False, "error": "Receta no encontrada"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nuevo_quimico_id = data.get("quimico_id", "").strip()
+        nueva_dosis = data.get("dosis")
+        nuevo_volumen = data.get("volumen_base")
+        
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        if not nuevo_quimico_id:
+            return jsonify({"success": False, "error": "Químico requerido"}), 400
+        
+        if nueva_dosis is None or nueva_dosis < 0:
+            return jsonify({"success": False, "error": "Dosis debe ser 0 o mayor"}), 400
+        
+        if nuevo_volumen is None or nuevo_volumen < 0:
+            return jsonify({"success": False, "error": "Volumen base debe ser 0 o mayor"}), 400
+        
+        
+        # Validar nombre único (excluyendo el actual)
+        existe_nombre = Receta.query.filter(
+            db.func.upper(Receta.nombre) == nuevo_nombre.upper(),
+            Receta.receta_id != receta_id
+        ).first()
+        
+        if existe_nombre:
+            return jsonify({
+                "success": False,
+                "error": f"Ya existe otra receta con el nombre '{nuevo_nombre}'"
+            }), 400
+        
+        # Validar que el nuevo químico existe
+        quimico = Quimico.query.get(nuevo_quimico_id)
+        if not quimico:
+            return jsonify({"success": False, "error": "Químico no encontrado"}), 404
+        
+        # Actualizar Receta
+        receta.nombre = nuevo_nombre
+        
+        # Actualizar o crear RecetaDetalle (debería existir solo 1)
+        detalle = RecetaDetalle.query.filter_by(receta_id=receta_id).first()
+        
+        if detalle:
+            # Actualizar existente
+            detalle.quimico_id = nuevo_quimico_id
+            detalle.dosis = nueva_dosis
+            detalle.volumen_base = nuevo_volumen
+            detalle.nota = nuevo_nombre  # ✅ Actualizar nota con nuevo nombre
+        else:
+            # Crear nuevo (por si no existe)
+            detalle = RecetaDetalle(
+                receta_id=receta_id,
+                quimico_id=nuevo_quimico_id,
+                dosis=nueva_dosis,
+                unidad_dosis="mL",
+                volumen_base=nuevo_volumen,
+                unidad_volumen="mL",
+                nota=nuevo_nombre
+            )
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "receta": {
+                "receta_id": receta.receta_id,
+                "nombre": receta.nombre,
+                "detalle": {
+                    "quimico_id": detalle.quimico_id,
+                    "dosis": detalle.dosis,
+                    "unidad_dosis": detalle.unidad_dosis,
+                    "volumen_base": detalle.volumen_base,
+                    "unidad_volumen": detalle.unidad_volumen,
+                    "nota": detalle.nota
+                }
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/recetas/<receta_id>", methods=["DELETE"])
+@admin_required
+def api_recetas_eliminar(receta_id):
+    """
+    Elimina una receta y su detalle.
+    Valida que NO esté siendo usada en:
+    - SopEventoDetalle
+    - ElementoDetalle
+    - SopFraccionDetalle
+    """
+    try:
+        receta = Receta.query.get(receta_id)
+        
+        if not receta:
+            return jsonify({"success": False, "error": "Receta no encontrada"}), 404
+        
+        # Validar que no esté en uso
+        en_eventos = db.session.query(SopEventoDetalle).filter_by(receta_id=receta_id).count()
+        en_elementos = db.session.query(ElementoDetalle).filter_by(receta_id=receta_id).count()
+        en_fracciones = db.session.query(SopFraccionDetalle).filter_by(receta_id=receta_id).count()
+        
+        total_usos = en_eventos + en_elementos + en_fracciones
+        
+        if total_usos > 0:
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Esta receta está en uso en {total_usos} lugar(es)",
+                "detalles": {
+                    "eventos": en_eventos,
+                    "elementos": en_elementos,
+                    "fracciones": en_fracciones
+                }
+            }), 400
+        
+        # Eliminar RecetaDetalle primero (por la foreign key)
+        RecetaDetalle.query.filter_by(receta_id=receta_id).delete()
+        
+        # Eliminar Receta
+        db.session.delete(receta)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Receta {receta_id} eliminada correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# =========================
+# API - CONSUMOS (CRUD)
+# =========================
+
+@main_bp.route("/api/consumos/next-id", methods=["GET"])
+@admin_required
+def api_consumos_next_id():
+    """
+    Genera el próximo ID disponible para consumos.
+    Formato fijo: CM-DS-{número}
+    Retorna: CM-DS-010
+    """
+    try:
+        # Buscar el último consumo
+        pattern = "CM-DS-%"
+        ultimo = Consumo.query.filter(
+            Consumo.consumo_id.like(pattern)
+        ).order_by(
+            Consumo.consumo_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes = ultimo.consumo_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            siguiente = 1
+        
+        nuevo_id = f"CM-DS-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "consumo_id": nuevo_id,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/consumos", methods=["POST"])
+@admin_required
+def api_consumos_crear():
+    """
+    Crea un nuevo consumo.
+    Body JSON:
+    {
+        "valor": 1,
+        "unidad": "disparos",
+        "regla": "x m2 = 1 mL"  // opcional
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        valor = data.get("valor")
+        unidad = data.get("unidad", "").strip()
+        regla = data.get("regla", "").strip() or None
+        
+        if valor is None or valor <= 0:
+            return jsonify({"success": False, "error": "Valor debe ser mayor a 0"}), 400
+        
+        if not unidad:
+            return jsonify({"success": False, "error": "Unidad requerida"}), 400
+        
+        if unidad not in ["disparos", "mL"]:
+            return jsonify({"success": False, "error": "Unidad debe ser 'disparos' o 'mL'"}), 400
+        
+        # Generar ID
+        pattern = "CM-DS-%"
+        ultimo = Consumo.query.filter(
+            Consumo.consumo_id.like(pattern)
+        ).order_by(
+            Consumo.consumo_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes = ultimo.consumo_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        consumo_id = f"CM-DS-{siguiente:03d}"
+        
+        nuevo_consumo = Consumo(
+            consumo_id=consumo_id,
+            valor=valor,
+            unidad=unidad,
+            regla=regla
+        )
+        
+        db.session.add(nuevo_consumo)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "consumo": {
+                "consumo_id": nuevo_consumo.consumo_id,
+                "valor": nuevo_consumo.valor,
+                "unidad": nuevo_consumo.unidad,
+                "regla": nuevo_consumo.regla
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/consumos/<consumo_id>", methods=["PUT"])
+@admin_required
+def api_consumos_editar(consumo_id):
+    """
+    Edita un consumo existente.
+    Body JSON:
+    {
+        "valor": 2,
+        "unidad": "disparos",
+        "regla": "x m2 = 2 mL"
+    }
+    """
+    try:
+        consumo = Consumo.query.get(consumo_id)
+        
+        if not consumo:
+            return jsonify({"success": False, "error": "Consumo no encontrado"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_valor = data.get("valor")
+        nueva_unidad = data.get("unidad", "").strip()
+        nueva_regla = data.get("regla", "").strip() or None
+        
+        if nuevo_valor is None or nuevo_valor <= 0:
+            return jsonify({"success": False, "error": "Valor debe ser mayor a 0"}), 400
+        
+        if not nueva_unidad:
+            return jsonify({"success": False, "error": "Unidad requerida"}), 400
+        
+        if nueva_unidad not in ["disparos", "mL"]:
+            return jsonify({"success": False, "error": "Unidad debe ser 'disparos' o 'mL'"}), 400
+        
+        consumo.valor = nuevo_valor
+        consumo.unidad = nueva_unidad
+        consumo.regla = nueva_regla
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "consumo": {
+                "consumo_id": consumo.consumo_id,
+                "valor": consumo.valor,
+                "unidad": consumo.unidad,
+                "regla": consumo.regla
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/consumos/<consumo_id>", methods=["DELETE"])
+@admin_required
+def api_consumos_eliminar(consumo_id):
+    """
+    Elimina un consumo.
+    Valida uso en: SopFraccionDetalle, ElementoDetalle, SopEventoDetalle
+    """
+    try:
+        consumo = Consumo.query.get(consumo_id)
+        
+        if not consumo:
+            return jsonify({"success": False, "error": "Consumo no encontrado"}), 404
+        
+        en_fracciones = db.session.query(SopFraccionDetalle).filter_by(consumo_id=consumo_id).count()
+        en_elementos = db.session.query(ElementoDetalle).filter_by(consumo_id=consumo_id).count()
+        en_eventos = db.session.query(SopEventoDetalle).filter_by(consumo_id=consumo_id).count()
+        
+        total_usos = en_fracciones + en_elementos + en_eventos
+        
+        if total_usos > 0:
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Este consumo está en uso en {total_usos} lugar(es)",
+                "detalles": {
+                    "fracciones": en_fracciones,
+                    "elementos": en_elementos,
+                    "eventos": en_eventos
+                }
+            }), 400
+        
+        db.session.delete(consumo)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Consumo {consumo_id} eliminado correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+    
+@main_bp.route("/catalogos/consumos")
+@admin_required
+def catalogos_consumos():
+    """
+    Panel de gestión de Consumos
+    """
+    # Obtener todos los consumos ordenados por ID
+    consumos = Consumo.query.order_by(Consumo.consumo_id.asc()).all()
+    
+    return render_template(
+        "catalogos/compartidos/consumos.html",
+        consumos=consumos
+    )

@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consumos · LuxSOP</title>
+  <style>
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --green: #198754;
+      --card: #fff;
+      --h: 46px;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+      box-sizing: border-box;
+    }
+
+    html { background: var(--bg); }
+
+    body {
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      padding-left: 70px;
+      max-width: 1200px;
+      margin-inline: auto;
+    }
+
+    @media (max-width: 900px) {
+      body { padding-left: 2rem; }
+    }
+
+    /* ===== Header ===== */
+    .head {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: .85rem;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 600;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-top: .35rem;
+    }
+
+    /* ===== Card Container ===== */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      padding: 20px;
+    }
+
+    /* ===== Table ===== */
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .table-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      height: var(--h);
+      padding: .55rem 1.1rem;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: filter 0.2s ease;
+    }
+
+    .btn-blue {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn-green {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn-sm {
+      height: 36px;
+      padding: .4rem .8rem;
+      font-size: .85rem;
+    }
+
+    .btn:hover {
+      filter: brightness(.95);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    thead {
+      background: #f8f9fa;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid var(--line);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: .9rem;
+    }
+
+    tr:hover {
+      background: #f8f9fa;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+    }
+
+    .empty-state-text {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .empty-state-sub {
+      font-size: .9rem;
+      color: #999;
+    }
+
+    /* ===== Actions ===== */
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ===== Burger Button ===== */
+    .burger {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1101;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    .burger:hover { filter: brightness(.98); }
+
+    /* ===== Overlay ===== */
+    .nav-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      background: transparent;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .18s ease, visibility 0s linear .18s;
+    }
+
+    .nav-overlay.is-open {
+      background: rgba(0,0,0,.35);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition: opacity .18s ease;
+    }
+
+    /* ===== Top Guard ===== */
+    .top-guard {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: env(safe-area-inset-top, 44px);
+      background: #fff;
+      z-index: 1103;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .12s ease;
+    }
+
+    .top-guard.is-on {
+      opacity: 1;
+    }
+
+    /* ===== Sidebar ===== */
+    .side-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 300px;
+      max-width: 84vw;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(0,0,0,.14);
+      z-index: 1102;
+      transform: translateX(-105%);
+      transition: transform .2s ease;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+
+    .side-nav.is-open {
+      transform: translateX(0);
+    }
+
+    .side-nav__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 6px;
+      min-height: 52px;
+    }
+
+    .side-nav__brand {
+      display: grid;
+      line-height: 1.1;
+    }
+
+    .side-nav__brand strong {
+      font-size: 1rem;
+    }
+
+    .side-nav__brand span {
+      font-size: .78rem;
+      color: var(--muted);
+    }
+
+    .side-nav__close,
+    .side-nav__back {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .side-nav__close:hover,
+    .side-nav__back:hover {
+      background: #f5f5f5;
+    }
+
+    .side-nav__link {
+      text-decoration: none;
+      color: var(--fg);
+      padding: 10px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: .92rem;
+      font-weight: 500;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .side-nav__link:hover {
+      background: #f3f3f3;
+    }
+
+    .side-nav__section {
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,.08);
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
+    .side-nav__content {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      opacity: 1;
+      transition: opacity .15s ease;
+    }
+
+    .side-nav__content.is-transitioning {
+      opacity: 0;
+    }
+
+    /* ===== Modal ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal.is-open {
+      display: flex;
+    }
+
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-content {
+      position: relative;
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalSlideIn 0.3s ease;
+    }
+
+    @keyframes modalSlideIn {
+      from { opacity: 0; transform: translateY(-30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .modal-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: #f5f5f5;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-footer {
+      padding: 20px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: .95rem;
+      transition: border-color 0.2s ease;
+      font-family: system-ui, sans-serif;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    }
+
+    .form-hint {
+      display: block;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    .btn-secondary:hover {
+      filter: brightness(.95);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Sidebar dinámico -->
+  <button class="burger" id="navToggle" aria-label="Abrir menú">☰</button>
+  <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
+  <div class="top-guard" id="topGuard" aria-hidden="true"></div>
+
+  <nav class="side-nav" id="sideNav" aria-label="Menú principal">
+    <div class="side-nav__head" id="navHead">
+      <div class="side-nav__brand">
+        <strong>LuxSOP</strong>
+        <span>ERP · Limpieza</span>
+      </div>
+      <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+    </div>
+    <div class="side-nav__content" id="navContent"></div>
+  </nav>
+
+  <!-- Contenido Principal -->
+  <div class="head">
+    <h1>📦 Consumos</h1>
+    <div class="sub">Gestiona los consumos de productos en tareas</div>
+  </div>
+
+  <div class="card">
+    <div class="table-header">
+      <div class="table-title">Lista de Consumos ({{ consumos|length }})</div>
+      <button class="btn btn-blue btn-sm btn-agregar-consumo">
+        Agregar Consumo
+      </button>
+    </div>
+
+    {% if consumos %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Valor</th>
+          <th>Unidad</th>
+          <th>Regla</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in consumos %}
+        <tr>
+          <td><code>{{ c.consumo_id }}</code></td>
+          <td><strong>{{ c.valor }}</strong></td>
+          <td>{{ c.unidad }}</td>
+          <td>{{ c.regla or '—' }}</td>
+          <td>
+            <div class="actions">
+              <button class="btn btn-sm btn-green btn-editar-consumo"
+                      data-id="{{ c.consumo_id }}"
+                      data-valor="{{ c.valor }}"
+                      data-unidad="{{ c.unidad }}"
+                      data-regla="{{ c.regla or '' }}">
+                Editar
+              </button>
+              <button class="btn btn-sm btn-eliminar-consumo" 
+                      style="background: #dc3545; color: #fff;"
+                      data-id="{{ c.consumo_id }}"
+                      data-valor="{{ c.valor }}"
+                      data-unidad="{{ c.unidad }}">
+                ✕
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">📦</div>
+      <div class="empty-state-text">No hay consumos registrados</div>
+      <div class="empty-state-sub">Agrega tu primer consumo para comenzar</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- MODAL CONSUMO -->
+  <div class="modal" id="modalConsumo">
+    <div class="modal-overlay" onclick="cerrarModalConsumo()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalConsumoTitulo">Agregar Consumo</h2>
+        <button class="modal-close" onclick="cerrarModalConsumo()">✕</button>
+      </div>
+      
+      <form id="formConsumo" onsubmit="guardarConsumo(event)">
+        <div class="modal-body">
+          
+          <!-- ID Generado -->
+          <div class="form-group">
+            <label>1. ID (Generado automáticamente)</label>
+            <input type="text" id="consumoId" readonly style="background: #f5f5f5; cursor: not-allowed;">
+            <small class="form-hint">Formato: CM-DS-010</small>
+          </div>
+
+          <!-- Valor -->
+          <div class="form-group">
+            <label for="consumoValor">2. Valor *</label>
+            <input type="number" id="consumoValor" min="0.01" step="0.01" placeholder="1" required>
+            <small class="form-hint">Cantidad numérica del consumo</small>
+          </div>
+
+          <!-- Unidad -->
+          <div class="form-group">
+            <label for="consumoUnidad">3. Unidad *</label>
+            <select id="consumoUnidad" required>
+              <option value="">Seleccionar unidad...</option>
+              <option value="disparos">disparos</option>
+              <option value="mL">mL</option>
+            </select>
+            <small class="form-hint">Tipo de medida</small>
+          </div>
+
+          <!-- Regla -->
+          <div class="form-group">
+            <label for="consumoRegla">4. Regla (opcional)</label>
+            <textarea id="consumoRegla" placeholder="Ej: x m2 = 1 mL, Interior, Exterior"></textarea>
+            <small class="form-hint">Descripción o condición del consumo (puede dejarse vacío)</small>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="cerrarModalConsumo()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-blue" id="btnGuardarConsumo">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  // ===== SIDEBAR NAVIGATION =====
+  (function() {
+    'use strict';
+
+    const nav = document.getElementById('sideNav');
+    const navHead = document.getElementById('navHead');
+    const navContent = document.getElementById('navContent');
+    const burger = document.getElementById('navToggle');
+    const overlay = document.getElementById('navOverlay');
+    const topGuard = document.getElementById('topGuard');
+
+    if (!nav || !navContent) return;
+
+    const NAV_LEVELS = {
+      main: {
+        level: 0,
+        title: 'Menu Principal',
+        showBrand: true,
+        items: [
+          { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
+          { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
+          { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
+          { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
+        ]
+      },
+      catalogos: {
+        level: 1,
+        title: 'Catálogos',
+        parent: 'main',
+        showBrand: false,
+        items: [
+          { icon: '📦', text: 'Regulares', action: 'alert', message: 'Próximamente disponible' },
+          { icon: '🎯', text: 'Eventos', action: 'alert', message: 'Próximamente disponible' },
+          { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
+        ]
+      },
+      compartidos: {
+        level: 2,
+        title: 'Compartidos',
+        parent: 'catalogos',
+        showBrand: false,
+        items: [
+          { icon: '🧪', text: 'Químicos/Recetas', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
+          { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
+        ]
+      }
+    };
+
+    let currentLevel = 'main';
+    let navStack = ['main'];
+
+    function navigateTo(targetLevel) {
+      if (!NAV_LEVELS[targetLevel]) return;
+      navContent.classList.add('is-transitioning');
+      setTimeout(() => {
+        currentLevel = targetLevel;
+        navStack.push(targetLevel);
+        renderNavLevel();
+        requestAnimationFrame(() => {
+          navContent.classList.remove('is-transitioning');
+        });
+      }, 150);
+    }
+
+    function goBack() {
+      if (navStack.length <= 1) return;
+      navContent.classList.add('is-transitioning');
+      setTimeout(() => {
+        navStack.pop();
+        currentLevel = navStack[navStack.length - 1];
+        renderNavLevel();
+        requestAnimationFrame(() => {
+          navContent.classList.remove('is-transitioning');
+        });
+      }, 150);
+    }
+
+    function renderNavLevel() {
+      const levelConfig = NAV_LEVELS[currentLevel];
+      if (!levelConfig) return;
+
+      updateNavHeader(levelConfig);
+
+      let html = '';
+      levelConfig.items.forEach(item => {
+        if (item.url) {
+          html += `<a class="side-nav__link" href="${item.url}">${item.icon} ${item.text}</a>`;
+        } else if (item.action === 'navigateTo') {
+          html += `<button class="side-nav__link" onclick="navSystem.navigateTo('${item.target}')">${item.icon} ${item.text}</button>`;
+        } else if (item.action === 'alert') {
+          html += `<button class="side-nav__link" onclick="alert('${item.message}')">${item.icon} ${item.text}</button>`;
+        }
+      });
+
+      if (currentLevel === 'main') {
+        html += `
+          <div class="side-nav__section">Sesión</div>
+          <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+            <button type="submit" class="side-nav__link">🚪 Salir</button>
+          </form>
+        `;
+      }
+
+      navContent.innerHTML = html;
+    }
+
+    function updateNavHeader(levelConfig) {
+      navHead.innerHTML = '';
+
+      if (levelConfig.showBrand) {
+        navHead.innerHTML = `
+          <div class="side-nav__brand">
+            <strong>LuxSOP</strong>
+            <span>ERP · Limpieza</span>
+          </div>
+          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+        `;
+      } else {
+        navHead.innerHTML = `
+          <button class="side-nav__back" id="navBack" aria-label="Volver">←</button>
+          <div class="side-nav__brand">
+            <strong>${levelConfig.title}</strong>
+          </div>
+          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
+        `;
+
+        const backBtn = document.getElementById('navBack');
+        if (backBtn) backBtn.addEventListener('click', goBack);
+      }
+
+      const closeBtn = document.getElementById('navClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeNav);
+    }
+
+    function openNav() {
+      topGuard?.classList.add('is-on');
+      requestAnimationFrame(() => {
+        overlay.classList.add('is-open');
+        nav.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+      });
+    }
+
+    function closeNav() {
+      nav.classList.remove('is-open');
+      overlay.classList.remove('is-open');
+      requestAnimationFrame(() => {
+        topGuard?.classList.remove('is-on');
+      });
+      document.body.style.overflow = '';
+      currentLevel = 'main';
+      navStack = ['main'];
+      renderNavLevel();
+    }
+
+    burger?.addEventListener('click', openNav);
+    overlay?.addEventListener('click', closeNav);
+    
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeNav();
+    });
+
+    nav.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (link) closeNav();
+    });
+
+    window.navSystem = { navigateTo, goBack };
+    renderNavLevel();
+
+  })();
+
+  // ===== CRUD DE CONSUMOS =====
+  (function() {
+    'use strict';
+
+    let modoModal = 'crear';
+    let consumoActualId = null;
+
+    // ===== ABRIR MODAL =====
+    window.abrirModalConsumo = async function(modo, id = null, valor = '', unidad = '', regla = '') {
+      modoModal = modo;
+      consumoActualId = id;
+
+      const modal = document.getElementById('modalConsumo');
+      const titulo = document.getElementById('modalConsumoTitulo');
+      const idInput = document.getElementById('consumoId');
+      const valorInput = document.getElementById('consumoValor');
+      const unidadSelect = document.getElementById('consumoUnidad');
+      const reglaTextarea = document.getElementById('consumoRegla');
+
+      // Limpiar form
+      document.getElementById('formConsumo').reset();
+      idInput.value = '';
+
+      if (modo === 'crear') {
+        titulo.textContent = 'Agregar Consumo';
+        
+        // Generar próximo ID
+        const nextId = await obtenerProximoId();
+        idInput.value = nextId;
+
+      } else if (modo === 'editar') {
+        titulo.textContent = 'Editar Consumo';
+        
+        idInput.value = id;
+        valorInput.value = valor;
+        unidadSelect.value = unidad;
+        reglaTextarea.value = regla;
+      }
+
+      modal.classList.add('is-open');
+      document.body.style.overflow = 'hidden';
+    };
+
+    // ===== CERRAR MODAL =====
+    window.cerrarModalConsumo = function() {
+      const modal = document.getElementById('modalConsumo');
+      modal.classList.remove('is-open');
+      document.body.style.overflow = '';
+      
+      document.getElementById('formConsumo').reset();
+      document.getElementById('consumoId').value = '';
+      modoModal = 'crear';
+      consumoActualId = null;
+    };
+
+    // ===== OBTENER PRÓXIMO ID =====
+    async function obtenerProximoId() {
+      try {
+        const response = await fetch('/api/consumos/next-id');
+        const data = await response.json();
+        
+        if (data.success) {
+          return data.consumo_id;
+        } else {
+          console.error('❌ Error al obtener ID:', data.error);
+          return '';
+        }
+      } catch (error) {
+        console.error('❌ Error de red:', error);
+        return '';
+      }
+    }
+
+    // ===== GUARDAR CONSUMO =====
+    window.guardarConsumo = async function(event) {
+      event.preventDefault();
+
+      const btnGuardar = document.getElementById('btnGuardarConsumo');
+      btnGuardar.disabled = true;
+      btnGuardar.textContent = 'Guardando...';
+
+      const valor = parseFloat(document.getElementById('consumoValor').value);
+      const unidad = document.getElementById('consumoUnidad').value;
+      const regla = document.getElementById('consumoRegla').value.trim() || null;
+
+      try {
+        let response, data;
+
+        if (modoModal === 'crear') {
+          response = await fetch('/api/consumos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valor, unidad, regla })
+          });
+
+        } else if (modoModal === 'editar') {
+          response = await fetch(`/api/consumos/${consumoActualId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valor, unidad, regla })
+          });
+        }
+
+        data = await response.json();
+
+        if (data.success) {
+          alert(modoModal === 'crear' ? 'Consumo creado correctamente' : 'Consumo actualizado correctamente');
+          cerrarModalConsumo();
+          location.reload();
+        } else {
+          alert('Error: ' + data.error);
+        }
+
+      } catch (error) {
+        console.error('❌ Error:', error);
+        alert('Error de conexión');
+      } finally {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = 'Guardar';
+      }
+    };
+
+    // ===== ELIMINAR CONSUMO =====
+    window.eliminarConsumo = async function(id, valor, unidad) {
+      const confirmar = confirm(
+        `¿Estás seguro de eliminar el consumo ${id} (${valor} ${unidad})?\n\n` +
+        `Esta acción no se puede deshacer.`
+      );
+
+      if (!confirmar) return;
+
+      try {
+        const response = await fetch(`/api/consumos/${id}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('Consumo eliminado correctamente');
+          location.reload();
+        } else {
+          if (data.detalles) {
+            const { fracciones, elementos, eventos } = data.detalles;
+            const total = fracciones + elementos + eventos;
+            
+            let mensaje = `❌ ${data.error}\n\nEste consumo está siendo utilizado en:\n`;
+            if (fracciones > 0) mensaje += `• ${fracciones} Fracción(es)\n`;
+            if (elementos > 0) mensaje += `• ${elementos} Elemento(s)\n`;
+            if (eventos > 0) mensaje += `• ${eventos} Evento(s)\n`;
+            mensaje += `\nTotal: ${total} referencias`;
+            
+            alert(mensaje);
+          } else {
+            alert('Error: ' + data.error);
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ Error:', error);
+        alert('Error de conexión');
+      }
+    };
+
+    // ===== EVENT LISTENERS =====
+    document.querySelector('.btn-agregar-consumo')?.addEventListener('click', function() {
+      abrirModalConsumo('crear');
+    });
+
+    document.addEventListener('click', function(e) {
+      if (e.target.closest('.btn-editar-consumo')) {
+        const btn = e.target.closest('.btn-editar-consumo');
+        abrirModalConsumo('editar', btn.dataset.id, btn.dataset.valor, btn.dataset.unidad, btn.dataset.regla);
+      }
+
+      if (e.target.closest('.btn-eliminar-consumo')) {
+        const btn = e.target.closest('.btn-eliminar-consumo');
+        eliminarConsumo(btn.dataset.id, btn.dataset.valor, btn.dataset.unidad);
+      }
+    });
+
+  })();
+  </script>
+
+</body>
+</html>
