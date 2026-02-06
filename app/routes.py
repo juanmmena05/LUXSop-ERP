@@ -3,9 +3,14 @@ import unicodedata
 from typing import Optional
 from datetime import datetime, date, timedelta, timezone
 
+# =====================================================
+# 📝 IMPORTS NECESARIOS (agregar al inicio de tu archivo)
+# =====================================================
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, make_response, abort, session
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, or_
+from sqlalchemy import func, distinct
+from sqlalchemy.exc import IntegrityError
 
 from flask_login import login_user, logout_user, login_required, current_user
 
@@ -1147,6 +1152,7 @@ def reporte_persona_dia(fecha, personal_id):
                 fracciones_filtradas.append({
                     "orden": sf.orden,
                     "fraccion_nombre": fr.fraccion_nombre if fr else "",
+                    "nombre_full": fr.nombre_full if fr else "",
                     "descripcion": metodologia.descripcion or "",
                     "nivel_limpieza": nivel_asignado,
                     "tiempo_min": round(tiempo_min, 2) if tiempo_min is not None else None,
@@ -1487,6 +1493,7 @@ def reporte_persona_dia_pdf(fecha, personal_id):
             fracciones_filtradas.append({
                 "orden": sf.orden,
                 "fraccion_nombre": fr.fraccion_nombre if fr else "",
+                "nombre_full": fr.nombre_full if fr else "",
                 "descripcion": metodologia.descripcion or "",
                 "nivel_limpieza": nivel_asignado,
                 "tiempo_base": round(tiempo_min, 2) if tiempo_min is not None else None,
@@ -4648,10 +4655,11 @@ def sop_evento_detalle(sop_evento_id):
     else:
         detalle_actual = detalles_list[0]
     
-    # ✅ CORRECCIÓN: filtrar kits por tipo_kit='evento'
+
+    # ✅ Filtrar kits por tipo_kit='evento' Y caso_id del SOP
     kits = (
         Kit.query
-        .filter_by(tipo_kit='evento')
+        .filter_by(tipo_kit='evento', caso_id=sop_evento.caso_id)
         .order_by(Kit.nombre.asc())
         .all()
     )
@@ -4778,20 +4786,23 @@ def api_quimicos_catalogos():
     - Unidades base existentes
     """
     try:
-        # Extraer grupos únicos (código del ID + categoría)
-        # Query: SELECT DISTINCT SUBSTRING(quimico_id, 4, 2), categoria FROM quimico
-        grupos_raw = db.session.query(
-            db.func.substr(Quimico.quimico_id, 4, 2).label('codigo'),
-            Quimico.categoria
-        ).distinct().all()
-        
-        # Crear diccionario de grupos
+        GLOSARIO_QUIMICOS = {
+            'AA': 'ACABADO',
+            'AB': 'ABRASIVO',
+            'AC': 'ACIDO',
+            'DE': 'DETERGENTE',
+            'DN': 'DESENGRASANTE',
+            'DS': 'DESINFECTANTE',
+            'LI': 'LIMPIADOR',
+            'SA': 'SANITIZANTE',
+            'SU': 'SUPRESOR',
+        }
+
+        # Crear lista para el frontend (mantiene formato del dropdown)
         grupos = [
-            {"codigo": g.codigo, "nombre": g.categoria}
-            for g in grupos_raw
-            if g.codigo and g.categoria
+            {"codigo": codigo, "nombre": categoria}
+            for codigo, categoria in sorted(GLOSARIO_QUIMICOS.items())
         ]
-        grupos.sort(key=lambda x: x['codigo'])
         
         # Extraer presentaciones existentes
         presentaciones_raw = db.session.query(
@@ -5132,8 +5143,9 @@ def api_recetas_next_id():
     if not codigo:
         return jsonify({"success": False, "error": "Código requerido"}), 400
     
-    if len(codigo) < 2 or len(codigo) > 3:
-        return jsonify({"success": False, "error": "Código debe tener 2-3 caracteres"}), 400
+
+    if len(codigo) != 2:
+        return jsonify({"success": False, "error": "Código debe tener exactamente 2 caracteres"}), 400
     
     try:
         # Buscar la última receta de este código
@@ -5201,34 +5213,48 @@ def api_recetas_crear():
         quimico_id = data.get("quimico_id", "").strip()
         dosis = data.get("dosis")
         volumen_base = data.get("volumen_base")
-        
-        if not codigo or len(codigo) < 2:
-            return jsonify({"success": False, "error": "Código inválido (mínimo 2 caracteres)"}), 400
-        
+
+        # 1. Validar formato de código
+        if not codigo or len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código inválido"}), 400
+
+        # 2. Validar que código venga de fracción existente  
+        pattern_fraccion = f"FR-{codigo}-%"
+        fraccion_existe = Fraccion.query.filter(
+            Fraccion.fraccion_id.like(pattern_fraccion)
+        ).first()
+
+        if not fraccion_existe:
+            return jsonify({
+                "success": False, 
+                "error": f"El código '{codigo}' no corresponde a ninguna fracción existente"
+            }), 400
+
+        # 3. Validar campos básicos
         if not nombre:
             return jsonify({"success": False, "error": "Nombre requerido"}), 400
-        
+
         if not quimico_id:
             return jsonify({"success": False, "error": "Químico requerido"}), 400
-        
+
         if dosis is None or dosis < 0:
             return jsonify({"success": False, "error": "Dosis debe ser 0 o mayor"}), 400
-        
+
         if volumen_base is None or volumen_base < 0:
             return jsonify({"success": False, "error": "Volumen base debe ser 0 o mayor"}), 400
-        
-        # Validar nombre único
+
+        # 4. Validar nombre único (hace query a BD)
         existe_nombre = Receta.query.filter(
             db.func.upper(Receta.nombre) == nombre.upper()
         ).first()
-        
+
         if existe_nombre:
             return jsonify({
                 "success": False,
                 "error": f"Ya existe una receta con el nombre '{nombre}'"
             }), 400
-        
-        # Validar que el químico existe
+
+        # 5. Validar que el químico existe (hace query a BD)
         quimico = Quimico.query.get(quimico_id)
         if not quimico:
             return jsonify({"success": False, "error": "Químico no encontrado"}), 404
@@ -5451,6 +5477,27 @@ def api_recetas_eliminar(receta_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@main_bp.route("/api/recetas/fracciones-disponibles", methods=["GET"])
+@admin_required
+def api_recetas_fracciones_disponibles():
+    """
+    Lista todas las fracciones para dropdown
+    """
+    fracciones = Fraccion.query.order_by(Fraccion.fraccion_nombre).all()
+    
+    return jsonify({
+        "success": True,
+        "fracciones": [
+            {
+                "codigo": f.fraccion_id.split('-')[1],  # "FR-TL-001" → "TL"
+                "nombre": f.fraccion_nombre,  # ✅ Cambiado a fraccion_nombre
+                "fraccion_id": f.fraccion_id
+            }
+            for f in fracciones
+        ]
+    })
+
+
 # =========================
 # API - CONSUMOS (CRUD)
 # =========================
@@ -5514,7 +5561,12 @@ def api_consumos_crear():
         
         valor = data.get("valor")
         unidad = data.get("unidad", "").strip()
-        regla = data.get("regla", "").strip() or None
+
+        regla = data.get("regla")
+        if regla:
+            regla = regla.strip() or None
+        else:
+            regla = None
         
         if valor is None or valor <= 0:
             return jsonify({"success": False, "error": "Valor debe ser mayor a 0"}), 400
@@ -5589,7 +5641,12 @@ def api_consumos_editar(consumo_id):
         
         nuevo_valor = data.get("valor")
         nueva_unidad = data.get("unidad", "").strip()
-        nueva_regla = data.get("regla", "").strip() or None
+
+        nueva_regla = data.get("regla")
+        if nueva_regla:
+            nueva_regla = nueva_regla.strip() or None
+        else:
+            nueva_regla = None
         
         if nuevo_valor is None or nuevo_valor <= 0:
             return jsonify({"success": False, "error": "Valor debe ser mayor a 0"}), 400
@@ -5663,7 +5720,7 @@ def api_consumos_eliminar(consumo_id):
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
     
-    
+
 @main_bp.route("/catalogos/consumos")
 @admin_required
 def catalogos_consumos():
@@ -5677,3 +5734,1651 @@ def catalogos_consumos():
         "catalogos/compartidos/consumos.html",
         consumos=consumos
     )
+
+
+"""
+Rutas para Elementos - Catálogos Regulares
+Agregar estas rutas a tu archivo principal de rutas (ej: routes.py o main.py)
+"""
+
+"""
+Rutas para Elementos - Catálogos Regulares
+Agregar estas rutas a tu archivo principal de rutas (ej: routes.py o main.py)
+"""
+
+# =====================================================
+# 🎯 ELEMENTOS - PÁGINA PRINCIPAL
+# =====================================================
+@main_bp.route('/catalogos/regulares/elementos')
+def catalogos_elementos():
+    """Página de gestión de elementos"""
+    return render_template('catalogos/regulares/elementos.html')
+
+
+# =====================================================
+# 🎯 API: GET /api/elementos/catalogos
+# =====================================================
+@main_bp.route('/api/elementos/catalogos', methods=['GET'])
+def api_elementos_catalogos():
+    """
+    Obtener datos para poblar dropdowns:
+    - Áreas
+    - SubÁreas (con su área)
+    - Grupos/nombres disponibles (SANITARIO, CESTO, etc.)
+    - Descripciones por grupo
+    """
+    try:
+        # 1. Obtener todas las áreas
+        areas = Area.query.order_by(Area.orden_area).all()
+        areas_data = [
+            {
+                'area_id': a.area_id,
+                'nombre': a.area_nombre
+            }
+            for a in areas
+        ]
+
+        # 2. Obtener todas las subáreas con su área
+        subareas = SubArea.query.join(Area).order_by(Area.orden_area, SubArea.orden_subarea).all()
+        subareas_data = [
+            {
+                'subarea_id': sa.subarea_id,
+                'nombre': sa.subarea_nombre,
+                'area_id': sa.area_id,
+                'area_nombre': sa.area.area_nombre
+            }
+            for sa in subareas
+        ]
+
+        # 3. Obtener grupos únicos (nombre) de elementos existentes
+        grupos = db.session.query(
+            Elemento.nombre
+        ).distinct().order_by(Elemento.nombre).all()
+        
+        grupos_data = [g[0] for g in grupos if g[0]]  # Lista plana de strings
+
+        # 4. Obtener descripciones únicas por grupo
+        descripciones_query = db.session.query(
+            Elemento.nombre,
+            Elemento.descripcion
+        ).distinct().order_by(Elemento.nombre, Elemento.descripcion).all()
+
+        # Organizar en diccionario: {nombre: [descripciones]}
+        descripciones_por_grupo = {}
+        for nombre, descripcion in descripciones_query:
+            if nombre not in descripciones_por_grupo:
+                descripciones_por_grupo[nombre] = []
+            if descripcion:  # Solo agregar si no es NULL
+                descripciones_por_grupo[nombre].append(descripcion)
+
+        return jsonify({
+            'areas': areas_data,
+            'subareas': subareas_data,
+            'grupos': grupos_data,
+            'descripciones_por_grupo': descripciones_por_grupo
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# 🎯 API: GET /api/elementos
+# =====================================================
+@main_bp.route('/api/elementos', methods=['GET'])
+def api_elementos_list():
+    try:
+        # Parámetros de paginación
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        # Parámetros de filtro
+        area_id = request.args.get('area_id')
+        subarea_id = request.args.get('subarea_id')
+
+        # Query base
+        query = Elemento.query.join(SubArea).join(Area)
+
+        # Aplicar filtros
+        if subarea_id:
+            query = query.filter(Elemento.subarea_id == subarea_id)
+        elif area_id:
+            # Si solo hay area_id, filtrar por todas las subareas de esa área
+            query = query.filter(SubArea.area_id == area_id)
+
+        # Ordenar por elemento_id
+        query = query.order_by(Elemento.elemento_id)
+
+        # Paginar
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        # Formatear resultados
+        elementos_data = [
+            {
+                'elemento_id': e.elemento_id,
+                'nombre': e.nombre,
+                'descripcion': e.descripcion,
+                'cantidad': e.cantidad,
+                'estatus': e.estatus,
+                'subarea_id': e.subarea_id,
+                'subarea_nombre': e.subarea.subarea_nombre,
+                'area_id': e.subarea.area_id,
+                'area_nombre': e.subarea.area.area_nombre
+            }
+            for e in pagination.items
+        ]
+
+        return jsonify({
+            'elementos': elementos_data,
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page,
+            'per_page': pagination.per_page,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# 🎯 API: GET /api/elementos/next-id
+# =====================================================
+@main_bp.route('/api/elementos/next-id', methods=['GET'])
+def api_elementos_next_id():
+    
+    try:
+        CODIGOS_ELEMENTO = {
+            'A/C': 'AR',
+            'ACCESO': 'AE',
+            'ACCESORIO': 'AC',
+            'ARCHIVERO': 'AH',
+            'BANCO': 'BA',
+            'BANQUILLO': 'BN',
+            'BASCULA': 'BC',
+            'BASE': 'BS',
+            'BORDE': ['BO', 'BP'],  # ← Caso especial
+            'CAMILLA': 'CA',
+            'CESTO': 'CE',
+            'CHAPA': 'CH',
+            'CUADRO': 'CU',
+            'DETECTOR': 'DE',
+            'ESCRITORIO': 'EC',
+            'ESPEJO': 'ES',
+            'EXTINTOR': 'EX',
+            'GABINETE': 'GE',
+            'LAMPARA': 'LM',
+            'LAVABO': 'LA',
+            'LIBRERO': 'LI',
+            'LUZ': 'LZ',
+            'MESA': 'ME',
+            'MICROONDAS': 'MI',
+            'MUEBLE': 'MU',
+            'PARED': 'PR',
+            'PERCHERO': 'PE',
+            'PROYECCION': 'PO',
+            'PROYECTOR': 'PY',
+            'PUERTA': 'PU',
+            'REFRIGERADOR': 'RE',
+            'SANITARIO': 'SA',
+            'SEÑALETICA': 'SE',
+            'SILLA': 'SI',
+            'SOFA': 'SO',
+            'TELEVISION': 'TV',
+            'TUBERIA': 'TU',
+            'VIGA': 'VG',
+        }
+
+        nombre = request.args.get('nombre')
+        descripcion = request.args.get('descripcion')
+
+        if not nombre or not descripcion:
+            return jsonify({'error': 'Faltan parámetros: nombre y descripcion'}), 400
+
+        # Determinar código
+        if nombre == 'BORDE':
+            # Lógica especial para BORDE
+            if 'puerta' in descripcion.lower():
+                codigo = 'BP'
+            else:
+                codigo = 'BO'
+
+        elif nombre in CODIGOS_ELEMENTO:
+            codigo = CODIGOS_ELEMENTO[nombre]
+        else:
+            # Fallback: primeras 2 letras
+            codigo = nombre[:2].upper()
+
+        # Buscar el último número usado para este código
+        # Patrón: EL-{CODIGO}-%
+        patron = f'EL-{codigo}-%'
+        
+        elementos = Elemento.query.filter(
+            Elemento.elemento_id.like(patron)
+        ).all()
+
+        # Extraer números de los IDs
+        numeros = []
+        for elem in elementos:
+            try:
+                # Formato: EL-SA-001 -> extraer 001
+                partes = elem.elemento_id.split('-')
+                if len(partes) == 3:
+                    num = int(partes[2])
+                    numeros.append(num)
+            except (ValueError, IndexError):
+                continue
+
+        # Calcular siguiente número
+        siguiente_num = max(numeros) + 1 if numeros else 1
+
+        # Generar ID
+        next_id = f'EL-{codigo}-{siguiente_num:03d}'
+
+        return jsonify({'next_id': next_id}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# 🎯 API: POST /api/elementos
+# =====================================================
+@main_bp.route('/api/elementos', methods=['POST'])
+def api_elementos_create():
+    try:
+        CODIGOS_ELEMENTO = {
+            'A/C': 'AR',
+            'ACCESO': 'AE',
+            'ACCESORIO': 'AC',
+            'ARCHIVERO': 'AH',
+            'BANCO': 'BA',
+            'BANQUILLO': 'BN',
+            'BASCULA': 'BC',
+            'BASE': 'BS',
+            'BORDE': ['BO', 'BP'],
+            'CAMILLA': 'CA',
+            'CESTO': 'CE',
+            'CHAPA': 'CH',
+            'CUADRO': 'CU',
+            'DETECTOR': 'DE',
+            'ESCRITORIO': 'EC',
+            'ESPEJO': 'ES',
+            'EXTINTOR': 'EX',
+            'GABINETE': 'GE',
+            'LAMPARA': 'LM',
+            'LAVABO': 'LA',
+            'LIBRERO': 'LI',
+            'LUZ': 'LZ',
+            'MESA': 'ME',
+            'MICROONDAS': 'MI',
+            'MUEBLE': 'MU',
+            'PARED': 'PR',
+            'PERCHERO': 'PE',
+            'PROYECCION': 'PO',
+            'PROYECTOR': 'PY',
+            'PUERTA': 'PU',
+            'REFRIGERADOR': 'RE',
+            'SANITARIO': 'SA',
+            'SEÑALETICA': 'SE',
+            'SILLA': 'SI',
+            'SOFA': 'SO',
+            'TELEVISION': 'TV',
+            'TUBERIA': 'TU',
+            'VIGA': 'VG',
+        }
+
+        data = request.get_json()
+
+        # Validaciones
+        required_fields = ['subarea_id', 'nombre', 'descripcion', 'cantidad']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'error': f'Campo requerido: {field}'}), 400
+
+        # Validar cantidad
+        cantidad = data['cantidad']
+        if not isinstance(cantidad, (int, float)) or cantidad < 1:
+            return jsonify({'error': 'La cantidad debe ser un número mayor o igual a 1'}), 400
+
+        # Validar que subarea_id existe
+        subarea = SubArea.query.get(data['subarea_id'])
+        if not subarea:
+            return jsonify({'error': 'SubÁrea no encontrada'}), 404
+      
+        nombre = data['nombre'].upper()
+        descripcion = data['descripcion']
+
+        # Determinar código
+        if nombre == 'BORDE':
+            if 'puerta' in descripcion.lower():
+                codigo = 'BP'
+            else:
+                codigo = 'BO'
+        elif nombre in CODIGOS_ELEMENTO:
+            codigo = CODIGOS_ELEMENTO[nombre]
+        else:
+            codigo = nombre[:2].upper()
+        
+        patron = f'EL-{codigo}-%'
+        elementos = Elemento.query.filter(Elemento.elemento_id.like(patron)).all()
+        
+        numeros = []
+        for elem in elementos:
+            try:
+                partes = elem.elemento_id.split('-')
+                if len(partes) == 3:
+                    num = int(partes[2])
+                    numeros.append(num)
+            except (ValueError, IndexError):
+                continue
+        
+        siguiente_num = max(numeros) + 1 if numeros else 1
+        elemento_id = f'EL-{codigo}-{siguiente_num:03d}'
+
+        # Crear elemento
+        nuevo_elemento = Elemento(
+            elemento_id=elemento_id,
+            subarea_id=data['subarea_id'],
+            nombre=nombre,
+            descripcion=data['descripcion'],
+            cantidad=cantidad,
+            estatus='ACTIVO'  # Siempre ACTIVO al crear
+        )
+
+        db.session.add(nuevo_elemento)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Elemento creado exitosamente',
+            'elemento': {
+                'elemento_id': nuevo_elemento.elemento_id,
+                'nombre': nuevo_elemento.nombre,
+                'descripcion': nuevo_elemento.descripcion,
+                'cantidad': nuevo_elemento.cantidad,
+                'estatus': nuevo_elemento.estatus,
+                'subarea_id': nuevo_elemento.subarea_id
+            }
+        }), 201
+
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({'error': 'Error de integridad: posiblemente el elemento ya existe'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# 🎯 API: PUT /api/elementos/<elemento_id>
+# =====================================================
+@main_bp.route('/api/elementos/<elemento_id>', methods=['PUT'])
+def api_elementos_update(elemento_id):
+    """
+    Editar un elemento existente
+    Solo permite editar: cantidad, estatus
+    
+    Body JSON:
+    {
+        "cantidad": 2,
+        "estatus": "INACTIVO"
+    }
+    """
+    try:
+        data = request.get_json()
+
+        # Buscar elemento
+        elemento = Elemento.query.get(elemento_id)
+        if not elemento:
+            return jsonify({'error': 'Elemento no encontrado'}), 404
+
+        # Validar campos permitidos
+        allowed_fields = ['cantidad', 'estatus']
+        for field in data.keys():
+            if field not in allowed_fields:
+                return jsonify({'error': f'Campo no editable: {field}'}), 400
+
+        # Actualizar cantidad
+        if 'cantidad' in data:
+            cantidad = data['cantidad']
+            if not isinstance(cantidad, (int, float)) or cantidad < 1:
+                return jsonify({'error': 'La cantidad debe ser un número mayor o igual a 1'}), 400
+            elemento.cantidad = cantidad
+
+        # Actualizar estatus
+        if 'estatus' in data:
+            estatus = data['estatus'].upper()
+            if estatus not in ['ACTIVO', 'INACTIVO']:
+                return jsonify({'error': 'Estatus debe ser ACTIVO o INACTIVO'}), 400
+            elemento.estatus = estatus
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Elemento actualizado exitosamente',
+            'elemento': {
+                'elemento_id': elemento.elemento_id,
+                'cantidad': elemento.cantidad,
+                'estatus': elemento.estatus
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# 🎯 API: DELETE /api/elementos/<elemento_id>
+# =====================================================
+@main_bp.route('/api/elementos/<elemento_id>', methods=['DELETE'])
+def api_elementos_delete(elemento_id):
+    """
+    Eliminar un elemento
+    Validación: NO debe estar en elemento_detalle
+    """
+    try:
+        # Buscar elemento
+        elemento = Elemento.query.get(elemento_id)
+        if not elemento:
+            return jsonify({'error': 'Elemento no encontrado'}), 404
+
+        # Validar que no esté en uso en elemento_detalle
+        en_uso = ElementoDetalle.query.filter_by(elemento_id=elemento_id).first()
+        if en_uso:
+            return jsonify({
+                'error': 'No se puede eliminar el elemento porque está en uso en ElementoDetalle'
+            }), 400
+
+        # Eliminar elemento
+        db.session.delete(elemento)
+        db.session.commit()
+
+        return jsonify({'message': 'Elemento eliminado exitosamente'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# =========================
+# API - HERRAMIENTAS (CRUD)
+# =========================
+
+@main_bp.route("/api/herramientas/catalogos", methods=["GET"])
+@admin_required
+def api_herramientas_catalogos():
+    """
+    Obtiene el glosario fijo de grupos de herramientas para el dropdown.
+    """
+    try:
+        GLOSARIO_HERRAMIENTAS = {
+            'AT': 'ATOMIZADOR',
+            'BA': 'BASTON',
+            'BL': 'BOLSA',
+            'BS': 'BASE',
+            'CA': 'CARRITO',
+            'CE': 'CEPILLO',
+            'CU': 'CUBETA',
+            'EO': 'ESPONJA',
+            'EP': 'ESPATULA',
+            'ES': 'ESCOBA',
+            'EX': 'EXPRIMIDOR',
+            'FI': 'FIBRA',
+            'GU': 'GUANTES',
+            'JA': 'JALADOR',
+            'MA': 'MANGUERA',
+            'MO': 'MOP',
+            'OR': 'ORGANIZADOR',
+            'PA': 'PAÑO',
+            'PL': 'PLUMERO',
+            'RE': 'RECOGEDOR',
+            'SE': 'SEÑALETICA',
+            'TO': 'TOALLAS',
+            'TP': 'TOPE',
+            'TR': 'TRAPEADOR',
+        }
+        
+        # Convertir a lista para el frontend
+        grupos = [
+            {"codigo": codigo, "nombre": nombre}
+            for codigo, nombre in sorted(GLOSARIO_HERRAMIENTAS.items())
+        ]
+        
+        return jsonify({
+            "success": True,
+            "grupos": grupos
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/herramientas/next-id", methods=["GET"])
+@admin_required
+def api_herramientas_next_id():
+    """
+    Genera el próximo ID disponible para un grupo específico.
+    Query param: grupo (ej: CA, MO, ES)
+    Retorna: HE-{grupo}-{número} (ej: HE-CA-002)
+    """
+    grupo = request.args.get("grupo", "").strip().upper()
+    
+    if not grupo:
+        return jsonify({"success": False, "error": "Grupo requerido"}), 400
+    
+    if len(grupo) != 2:
+        return jsonify({"success": False, "error": "Grupo debe tener 2 caracteres"}), 400
+    
+    try:
+        # Buscar la última herramienta de este grupo
+        pattern = f"HE-{grupo}-%"
+        ultima = Herramienta.query.filter(
+            Herramienta.herramienta_id.like(pattern)
+        ).order_by(
+            Herramienta.herramienta_id.desc()
+        ).first()
+        
+        if ultima:
+            # Extraer el número del ID (ej: "HE-CA-002" → "002" → 2)
+            partes = ultima.herramienta_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            # Primera herramienta de este grupo
+            siguiente = 1
+        
+        # Formatear con 3 dígitos (001, 002, ..., 999)
+        nuevo_id = f"HE-{grupo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "herramienta_id": nuevo_id,
+            "grupo": grupo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/herramientas", methods=["GET"])
+@admin_required
+def api_herramientas_listar():
+    """
+    Lista todas las herramientas con paginación y filtros.
+    Query params opcionales:
+    - page: número de página (default 1)
+    - per_page: resultados por página (default 50)
+    - grupo: filtrar por grupo (ej: CA, MO)
+    - estatus: filtrar por estatus (Activo, Inactivo)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        grupo = request.args.get('grupo', '').strip().upper()
+        estatus = request.args.get('estatus', '').strip()
+        
+        # Query base
+        query = Herramienta.query
+        
+        # Filtros
+        if grupo:
+            pattern = f"HE-{grupo}-%"
+            query = query.filter(Herramienta.herramienta_id.like(pattern))
+        
+        if estatus:
+            query = query.filter(Herramienta.estatus == estatus)
+        
+        # Ordenar y paginar
+        query = query.order_by(Herramienta.herramienta_id.asc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        herramientas_data = [
+            {
+                'herramienta_id': h.herramienta_id,
+                'nombre': h.nombre,
+                'descripcion': h.descripcion,
+                'estatus': h.estatus,
+                'grupo': h.herramienta_id.split('-')[1] if '-' in h.herramienta_id else ''
+            }
+            for h in pagination.items
+        ]
+        
+        return jsonify({
+            "success": True,
+            "herramientas": herramientas_data,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/herramientas", methods=["POST"])
+@admin_required
+def api_herramientas_crear():
+    """
+    Crea una nueva herramienta.
+    Body JSON:
+    {
+        "grupo": "CA",
+        "nombre": "CARRITO",
+        "descripcion": "Carrito de limpieza"  // opcional, si vacío usa nombre
+    }
+    """
+    try:
+        GLOSARIO_HERRAMIENTAS = {
+            'AT': 'ATOMIZADOR', 'BA': 'BASTON', 'BL': 'BOLSA', 'BS': 'BASE',
+            'CA': 'CARRITO', 'CE': 'CEPILLO', 'CU': 'CUBETA', 'EO': 'ESPONJA',
+            'EP': 'ESPATULA', 'ES': 'ESCOBA', 'EX': 'EXPRIMIDOR', 'FI': 'FIBRA',
+            'GU': 'GUANTES', 'JA': 'JALADOR', 'MA': 'MANGUERA', 'MO': 'MOP',
+            'OR': 'ORGANIZADOR', 'PA': 'PAÑO', 'PL': 'PLUMERO', 'RE': 'RECOGEDOR',
+            'SE': 'SEÑALETICA', 'TO': 'TOALLAS', 'TP': 'TOPE', 'TR': 'TRAPEADOR',
+        }
+        
+        data = request.get_json()
+        
+        # Validaciones
+        grupo = data.get("grupo", "").strip().upper()
+        nombre = data.get("nombre", "").strip()
+        descripcion = data.get("descripcion", "").strip()
+        
+        # 1. Validar formato de grupo
+        if not grupo or len(grupo) != 2:
+            return jsonify({"success": False, "error": "Grupo inválido (2 caracteres)"}), 400
+        
+        # 2. Validar que grupo esté en el glosario
+        if grupo not in GLOSARIO_HERRAMIENTAS:
+            return jsonify({
+                "success": False,
+                "error": f"Grupo '{grupo}' no válido. Usa: {', '.join(GLOSARIO_HERRAMIENTAS.keys())}"
+            }), 400
+        
+        # 3. Validar nombre
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # 4. Si descripción vacía, usar nombre
+        if not descripcion:
+            descripcion = nombre
+        
+        # 5. Generar ID
+        pattern = f"HE-{grupo}-%"
+        ultima = Herramienta.query.filter(
+            Herramienta.herramienta_id.like(pattern)
+        ).order_by(
+            Herramienta.herramienta_id.desc()
+        ).first()
+        
+        if ultima:
+            partes = ultima.herramienta_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        herramienta_id = f"HE-{grupo}-{siguiente:03d}"
+        
+        # 6. Crear herramienta
+        nueva_herramienta = Herramienta(
+            herramienta_id=herramienta_id,
+            nombre=nombre,
+            descripcion=descripcion,
+            estatus='Activo'  # Siempre Activo al crear
+        )
+        
+        db.session.add(nueva_herramienta)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "herramienta": {
+                "herramienta_id": nueva_herramienta.herramienta_id,
+                "nombre": nueva_herramienta.nombre,
+                "descripcion": nueva_herramienta.descripcion,
+                "estatus": nueva_herramienta.estatus
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/herramientas/<herramienta_id>", methods=["PUT"])
+@admin_required
+def api_herramientas_editar(herramienta_id):
+    """
+    Edita una herramienta existente.
+    Solo permite editar: nombre, descripcion, estatus
+    NO permite editar: herramienta_id, grupo
+    
+    Body JSON:
+    {
+        "nombre": "CARRITO NUEVO",
+        "descripcion": "Carrito de limpieza mejorado",
+        "estatus": "Activo"  // Activo o Inactivo
+    }
+    """
+    try:
+        herramienta = Herramienta.query.get(herramienta_id)
+        
+        if not herramienta:
+            return jsonify({"success": False, "error": "Herramienta no encontrada"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nueva_descripcion = data.get("descripcion", "").strip()
+        nuevo_estatus = data.get("estatus", "").strip()
+        
+        # Validaciones
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        if not nueva_descripcion:
+            return jsonify({"success": False, "error": "Descripción requerida"}), 400
+        
+        if nuevo_estatus not in ['Activo', 'Inactivo']:
+            return jsonify({"success": False, "error": "Estatus debe ser 'Activo' o 'Inactivo'"}), 400
+        
+        # Actualizar
+        herramienta.nombre = nuevo_nombre
+        herramienta.descripcion = nueva_descripcion
+        herramienta.estatus = nuevo_estatus
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "herramienta": {
+                "herramienta_id": herramienta.herramienta_id,
+                "nombre": herramienta.nombre,
+                "descripcion": herramienta.descripcion,
+                "estatus": herramienta.estatus
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/herramientas/<herramienta_id>", methods=["DELETE"])
+@admin_required
+def api_herramientas_eliminar(herramienta_id):
+    """
+    Elimina una herramienta.
+    Valida que NO esté siendo usada en kit_detalle.
+    """
+    try:
+        herramienta = Herramienta.query.get(herramienta_id)
+        
+        if not herramienta:
+            return jsonify({"success": False, "error": "Herramienta no encontrada"}), 404
+        
+        # Validar que no esté en kits
+        en_kits = KitDetalle.query.filter_by(herramienta_id=herramienta_id).count()
+        
+        if en_kits > 0:
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Esta herramienta está en {en_kits} kit(s)"
+            }), 400
+        
+        # Eliminar
+        db.session.delete(herramienta)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Herramienta {herramienta_id} eliminada correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+@main_bp.route("/catalogos/herramientas")
+@admin_required
+def catalogos_herramientas():
+    return render_template("catalogos/regulares/herramientas.html")
+
+
+# =========================
+# API - KITS (CRUD)
+# =========================
+
+@main_bp.route("/api/kits/fracciones-disponibles", methods=["GET"])
+@admin_required
+def api_kits_fracciones_disponibles():
+    """
+    Lista todas las fracciones para dropdown (igual que recetas).
+    """
+    try:
+        fracciones = Fraccion.query.order_by(Fraccion.fraccion_nombre).all()
+        
+        return jsonify({
+            "success": True,
+            "fracciones": [
+                {
+                    "codigo": f.fraccion_id.split('-')[1],  # "FR-TL-001" → "TL"
+                    "nombre": f.fraccion_nombre,
+                    "fraccion_id": f.fraccion_id
+                }
+                for f in fracciones
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits/herramientas-disponibles", methods=["GET"])
+@admin_required
+def api_kits_herramientas_disponibles():
+    """
+    Lista todas las herramientas activas para checkboxes.
+    Query params opcionales:
+    - grupo: filtrar por grupo (ej: CA, MO)
+    """
+    try:
+        grupo = request.args.get('grupo', '').strip().upper()
+        
+        # Query base - solo herramientas activas
+        query = Herramienta.query.filter_by(estatus='Activo')
+        
+        # Filtro por grupo
+        if grupo:
+            pattern = f"HE-{grupo}-%"
+            query = query.filter(Herramienta.herramienta_id.like(pattern))
+        
+        herramientas = query.order_by(Herramienta.herramienta_id.asc()).all()
+        
+        return jsonify({
+            "success": True,
+            "herramientas": [
+                {
+                    "herramienta_id": h.herramienta_id,
+                    "nombre": h.nombre,
+                    "descripcion": h.descripcion,
+                    "grupo": h.herramienta_id.split('-')[1] if '-' in h.herramienta_id else ''
+                }
+                for h in herramientas
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits/next-id", methods=["GET"])
+@admin_required
+def api_kits_next_id():
+    """
+    Genera el próximo ID disponible para un código de fracción.
+    Query param: codigo (ej: TL, SA)
+    Retorna: KT-{codigo}-{número} (ej: KT-TL-002)
+    """
+    codigo = request.args.get("codigo", "").strip().upper()
+    
+    if not codigo:
+        return jsonify({"success": False, "error": "Código requerido"}), 400
+    
+    if len(codigo) != 2:
+        return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
+    
+    try:
+        # Buscar el último kit de este código
+        pattern = f"KT-{codigo}-%"
+        ultimo = Kit.query.filter(
+            Kit.kit_id.like(pattern)
+        ).order_by(
+            Kit.kit_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes = ultimo.kit_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            siguiente = 1
+        
+        nuevo_id = f"KT-{codigo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "kit_id": nuevo_id,
+            "codigo": codigo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits", methods=["GET"])
+@admin_required
+def api_kits_listar():
+    """
+    Lista todos los kits con sus herramientas.
+    Query params opcionales:
+    - page: número de página (default 1)
+    - per_page: resultados por página (default 50)
+    - fraccion: filtrar por código de fracción (ej: TL)
+    - nivel: filtrar por nivel (1, 2, 3, 4, o 'general' para NULL)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        fraccion = request.args.get('fraccion', '').strip().upper()
+        nivel = request.args.get('nivel', '').strip()
+        
+        # Query base
+        query = Kit.query
+        
+        # Filtros
+        if fraccion:
+            pattern = f"KT-{fraccion}-%"
+            query = query.filter(Kit.kit_id.like(pattern))
+        
+        if nivel:
+            if nivel == 'general':
+                query = query.filter(Kit.nivel_limpieza_id.is_(None))
+            else:
+                query = query.filter(Kit.nivel_limpieza_id == int(nivel))
+        
+        # Ordenar y paginar
+        query = query.order_by(Kit.kit_id.asc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Formatear con herramientas
+        kits_data = []
+        for k in pagination.items:
+            # Obtener herramientas del kit
+            detalles = KitDetalle.query.filter_by(kit_id=k.kit_id).all()
+            herramientas = [
+                {
+                    'herramienta_id': d.herramienta_id,
+                    'nombre': d.herramienta.nombre if d.herramienta else '',
+                    'nota': d.nota
+                }
+                for d in detalles
+            ]
+            
+            kits_data.append({
+                'kit_id': k.kit_id,
+                'fraccion_id': k.fraccion_id,
+                'nivel_limpieza_id': k.nivel_limpieza_id,
+                'nombre': k.nombre,
+                'tipo_kit': k.tipo_kit,
+                'codigo': k.kit_id.split('-')[1] if '-' in k.kit_id else '',
+                'herramientas': herramientas,
+                'cantidad_herramientas': len(herramientas)
+            })
+        
+        return jsonify({
+            "success": True,
+            "kits": kits_data,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits", methods=["POST"])
+@admin_required
+def api_kits_crear():
+    """
+    Crea un nuevo kit con sus herramientas.
+    Body JSON:
+    {
+        "codigo": "TL",
+        "nombre": "Kit Tallar Baño",
+        "nivel_limpieza_id": null,  // null = general, o 1, 2, 3, 4
+        "herramientas": ["HE-CE-001", "HE-FI-001", "HE-GU-001"]  // IDs de herramientas
+    }
+    
+    Crea:
+    - Kit (kit_id, fraccion_id, nivel_limpieza_id, nombre, tipo_kit='sop', caso_id=null)
+    - KitDetalle (uno por cada herramienta seleccionada)
+    """
+    try:
+        data = request.get_json()
+        
+        # Validaciones
+        codigo = data.get("codigo", "").strip().upper()
+        nombre = data.get("nombre", "").strip()
+        nivel_limpieza_id = data.get("nivel_limpieza_id")
+        herramientas_ids = data.get("herramientas", [])
+        
+        # 1. Validar código
+        if not codigo or len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código inválido (2 caracteres)"}), 400
+        
+        # 2. Validar que código venga de fracción existente
+        pattern_fraccion = f"FR-{codigo}-%"
+        fraccion = Fraccion.query.filter(
+            Fraccion.fraccion_id.like(pattern_fraccion)
+        ).first()
+        
+        if not fraccion:
+            return jsonify({
+                "success": False,
+                "error": f"El código '{codigo}' no corresponde a ninguna fracción existente"
+            }), 400
+        
+        # 3. Validar nombre
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # 4. Validar nivel de limpieza
+        if nivel_limpieza_id is not None:
+            if nivel_limpieza_id not in [1, 2, 3, 4]:
+                return jsonify({"success": False, "error": "Nivel debe ser 1, 2, 3, 4 o null"}), 400
+        
+        # 5. Validar que tenga al menos 1 herramienta
+        if not herramientas_ids or len(herramientas_ids) == 0:
+            return jsonify({"success": False, "error": "Debe seleccionar al menos 1 herramienta"}), 400
+        
+        # 6. Validar que todas las herramientas existan
+        for h_id in herramientas_ids:
+            herr = Herramienta.query.get(h_id)
+            if not herr:
+                return jsonify({"success": False, "error": f"Herramienta {h_id} no encontrada"}), 404
+        
+        # 7. Generar ID del kit
+        pattern = f"KT-{codigo}-%"
+        ultimo = Kit.query.filter(
+            Kit.kit_id.like(pattern)
+        ).order_by(
+            Kit.kit_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes = ultimo.kit_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        kit_id = f"KT-{codigo}-{siguiente:03d}"
+        
+        # 8. Crear Kit
+        nuevo_kit = Kit(
+            kit_id=kit_id,
+            fraccion_id=fraccion.fraccion_id,
+            nivel_limpieza_id=nivel_limpieza_id,
+            nombre=nombre,
+            tipo_kit='sop',  # Fijo para kits regulares
+            caso_id=None  # NULL para kits regulares
+        )
+        
+        db.session.add(nuevo_kit)
+        db.session.flush()
+        
+        # 9. Crear KitDetalle para cada herramienta
+        for h_id in herramientas_ids:
+            detalle = KitDetalle(
+                kit_id=kit_id,
+                herramienta_id=h_id,
+                nota=nombre  # Nota = nombre del kit
+            )
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "kit": {
+                "kit_id": nuevo_kit.kit_id,
+                "fraccion_id": nuevo_kit.fraccion_id,
+                "nivel_limpieza_id": nuevo_kit.nivel_limpieza_id,
+                "nombre": nuevo_kit.nombre,
+                "herramientas": herramientas_ids
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits/<kit_id>", methods=["PUT"])
+@admin_required
+def api_kits_editar(kit_id):
+    """
+    Edita un kit existente.
+    Solo permite editar: nombre, nivel_limpieza_id, herramientas
+    NO permite editar: kit_id, fraccion_id
+    
+    Body JSON:
+    {
+        "nombre": "Kit Tallar Baño Profundo",
+        "nivel_limpieza_id": 4,
+        "herramientas": ["HE-CE-001", "HE-FI-002"]  // Nueva lista de herramientas
+    }
+    """
+    try:
+        kit = Kit.query.get(kit_id)
+        
+        if not kit:
+            return jsonify({"success": False, "error": "Kit no encontrado"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nuevo_nivel = data.get("nivel_limpieza_id")
+        nuevas_herramientas = data.get("herramientas", [])
+        
+        # Validaciones
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        if nuevo_nivel is not None:
+            if nuevo_nivel not in [1, 2, 3, 4]:
+                return jsonify({"success": False, "error": "Nivel debe ser 1, 2, 3, 4 o null"}), 400
+        
+        if not nuevas_herramientas or len(nuevas_herramientas) == 0:
+            return jsonify({"success": False, "error": "Debe tener al menos 1 herramienta"}), 400
+        
+        # Validar herramientas
+        for h_id in nuevas_herramientas:
+            herr = Herramienta.query.get(h_id)
+            if not herr:
+                return jsonify({"success": False, "error": f"Herramienta {h_id} no encontrada"}), 404
+        
+        # Actualizar Kit
+        kit.nombre = nuevo_nombre
+        kit.nivel_limpieza_id = nuevo_nivel
+        
+        # Actualizar herramientas - eliminar todas y recrear
+        KitDetalle.query.filter_by(kit_id=kit_id).delete()
+        
+        for h_id in nuevas_herramientas:
+            detalle = KitDetalle(
+                kit_id=kit_id,
+                herramienta_id=h_id,
+                nota=nuevo_nombre  # Actualizar nota con nuevo nombre
+            )
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "kit": {
+                "kit_id": kit.kit_id,
+                "fraccion_id": kit.fraccion_id,
+                "nivel_limpieza_id": kit.nivel_limpieza_id,
+                "nombre": kit.nombre,
+                "herramientas": nuevas_herramientas
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits/<kit_id>", methods=["DELETE"])
+@admin_required
+def api_kits_eliminar(kit_id):
+    """
+    Elimina un kit y sus herramientas.
+    Valida que NO esté siendo usado en:
+    - SopFraccionDetalle
+    - ElementoDetalle
+    - (Agregar otras tablas según necesites)
+    """
+    try:
+        kit = Kit.query.get(kit_id)
+        
+        if not kit:
+            return jsonify({"success": False, "error": "Kit no encontrado"}), 404
+        
+        # Validar que no esté en uso (agregar validaciones según tus tablas)
+        # Ejemplo:
+        # en_sop = SopFraccionDetalle.query.filter_by(kit_id=kit_id).count()
+        # if en_sop > 0:
+        #     return jsonify({
+        #         "success": False,
+        #         "error": f"No se puede eliminar. Este kit está en {en_sop} SOP(s)"
+        #     }), 400
+        
+        # Eliminar KitDetalle primero
+        KitDetalle.query.filter_by(kit_id=kit_id).delete()
+        
+        # Eliminar Kit
+        db.session.delete(kit)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Kit {kit_id} eliminado correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+
+@main_bp.route("/catalogos/kits")
+@admin_required
+def catalogos_kits():
+    return render_template("catalogos/regulares/kits.html")
+
+
+
+# =========================
+# CATÁLOGOS - FRACCIONES
+# =========================
+
+@main_bp.route("/catalogos/fracciones")
+@admin_required
+def catalogos_fracciones():
+    """Panel de gestión de Fracciones"""
+    return render_template("catalogos/regulares/fracciones.html")
+
+
+# =========================
+# API - FRACCIONES (CRUD)
+# =========================
+
+@main_bp.route("/api/fracciones/catalogos", methods=["GET"])
+@admin_required
+def api_fracciones_catalogos():
+    """
+    Obtiene el glosario de fracciones para dropdown.
+    Retorna códigos con sus nombres base.
+    """
+    try:
+        GLOSARIO_FRACCIONES = {
+            'BS': 'Sacar Basura',
+            'TL': 'Tallar Baño',
+            'SE': 'Colocar Señalética',
+            'SP': 'Sacudir Superficies',
+            'TR': 'Trapear',
+            'LV': 'Lavar',
+            'PU': 'Pulir',
+            'BA': 'Barrer',
+            'AS': 'Aspirar',
+            'DE': 'Desinfectar',
+            'LI': 'Limpiar',
+            'SA': 'Sanitizar',
+        }
+        
+        # Convertir a lista para el frontend
+        grupos = [
+            {"codigo": codigo, "nombre": nombre}
+            for codigo, nombre in sorted(GLOSARIO_FRACCIONES.items())
+        ]
+        
+        # Obtener grupos de fracciones únicos (administracion/produccion)
+        grupos_fracciones = db.session.query(
+            Fraccion.grupo_fracciones
+        ).filter(
+            Fraccion.grupo_fracciones.isnot(None),
+            Fraccion.grupo_fracciones != ''
+        ).distinct().all()
+        
+        grupos_frac = sorted([g[0] for g in grupos_fracciones if g[0]])
+        
+        return jsonify({
+            "success": True,
+            "grupos": grupos,
+            "grupos_fracciones": grupos_frac if grupos_frac else ["administracion", "produccion"]
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones/next-id", methods=["GET"])
+@admin_required
+def api_fracciones_next_id():
+    """
+    Genera el próximo ID disponible para un código específico.
+    Query param: codigo (ej: BS, TL, SP)
+    Retorna: FR-{codigo}-{número} (ej: FR-BS-002)
+    """
+    codigo = request.args.get("codigo", "").strip().upper()
+    
+    if not codigo:
+        return jsonify({"success": False, "error": "Código requerido"}), 400
+    
+    if len(codigo) != 2:
+        return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
+    
+    try:
+        # Buscar la última fracción de este código
+        # Pattern: FR-{codigo}-%
+        pattern = f"FR-{codigo}-%"
+        ultima = Fraccion.query.filter(
+            Fraccion.fraccion_id.like(pattern)
+        ).order_by(
+            Fraccion.fraccion_id.desc()
+        ).first()
+        
+        if ultima:
+            # Extraer el número del ID (ej: "FR-BS-004" → "004" → 4)
+            partes = ultima.fraccion_id.split('-')
+            if len(partes) == 3:
+                try:
+                    numero_actual = int(partes[2])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            # Primera fracción de este código
+            siguiente = 1
+        
+        # Formatear con 3 dígitos (001, 002, ..., 999)
+        nuevo_id = f"FR-{codigo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "fraccion_id": nuevo_id,
+            "codigo": codigo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones", methods=["GET"])
+@admin_required
+def api_fracciones_listar():
+    """
+    Lista todas las fracciones con paginación y filtros.
+    Query params opcionales:
+    - page: número de página (default 1)
+    - per_page: resultados por página (default 50)
+    - grupo: filtrar por grupo_fracciones (administracion/produccion)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        grupo = request.args.get('grupo', '').strip()
+        
+        # Query base
+        query = Fraccion.query
+        
+        # Filtro por grupo_fracciones
+        if grupo:
+            query = query.filter(Fraccion.grupo_fracciones == grupo)
+        
+        # Ordenar y paginar
+        query = query.order_by(Fraccion.fraccion_id.asc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Formatear resultados
+        fracciones_data = []
+        for f in pagination.items:
+            # Calcular nombre_full
+            nombre_full = f.fraccion_nombre
+            if f.nombre_custom:
+                nombre_full = f"{f.fraccion_nombre} — {f.nombre_custom}"
+            
+            fracciones_data.append({
+                'fraccion_id': f.fraccion_id,
+                'fraccion_nombre': f.fraccion_nombre,  # nombre base
+                'nombre_custom': f.nombre_custom,
+                'nombre_full': nombre_full,
+                'nota_tecnica': f.nota_tecnica,
+                'grupo_fracciones': f.grupo_fracciones,
+                'codigo': f.fraccion_id.split('-')[1] if '-' in f.fraccion_id else ''
+            })
+        
+        return jsonify({
+            "success": True,
+            "fracciones": fracciones_data,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones", methods=["POST"])
+@admin_required
+def api_fracciones_crear():
+    """
+    Crea una nueva fracción.
+    Body JSON:
+    {
+        "codigo": "BS",                     # Del glosario
+        "nombre_custom": "Producción",      # Opcional
+        "nota_tecnica": "...",              # Opcional
+        "grupo_fracciones": "administracion" # administracion o produccion
+    }
+    
+    El nombre base viene automático del glosario según el código.
+    """
+    try:
+        GLOSARIO_FRACCIONES = {
+            'SE': 'Colocar Señalética',
+            'BS': 'Sacar Basura',
+            'SP': 'Sacudir Superficies',
+            'VI': 'Limpiar Vidrios',
+            'BA': 'Barrer',
+            'TL': 'Tallar Baño',
+            'CN': 'Reabastecer Consumibles',
+            'SA': 'Sacudir Elementos',
+            'TA': 'Lavar Trastes',
+            'AC': 'Acomodar Trastes',
+            'MS': 'Mop Seco',
+            'MH': 'Mop Húmedo',
+            'TR': 'Trapear',
+        }
+        
+        data = request.get_json()
+        
+        # Validaciones
+        codigo = data.get("codigo", "").strip().upper()
+        nombre_custom = data.get("nombre_custom", "").strip() or None
+        nota_tecnica = data.get("nota_tecnica", "").strip() or None
+        grupo_fracciones = data.get("grupo_fracciones", "").strip() or None
+        
+        # 1. Validar código
+        if not codigo or len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código inválido (2 caracteres)"}), 400
+        
+        # 2. Validar que código esté en glosario
+        if codigo not in GLOSARIO_FRACCIONES:
+            return jsonify({
+                "success": False,
+                "error": f"Código '{codigo}' no válido. Usa: {', '.join(GLOSARIO_FRACCIONES.keys())}"
+            }), 400
+        
+        # 3. Obtener nombre base del glosario
+        nombre_base = GLOSARIO_FRACCIONES[codigo]
+        
+        # 4. Validar grupo_fracciones
+        if grupo_fracciones and grupo_fracciones not in ['administracion', 'produccion']:
+            return jsonify({"success": False, "error": "Grupo debe ser 'administracion' o 'produccion'"}), 400
+        
+        # 5. Generar ID
+        pattern = f"FR-{codigo}-%"
+        ultima = Fraccion.query.filter(
+            Fraccion.fraccion_id.like(pattern)
+        ).order_by(
+            Fraccion.fraccion_id.desc()
+        ).first()
+        
+        if ultima:
+            partes = ultima.fraccion_id.split('-')
+            numero_actual = int(partes[2]) if len(partes) == 3 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        fraccion_id = f"FR-{codigo}-{siguiente:03d}"
+        
+        # 6. Crear fracción
+        nueva_fraccion = Fraccion(
+            fraccion_id=fraccion_id,
+            fraccion_nombre=nombre_base,      # ← Nombre base del glosario
+            nombre_custom=nombre_custom,      # ← Variación opcional
+            nota_tecnica=nota_tecnica,
+            grupo_fracciones=grupo_fracciones
+        )
+        
+        db.session.add(nueva_fraccion)
+        db.session.commit()
+        
+        # Calcular nombre_full para respuesta
+        nombre_full = nombre_base
+        if nombre_custom:
+            nombre_full = f"{nombre_base} — {nombre_custom}"
+        
+        return jsonify({
+            "success": True,
+            "fraccion": {
+                "fraccion_id": nueva_fraccion.fraccion_id,
+                "fraccion_nombre": nueva_fraccion.fraccion_nombre,
+                "nombre_custom": nueva_fraccion.nombre_custom,
+                "nombre_full": nombre_full,
+                "nota_tecnica": nueva_fraccion.nota_tecnica,
+                "grupo_fracciones": nueva_fraccion.grupo_fracciones
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones/<fraccion_id>", methods=["PUT"])
+@admin_required
+def api_fracciones_editar(fraccion_id):
+    """
+    Edita una fracción existente.
+    Solo permite editar: nombre_custom, nota_tecnica, grupo_fracciones
+    NO permite editar: fraccion_id, fraccion_nombre (viene del glosario)
+    
+    Body JSON:
+    {
+        "nombre_custom": "Nueva Variación",
+        "nota_tecnica": "...",
+        "grupo_fracciones": "produccion"
+    }
+    """
+    try:
+        fraccion = Fraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_custom = data.get("nombre_custom", "").strip() or None
+        nueva_nota = data.get("nota_tecnica", "").strip() or None
+        nuevo_grupo = data.get("grupo_fracciones", "").strip() or None
+        
+        # Validar grupo_fracciones
+        if nuevo_grupo and nuevo_grupo not in ['administracion', 'produccion']:
+            return jsonify({"success": False, "error": "Grupo debe ser 'administracion' o 'produccion'"}), 400
+        
+        # Actualizar
+        fraccion.nombre_custom = nuevo_custom
+        fraccion.nota_tecnica = nueva_nota
+        fraccion.grupo_fracciones = nuevo_grupo
+        
+        db.session.commit()
+        
+        # Calcular nombre_full para respuesta
+        nombre_full = fraccion.fraccion_nombre
+        if nuevo_custom:
+            nombre_full = f"{fraccion.fraccion_nombre} — {nuevo_custom}"
+        
+        return jsonify({
+            "success": True,
+            "fraccion": {
+                "fraccion_id": fraccion.fraccion_id,
+                "fraccion_nombre": fraccion.fraccion_nombre,
+                "nombre_custom": fraccion.nombre_custom,
+                "nombre_full": nombre_full,
+                "nota_tecnica": fraccion.nota_tecnica,
+                "grupo_fracciones": fraccion.grupo_fracciones
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones/<fraccion_id>", methods=["DELETE"])
+@admin_required
+def api_fracciones_eliminar(fraccion_id):
+    """
+    Elimina una fracción.
+    Valida que NO esté siendo usada en:
+    - Metodologia
+    - SopFraccion
+    - ElementoSet
+    - Kit
+    """
+    try:
+        fraccion = Fraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        # Validar que no esté en uso
+        en_metodologia = Metodologia.query.filter_by(fraccion_id=fraccion_id).count()
+        en_sop = SopFraccion.query.filter_by(fraccion_id=fraccion_id).count()
+        en_elemento = ElementoSet.query.filter_by(fraccion_id=fraccion_id).count()
+        en_kit = Kit.query.filter_by(fraccion_id=fraccion_id).count()
+        
+        total_usos = en_metodologia + en_sop + en_elemento + en_kit
+        
+        if total_usos > 0:
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Esta fracción está en uso en {total_usos} lugar(es)",
+                "detalles": {
+                    "metodologias": en_metodologia,
+                    "sops": en_sop,
+                    "elemento_sets": en_elemento,
+                    "kits": en_kit
+                }
+            }), 400
+        
+        # Eliminar
+        db.session.delete(fraccion)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Fracción {fraccion_id} eliminada correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500

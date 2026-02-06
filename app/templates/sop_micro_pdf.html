@@ -31,7 +31,7 @@
     <ol>
       {% for f in fracciones %}
         <li>
-          <strong>{{ f.orden }}. {{ f.fraccion_nombre }}</strong>
+          <strong>{{ f.orden }}. {{ f.nombre_full }}</strong>
           {% if f.descripcion %}<div>{{ f.descripcion }}</div>{% endif %}
           <div style="color:#666">Nivel: {{ f.nivel_limpieza|capitalize }}</div>
         </li>

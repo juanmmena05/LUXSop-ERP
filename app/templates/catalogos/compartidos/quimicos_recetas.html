@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Químicos y Recetas · LuxSOP</title>
+  <!-- ✅ CSS DEL SIDEBAR (EXTERNO) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
   <style>
     :root {
       --fg: #222;
@@ -245,191 +247,41 @@
       gap: 8px;
     }
 
-    /* ===== Burger Button ===== */
-    .burger {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 1101;
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #fff;
-      cursor: pointer;
-      font-size: 20px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 1px 4px rgba(0,0,0,.06);
-      -webkit-tap-highlight-color: transparent;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    .burger:hover { filter: brightness(.98); }
-
-    /* ===== Overlay ===== */
-    .nav-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1100;
+    .btn-icon {
       background: transparent;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity .18s ease, visibility 0s linear .18s;
-    }
-
-    .nav-overlay.is-open {
-      background: rgba(0,0,0,.35);
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      transition: opacity .18s ease;
-    }
-
-    /* ===== Top Guard (Safari iOS fix) ===== */
-    .top-guard {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: env(safe-area-inset-top, 44px);
-      background: #fff;
-      z-index: 1103;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity .12s ease;
-    }
-
-    .top-guard.is-on {
-      opacity: 1;
-    }
-
-    /* ===== Sidebar ===== */
-    .side-nav {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 300px;
-      max-width: 84vw;
-      background: var(--card);
-      border-right: 1px solid var(--line);
-      box-shadow: 0 8px 30px rgba(0,0,0,.14);
-      z-index: 1102;
-      transform: translateX(-105%);
-      transition: transform .2s ease;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      overflow-y: auto;
-    }
-
-    .side-nav.is-open {
-      transform: translateX(0);
-    }
-
-    .side-nav__head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 6px;
-      min-height: 52px;
-    }
-
-    .side-nav__brand {
-      display: grid;
-      line-height: 1.1;
-    }
-
-    .side-nav__brand strong {
-      font-size: 1rem;
-    }
-
-    .side-nav__brand span {
-      font-size: .78rem;
-      color: var(--muted);
-    }
-
-    .side-nav__close,
-    .side-nav__back {
+      border: 1px solid var(--line);
+      color: var(--fg);
       width: 36px;
       height: 36px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #fff;
+      padding: 0;
+      border-radius: 8px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      transition: background 0.2s ease;
-      flex-shrink: 0;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
     }
 
-    .side-nav__close:hover,
-    .side-nav__back:hover {
-      background: #f5f5f5;
+    .btn-icon:hover {
+      background: #f8f9fa;
+      border-color: #aaa;
     }
 
-    .side-nav__link {
-      text-decoration: none;
-      color: var(--fg);
-      padding: 10px 12px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: .92rem;
-      font-weight: 500;
-      background: transparent;
-      border: none;
-      width: 100%;
-      text-align: left;
-      cursor: pointer;
-      transition: background 0.2s ease;
+    .btn-icon.btn-delete:hover {
+      background: #fff5f5;
+      border-color: #dc3545;
+      color: #dc3545;
     }
-
-    .side-nav__link:hover {
-      background: #f3f3f3;
-    }
-
-    .side-nav__section {
-      margin-top: 6px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(0,0,0,.08);
-      color: var(--muted);
-      font-size: .75rem;
-    }
-
-    .side-nav__content {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      opacity: 1;
-      transition: opacity .15s ease;
-    }
-
-    .side-nav__content.is-transitioning {
-      opacity: 0;
-    }
-
 
     /* ===== Modal ===== */
     .modal {
       position: fixed;
       inset: 0;
-      z-index: 2000;
+      z-index: 1300;
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 20px;
     }
 
     .modal.is-open {
@@ -437,107 +289,128 @@
     }
 
     .modal-overlay {
-      position: absolute;
+      position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(2px);
+      z-index: 1;
     }
 
     .modal-content {
       position: relative;
-      background: var(--card);
+      z-index: 2;
+      background: #fff;
       border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 90%;
       max-width: 600px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      animation: modalSlideIn 0.3s ease;
+      max-height: 85vh;
+      overflow: hidden;
+      animation: slideUp 0.3s ease;
     }
 
-    @keyframes modalSlideIn {
-      from { opacity: 0; transform: translateY(-30px); }
-      to { opacity: 1; transform: translateY(0); }
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .modal-header {
-      padding: 24px;
-      border-bottom: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
     }
 
     .modal-header h2 {
-      margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
+      margin: 0;
     }
 
     .modal-close {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: #fff;
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--muted);
       cursor: pointer;
-      font-size: 20px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s ease;
+      border-radius: 8px;
+      transition: all 0.2s ease;
     }
 
     .modal-close:hover {
-      background: #f5f5f5;
+      background: #f8f9fa;
+      color: var(--fg);
     }
 
     .modal-body {
       padding: 24px;
+      max-height: calc(85vh - 180px);
+      overflow-y: auto;
     }
 
     .modal-footer {
-      padding: 20px 24px;
+      padding: 16px 24px;
       border-top: 1px solid var(--line);
       display: flex;
       gap: 12px;
       justify-content: flex-end;
     }
 
+    /* ===== Form ===== */
     .form-group {
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
 
     .form-group label {
       display: block;
       font-size: .9rem;
       font-weight: 600;
-      color: var(--fg);
+      color: #333;
       margin-bottom: 8px;
     }
 
     .form-group input,
-    .form-group select {
+    .form-group select,
+    .form-group textarea {
       width: 100%;
+      padding: .7rem .85rem;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px 14px;
+      border-radius: 10px;
       font-size: .95rem;
       transition: border-color 0.2s ease;
+      background: #fff;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      min-height: 80px;
+      resize: vertical;
     }
 
     .form-group input:focus,
-    .form-group select:focus {
+    .form-group select:focus,
+    .form-group textarea:focus {
       outline: none;
       border-color: var(--blue);
       box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
     }
 
     .form-hint {
-      display: block;
-      font-size: .8rem;
+      font-size: .85rem;
       color: var(--muted);
       margin-top: 6px;
+      display: block;
     }
 
     .btn-secondary {
@@ -545,38 +418,12 @@
       color: #fff;
     }
 
-    .btn-secondary:hover {
-      filter: brightness(.95);
-    }
-
-    /* ===== Loading State ===== */
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
   </style>
 </head>
 
 <body>
-  <!-- ✅ Sidebar dinámico -->
-  <button class="burger" id="navToggle" aria-label="Abrir menú">☰</button>
-  <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
-  <div class="top-guard" id="topGuard" aria-hidden="true"></div>
-
-  <nav class="side-nav" id="sideNav" aria-label="Menú principal">
-    <div class="side-nav__head" id="navHead">
-      <div class="side-nav__brand">
-        <strong>LuxSOP</strong>
-        <span>ERP · Limpieza</span>
-      </div>
-      <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-    </div>
-    <div class="side-nav__content" id="navContent">
-      <!-- Se llenará dinámicamente con JavaScript -->
-    </div>
-  </nav>
-
+  <!-- ✅ INCLUIR COMPONENTE SIDEBAR -->
+  {% include 'components/sidebar_nav.html' %}
   <!-- ===== Contenido Principal ===== -->
   <div class="head">
     <h1>🧪 Químicos y Recetas</h1>
@@ -625,18 +472,19 @@
             <td>{{ q.unidad_base or '—' }}</td>
             <td>
               <div class="actions">
-                <button class="btn btn-sm btn-green btn-editar-quimico"
+                <button class="btn-icon btn-editar-quimico"
                         data-id="{{ q.quimico_id }}"
                         data-nombre="{{ q.nombre }}"
                         data-presentacion="{{ q.presentacion or '' }}"
-                        data-unidad="{{ q.unidad_base or '' }}">
-                  Editar
+                        data-unidad="{{ q.unidad_base or '' }}"
+                        title="Editar">
+                  ✏️
                 </button>
-                <button class="btn btn-sm btn-eliminar-quimico" 
-                        style="background: #dc3545; color: #fff;"
+                <button class="btn-icon btn-delete btn-eliminar-quimico"
                         data-id="{{ q.quimico_id }}"
-                        data-nombre="{{ q.nombre }}">
-                  ✕
+                        data-nombre="{{ q.nombre }}"
+                        title="Eliminar">
+                  🗑️
                 </button>
               </div>
             </td>
@@ -709,16 +557,20 @@
             </td>
             <td>
               <div class="actions">
-                <button class="btn btn-sm btn-green btn-editar-receta"
+                <button class="btn-icon btn-editar-receta"
                         data-id="{{ r.receta_id }}"
-                        data-nombre="{{ r.nombre }}">
-                  Editar
+                        data-nombre="{{ r.nombre }}"
+                        data-quimico="{{ r.detalles[0].quimico_id if r.detalles else '' }}"
+                        data-dosis="{{ r.detalles[0].dosis if r.detalles else 0 }}"
+                        data-volumen="{{ r.detalles[0].volumen_base if r.detalles else 0 }}"
+                        title="Editar">
+                  ✏️
                 </button>
-                <button class="btn btn-sm btn-eliminar-receta" 
-                        style="background: #dc3545; color: #fff;"
+                <button class="btn-icon btn-delete btn-eliminar-receta"
                         data-id="{{ r.receta_id }}"
-                        data-nombre="{{ r.nombre }}">
-                  ✕
+                        data-nombre="{{ r.nombre }}"
+                        title="Eliminar">
+                  🗑️
                 </button>
               </div>
             </td>
@@ -813,27 +665,28 @@
       <form id="formReceta" onsubmit="guardarReceta(event)">
         <div class="modal-body">
           
-          <!-- Código (2-3 letras) -->
-          <div class="form-group" id="codigoField">
-            <label for="recetaCodigo">1. Código (2-3 letras) *</label>
-            <input type="text" id="recetaCodigo" maxlength="3" 
-                   placeholder="Ej: BA, TL, TRA" 
-                   style="text-transform: uppercase;" required>
-            <small class="form-hint">Este código se usará para generar el ID</small>
+          <!-- ✅ CAMBIO: Fracción (dropdown en lugar de input) -->
+          <div class="form-group" id="fraccionField">
+            <label for="recetaFraccion">1. Fracción *</label>
+            <select id="recetaFraccion" required>
+              <option value="">Seleccionar fracción...</option>
+              <!-- Se llena dinámicamente desde /api/recetas/fracciones-disponibles -->
+            </select>
+            <small class="form-hint">Selecciona la fracción para esta receta</small>
           </div>
 
           <!-- ID Generado -->
           <div class="form-group">
             <label>2. ID (Generado automáticamente)</label>
             <input type="text" id="recetaId" readonly style="background: #f5f5f5; cursor: not-allowed;">
-            <small class="form-hint">El ID se genera según el código ingresado</small>
+            <small class="form-hint">El ID se genera según la fracción seleccionada</small>
           </div>
 
-          <!-- Nombre -->
+          <!-- Nombre (se auto-llena al seleccionar fracción, pero es editable) -->
           <div class="form-group">
             <label for="recetaNombre">3. Nombre de la receta *</label>
             <input type="text" id="recetaNombre" placeholder="Ej: Tallar Baños" required>
-            <small class="form-hint">El nombre debe ser único</small>
+            <small class="form-hint">Se auto-completa con el nombre de la fracción (puedes editarlo)</small>
           </div>
 
           <!-- Químico -->
@@ -876,200 +729,6 @@
   <script id="recetasData" type="application/json">{{ recetas_json_str|default("[]")|safe }}</script>
 
   <script>
-  // =====================================================
-  // 🎯 SISTEMA DE NAVEGACIÓN MULTINIVEL EN SIDEBAR
-  // =====================================================
-  
-  (function() {
-    'use strict';
-
-    const nav = document.getElementById('sideNav');
-    const navHead = document.getElementById('navHead');
-    const navContent = document.getElementById('navContent');
-    const burger = document.getElementById('navToggle');
-    const overlay = document.getElementById('navOverlay');
-    const topGuard = document.getElementById('topGuard');
-
-    if (!nav || !navContent) return;
-
-    const NAV_LEVELS = {
-      main: {
-        level: 0,
-        title: 'Menu Principal',
-        showBrand: true,
-        items: [
-          { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
-          { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
-          { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
-          { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
-        ]
-      },
-      catalogos: {
-        level: 1,
-        title: 'Catálogos',
-        parent: 'main',
-        showBrand: false,
-        items: [
-          { icon: '📦', text: 'Regulares', action: 'alert', message: 'Próximamente disponible' },
-          { icon: '🎯', text: 'Eventos', action: 'alert', message: 'Próximamente disponible' },
-          { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
-        ]
-      },
-      compartidos: {
-        level: 2,
-        title: 'Compartidos',
-        parent: 'catalogos',
-        showBrand: false,
-        items: [
-          { icon: '🧪', text: 'Químicos/Recetas', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
-          { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
-        ]
-      }
-    };
-
-    let currentLevel = 'main';
-    let navStack = ['main'];
-
-    function navigateTo(targetLevel) {
-      if (!NAV_LEVELS[targetLevel]) return;
-      navContent.classList.add('is-transitioning');
-      setTimeout(() => {
-        currentLevel = targetLevel;
-        navStack.push(targetLevel);
-        saveNavState();
-        renderNavLevel();
-        requestAnimationFrame(() => {
-          navContent.classList.remove('is-transitioning');
-        });
-      }, 150);
-    }
-
-    function goBack() {
-      if (navStack.length <= 1) return;
-      navContent.classList.add('is-transitioning');
-      setTimeout(() => {
-        navStack.pop();
-        currentLevel = navStack[navStack.length - 1];
-        saveNavState();
-        renderNavLevel();
-        requestAnimationFrame(() => {
-          navContent.classList.remove('is-transitioning');
-        });
-      }, 150);
-    }
-
-    function renderNavLevel() {
-      const levelConfig = NAV_LEVELS[currentLevel];
-      if (!levelConfig) return;
-
-      updateNavHeader(levelConfig);
-
-      let html = '';
-      levelConfig.items.forEach(item => {
-        if (item.url) {
-          html += `<a class="side-nav__link" href="${item.url}">${item.icon} ${item.text}</a>`;
-        } else if (item.action === 'navigateTo') {
-          html += `<button class="side-nav__link" onclick="navSystem.navigateTo('${item.target}')">${item.icon} ${item.text}</button>`;
-        } else if (item.action === 'alert') {
-          html += `<button class="side-nav__link" onclick="alert('${item.message}')">${item.icon} ${item.text}</button>`;
-        }
-      });
-
-      if (currentLevel === 'main') {
-        html += `
-          <div class="side-nav__section">Sesión</div>
-          <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
-            <button type="submit" class="side-nav__link">🚪 Salir</button>
-          </form>
-        `;
-      }
-
-      navContent.innerHTML = html;
-    }
-
-    function updateNavHeader(levelConfig) {
-      navHead.innerHTML = '';
-
-      if (levelConfig.showBrand) {
-        navHead.innerHTML = `
-          <div class="side-nav__brand">
-            <strong>LuxSOP</strong>
-            <span>ERP · Limpieza</span>
-          </div>
-          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-        `;
-      } else {
-        navHead.innerHTML = `
-          <button class="side-nav__back" id="navBack" aria-label="Volver">←</button>
-          <div class="side-nav__brand">
-            <strong>${levelConfig.title}</strong>
-          </div>
-          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-        `;
-
-        const backBtn = document.getElementById('navBack');
-        if (backBtn) backBtn.addEventListener('click', goBack);
-      }
-
-      const closeBtn = document.getElementById('navClose');
-      if (closeBtn) closeBtn.addEventListener('click', closeNav);
-    }
-
-    function saveNavState() {
-      sessionStorage.setItem('luxsop_nav_level', currentLevel);
-      sessionStorage.setItem('luxsop_nav_stack', JSON.stringify(navStack));
-    }
-
-    function restoreNavState() {
-      currentLevel = 'main';
-      navStack = ['main'];
-      renderNavLevel();
-    }
-
-    function openNav() {
-      topGuard?.classList.add('is-on');
-      requestAnimationFrame(() => {
-        overlay.classList.add('is-open');
-        nav.classList.add('is-open');
-        burger.setAttribute('aria-expanded', 'true');
-        overlay.setAttribute('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
-      });
-    }
-
-    function closeNav() {
-      nav.classList.remove('is-open');
-      overlay.classList.remove('is-open');
-      requestAnimationFrame(() => {
-        topGuard?.classList.remove('is-on');
-      });
-      burger.setAttribute('aria-expanded', 'false');
-      overlay.setAttribute('aria-hidden', 'true');
-      document.body.style.overflow = '';
-
-      currentLevel = 'main';
-      navStack = ['main'];
-      sessionStorage.removeItem('luxsop_nav_level');
-      sessionStorage.removeItem('luxsop_nav_stack');
-      renderNavLevel();
-    }
-
-    burger?.addEventListener('click', openNav);
-    overlay?.addEventListener('click', closeNav);
-    
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeNav();
-    });
-
-    nav.addEventListener('click', (e) => {
-      const link = e.target.closest('a');
-      if (link) closeNav();
-    });
-
-    window.navSystem = { navigateTo, goBack };
-    restoreNavState();
-
-  })();
 
   // =====================================================
   // 🎯 SISTEMA DE TABS
@@ -1191,6 +850,7 @@
         // MODO EDITAR
         titulo.textContent = 'Editar Químico';
         grupoField.style.display = 'none'; // No se puede cambiar grupo
+        fraccionSelect.removeAttribute('required');  // ✅ AGREGAR ESTA LÍNEA
         grupoSelect.required = false;
         
         // Pre-cargar datos
@@ -1396,48 +1056,76 @@
   // =====================================================
   // 🧬 CRUD DE RECETAS CON MODAL
   // =====================================================
-  
+  // ===== CRUD DE RECETAS =====
   (function() {
     'use strict';
 
-    let catalogosRecetas = null; // Químicos disponibles
-    let modoModalReceta = 'crear'; // 'crear' o 'editar'
+    let modoModalReceta = 'crear';
     let recetaActualId = null;
-    let recetaActualDetalle = null; // Para guardar info del detalle al editar
+    let fraccionesDisponibles = [];
 
-    // ===== CARGAR CATÁLOGOS DE RECETAS =====
-    async function cargarCatalogosRecetas() {
+    // ===== CARGAR FRACCIONES AL INICIAR =====
+    async function cargarFracciones() {
       try {
-        const response = await fetch('/api/recetas/catalogos');
+        const response = await fetch('/api/recetas/fracciones-disponibles');
         const data = await response.json();
         
         if (data.success) {
-          catalogosRecetas = data;
-          console.log('✅ Catálogos de recetas cargados:', catalogosRecetas);
-        } else {
-          console.error('❌ Error al cargar catálogos:', data.error);
-          alert('Error al cargar catálogos de recetas');
+          fraccionesDisponibles = data.fracciones;
+          
+          // Poblar dropdown
+          const select = document.getElementById('recetaFraccion');
+          select.innerHTML = '<option value="">Seleccionar fracción...</option>';
+          
+          data.fracciones.forEach(f => {
+            const option = document.createElement('option');
+            option.value = f.codigo;
+            option.textContent = `${f.codigo} - ${f.nombre}`;
+            option.dataset.nombre = f.nombre;
+            select.appendChild(option);
+          });
         }
       } catch (error) {
-        console.error('❌ Error de red:', error);
-        alert('Error de conexión al cargar catálogos');
+        console.error('❌ Error al cargar fracciones:', error);
       }
     }
 
-    // ===== ABRIR MODAL RECETA =====
-    window.abrirModalReceta = async function(modo, id = null) {
+    // ===== EVENTO: Cuando selecciona una fracción =====
+    document.getElementById('recetaFraccion')?.addEventListener('change', async function() {
+      const codigo = this.value;
+      const nombreFraccion = this.options[this.selectedIndex].dataset.nombre;
+      
+      if (!codigo) {
+        document.getElementById('recetaId').value = '';
+        document.getElementById('recetaNombre').value = '';
+        return;
+      }
+      
+      // Auto-llenar nombre con el nombre de la fracción
+      document.getElementById('recetaNombre').value = nombreFraccion;
+      
+      // Obtener próximo ID disponible
+      try {
+        const response = await fetch(`/api/recetas/next-id?codigo=${codigo}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          document.getElementById('recetaId').value = data.receta_id;
+        }
+      } catch (error) {
+        console.error('❌ Error al obtener próximo ID:', error);
+      }
+    });
+
+    // ===== ABRIR MODAL =====
+    window.abrirModalReceta = async function(modo, id = null, nombre = '', quimico_id = '', dosis = '', volumen = '') {
       modoModalReceta = modo;
       recetaActualId = id;
 
-      // Cargar catálogos si no están cargados
-      if (!catalogosRecetas) {
-        await cargarCatalogosRecetas();
-      }
-
       const modal = document.getElementById('modalReceta');
       const titulo = document.getElementById('modalRecetaTitulo');
-      const codigoField = document.getElementById('codigoField');
-      const codigoInput = document.getElementById('recetaCodigo');
+      const fraccionField = document.getElementById('fraccionField');
+      const fraccionSelect = document.getElementById('recetaFraccion');
       const idInput = document.getElementById('recetaId');
       const nombreInput = document.getElementById('recetaNombre');
       const quimicoSelect = document.getElementById('recetaQuimico');
@@ -1448,112 +1136,74 @@
       document.getElementById('formReceta').reset();
       idInput.value = '';
 
-      // Poblar químicos
-      quimicoSelect.innerHTML = '<option value="">Seleccionar químico...</option>';
-      if (catalogosRecetas && catalogosRecetas.quimicos) {
-        catalogosRecetas.quimicos.forEach(q => {
-          quimicoSelect.innerHTML += `<option value="${q.quimico_id}">${q.quimico_id} - ${q.nombre}</option>`;
-        });
-      }
-
       if (modo === 'crear') {
-        // MODO CREAR
         titulo.textContent = 'Agregar Receta';
-        codigoField.style.display = 'block';
-        codigoInput.required = true;
         
-        // Listener para generar ID al escribir código
-        codigoInput.oninput = async function() {
-          const codigo = this.value.trim().toUpperCase();
-          this.value = codigo; // Actualizar con mayúsculas
-          
-          if (codigo.length >= 2) {
-            const nextId = await obtenerProximoIdReceta(codigo);
-            idInput.value = nextId;
-          } else {
-            idInput.value = '';
-          }
-        };
+        // Mostrar campo de fracción
+        fraccionField.style.display = 'block';
+        fraccionSelect.setAttribute('required', '');  // ✅ AGREGAR ESTA LÍNEA
+        
+        // Cargar fracciones si no están cargadas
+        if (fraccionesDisponibles.length === 0) {
+          await cargarFracciones();
+        }
+
+        // Cargar químicos
+        await cargarQuimicos();
 
       } else if (modo === 'editar') {
-        // MODO EDITAR
         titulo.textContent = 'Editar Receta';
-        codigoField.style.display = 'none'; // No se puede cambiar código
-        codigoInput.required = false;
         
-        // Cargar datos de la receta
-        await cargarDatosReceta(id);
+        // Ocultar campo de fracción (no se puede cambiar el código)
+        fraccionField.style.display = 'none';
+        fraccionSelect.removeAttribute('required');
+        
+        idInput.value = id;
+        nombreInput.value = nombre;
+        dosisInput.value = dosis;
+        volumenInput.value = volumen;
+        
+        // Cargar químicos y seleccionar el actual
+        await cargarQuimicos();
+        quimicoSelect.value = quimico_id;
       }
 
-      // Mostrar modal
       modal.classList.add('is-open');
       document.body.style.overflow = 'hidden';
     };
 
-    // ===== CARGAR DATOS DE RECETA PARA EDITAR =====
-    async function cargarDatosReceta(recetaId) {
-      try {
-        // Buscar la receta en la lista actual (ya tenemos los datos en la página)
-        // O hacer un fetch si necesitas datos frescos
-        // ✅ JSON ya viene serializado desde Python (inyectado en <script type="application/json">)
-        const recetas = JSON.parse(document.getElementById('recetasData').textContent);
-        const receta = recetas.find(r => r.receta_id === recetaId);
-        
-        if (!receta) {
-          alert('Receta no encontrada');
-          cerrarModalReceta();
-          return;
-        }
-
-        // Pre-cargar datos
-        document.getElementById('recetaId').value = receta.receta_id;
-        document.getElementById('recetaNombre').value = receta.nombre;
-        
-        // Si tiene detalles, cargar el primer detalle (debería ser solo 1)
-        if (receta.detalles && receta.detalles.length > 0) {
-          const detalle = receta.detalles[0];
-          recetaActualDetalle = detalle;
-          
-          document.getElementById('recetaQuimico').value = detalle.quimico_id;
-          document.getElementById('recetaDosis').value = detalle.dosis;
-          document.getElementById('recetaVolumen').value = detalle.volumen_base;
-        }
-        
-      } catch (error) {
-        console.error('❌ Error al cargar datos:', error);
-        alert('Error al cargar datos de la receta');
-      }
-    }
-
-    // ===== CERRAR MODAL RECETA =====
+    // ===== CERRAR MODAL =====
     window.cerrarModalReceta = function() {
       const modal = document.getElementById('modalReceta');
       modal.classList.remove('is-open');
       document.body.style.overflow = '';
       
-      // Limpiar form
       document.getElementById('formReceta').reset();
       document.getElementById('recetaId').value = '';
+      document.getElementById('fraccionField').style.display = 'block';
       modoModalReceta = 'crear';
       recetaActualId = null;
-      recetaActualDetalle = null;
     };
 
-    // ===== OBTENER PRÓXIMO ID DE RECETA =====
-    async function obtenerProximoIdReceta(codigo) {
+    // ===== CARGAR QUÍMICOS =====
+    async function cargarQuimicos() {
       try {
-        const response = await fetch(`/api/recetas/next-id?codigo=${codigo}`);
+        const response = await fetch('/api/recetas/catalogos');
         const data = await response.json();
         
         if (data.success) {
-          return data.receta_id;
-        } else {
-          console.error('❌ Error al obtener ID:', data.error);
-          return '';
+          const select = document.getElementById('recetaQuimico');
+          select.innerHTML = '<option value="">Seleccionar químico...</option>';
+          
+          data.quimicos.forEach(q => {
+            const option = document.createElement('option');
+            option.value = q.quimico_id;
+            option.textContent = `${q.quimico_id} - ${q.nombre} (${q.categoria})`;
+            select.appendChild(option);
+          });
         }
       } catch (error) {
-        console.error('❌ Error de red:', error);
-        return '';
+        console.error('❌ Error al cargar químicos:', error);
       }
     }
 
@@ -1565,49 +1215,32 @@
       btnGuardar.disabled = true;
       btnGuardar.textContent = 'Guardando...';
 
-      const id = document.getElementById('recetaId').value;
-      const nombre = document.getElementById('recetaNombre').value.trim();
-      const quimicoId = document.getElementById('recetaQuimico').value;
-      const dosis = parseFloat(document.getElementById('recetaDosis').value);
-      const volumen = parseFloat(document.getElementById('recetaVolumen').value);
-
       try {
         let response, data;
 
         if (modoModalReceta === 'crear') {
-          // CREAR NUEVA RECETA
-          const codigo = document.getElementById('recetaCodigo').value.trim().toUpperCase();
-          
-          if (!codigo || codigo.length < 2) {
-            alert('El código debe tener al menos 2 caracteres');
-            btnGuardar.disabled = false;
-            btnGuardar.textContent = 'Guardar';
-            return;
-          }
+          const codigo = document.getElementById('recetaFraccion').value;
+          const nombre = document.getElementById('recetaNombre').value;
+          const quimico_id = document.getElementById('recetaQuimico').value;
+          const dosis = parseFloat(document.getElementById('recetaDosis').value);
+          const volumen_base = parseFloat(document.getElementById('recetaVolumen').value);
 
           response = await fetch('/api/recetas', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              codigo,
-              nombre,
-              quimico_id: quimicoId,
-              dosis,
-              volumen_base: volumen
-            })
+            body: JSON.stringify({ codigo, nombre, quimico_id, dosis, volumen_base })
           });
 
         } else if (modoModalReceta === 'editar') {
-          // EDITAR RECETA EXISTENTE
+          const nombre = document.getElementById('recetaNombre').value;
+          const quimico_id = document.getElementById('recetaQuimico').value;
+          const dosis = parseFloat(document.getElementById('recetaDosis').value);
+          const volumen_base = parseFloat(document.getElementById('recetaVolumen').value);
+
           response = await fetch(`/api/recetas/${recetaActualId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nombre,
-              quimico_id: quimicoId,
-              dosis,
-              volumen_base: volumen
-            })
+            body: JSON.stringify({ nombre, quimico_id, dosis, volumen_base })
           });
         }
 
@@ -1616,7 +1249,7 @@
         if (data.success) {
           alert(modoModalReceta === 'crear' ? 'Receta creada correctamente' : 'Receta actualizada correctamente');
           cerrarModalReceta();
-          location.reload(); // Recargar para mostrar cambios
+          location.reload();
         } else {
           alert('Error: ' + data.error);
         }
@@ -1633,7 +1266,7 @@
     // ===== ELIMINAR RECETA =====
     window.eliminarReceta = async function(id, nombre) {
       const confirmar = confirm(
-        `¿Estás seguro de eliminar la receta "${nombre}" (${id})?\n\n` +
+        `¿Estás seguro de eliminar la receta ${id} (${nombre})?\n\n` +
         `Esta acción no se puede deshacer.`
       );
 
@@ -1672,34 +1305,36 @@
       }
     };
 
-    // ===== INICIALIZAR =====
-    cargarCatalogosRecetas();
-
-    // ===== EVENT LISTENERS PARA RECETAS =====
-    // Botón agregar receta
+    // ===== EVENT LISTENERS =====
     document.querySelector('.btn-agregar-receta')?.addEventListener('click', function() {
       abrirModalReceta('crear');
     });
 
-    // Event delegation para botones de editar/eliminar recetas
     document.addEventListener('click', function(e) {
-      // Editar receta
       if (e.target.closest('.btn-editar-receta')) {
         const btn = e.target.closest('.btn-editar-receta');
-        const id = btn.dataset.id;
-        abrirModalReceta('editar', id);
+        abrirModalReceta(
+          'editar', 
+          btn.dataset.id, 
+          btn.dataset.nombre,
+          btn.dataset.quimico,
+          btn.dataset.dosis,
+          btn.dataset.volumen
+        );
       }
 
-      // Eliminar receta
+
       if (e.target.closest('.btn-eliminar-receta')) {
         const btn = e.target.closest('.btn-eliminar-receta');
-        const id = btn.dataset.id;
-        const nombre = btn.dataset.nombre;
-        eliminarReceta(id, nombre);
+        eliminarReceta(btn.dataset.id, btn.dataset.nombre);
       }
     });
 
+    // ✅ Cargar fracciones al iniciar la página
+    cargarFracciones();
+
   })();
+
   </script>
 
 </body>

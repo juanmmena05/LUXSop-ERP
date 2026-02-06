@@ -315,7 +315,7 @@
       {% for sf in sop_fracciones %}
         <a class="sf-link {% if sf_actual and sf.sop_fraccion_id == sf_actual.sop_fraccion_id %}is-active{% endif %}"
             href="{{ url_for('main.sop_detalles', sop_id=sop.sop_id, nivel=nivel, tipo_sop=tipo_sop, sop_fraccion_id=sf.sop_fraccion_id) }}">
-          <div><strong>{{ sf.fraccion.fraccion_id if sf.fraccion else sf.fraccion_id }}</strong> — {{ sf.fraccion.fraccion_nombre if sf.fraccion else '' }}</div>
+          <div><strong>{{ sf.fraccion.fraccion_id if sf.fraccion else sf.fraccion_id }}</strong> — {{ sf.fraccion.nombre_full if sf.fraccion else '' }}</div>
           <small>Orden: {{ sf.orden }}</small>
         </a>
       {% endfor %}

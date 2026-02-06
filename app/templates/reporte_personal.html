@@ -470,7 +470,7 @@
                 <ol class="list">
                   {% for f in d.fracciones %}
                     <li>
-                      <div><strong>{{ f.fraccion_nombre }}</strong></div>
+                      <div><strong>{{ f.nombre_full }}</strong></div>
 
                       {% if f.tiempo_min is not none %}
                         <div class="tiempo-box">⏱ Tiempo estimado: {{ f.tiempo_min }} min</div>
