@@ -1,12 +1,8 @@
-<!-- ===== SIDEBAR NAVIGATION COMPONENT ===== -->
-<!-- Incluir en templates con: {% include 'components/sidebar_nav.html' %} -->
-
-<!-- Burger Button -->
+<!-- ✅ SIDEBAR DINÁMICO MULTINIVEL -->
 <button class="burger" id="navToggle" aria-label="Abrir menú">☰</button>
 <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
 <div class="top-guard" id="topGuard" aria-hidden="true"></div>
 
-<!-- Sidebar Navigation -->
 <nav class="side-nav" id="sideNav" aria-label="Menú principal">
   <div class="side-nav__head" id="navHead">
     <div class="side-nav__brand">
@@ -28,6 +24,7 @@
 (function() {
   'use strict';
 
+  // ===== ELEMENTOS DEL DOM =====
   const nav = document.getElementById('sideNav');
   const navHead = document.getElementById('navHead');
   const navContent = document.getElementById('navContent');
@@ -67,8 +64,9 @@
       parent: 'catalogos',
       showBrand: false,
       items: [
-        { icon: '🔧', text: 'Herramientas/Kits', action: 'alert', message: 'Próximamente disponible' },
-        { icon: '🧩', text: 'Elementos', action: 'alert', message: 'Próximamente disponible' },
+        { icon: '🔧', text: 'Herramientas', url: '{{ url_for("main.catalogos_herramientas") }}' },
+        { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits") }}' },
+        { icon: '🧩', text: 'Elementos', url: '{{ url_for("main.catalogos_elementos") }}' },
         { icon: '📊', text: 'Fracciones', action: 'alert', message: 'Próximamente disponible' }
       ]
     },
@@ -88,9 +86,11 @@
   let currentLevel = 'main';
   let navStack = ['main'];
 
-  // ===== NAVEGACIÓN =====
+  // ===== FUNCIONES DE NAVEGACIÓN =====
+  
   function navigateTo(targetLevel) {
     if (!NAV_LEVELS[targetLevel]) return;
+
     navContent.classList.add('is-transitioning');
     setTimeout(() => {
       currentLevel = targetLevel;
@@ -105,6 +105,7 @@
 
   function goBack() {
     if (navStack.length <= 1) return;
+
     navContent.classList.add('is-transitioning');
     setTimeout(() => {
       navStack.pop();
@@ -174,17 +175,22 @@
     if (closeBtn) closeBtn.addEventListener('click', closeNav);
   }
 
+  // ===== PERSISTENCIA =====
+  
   function saveNavState() {
     sessionStorage.setItem('luxsop_nav_level', currentLevel);
     sessionStorage.setItem('luxsop_nav_stack', JSON.stringify(navStack));
   }
 
   function restoreNavState() {
+    // ✅ Siempre iniciamos en main (ya no restauramos estado previo)
     currentLevel = 'main';
     navStack = ['main'];
     renderNavLevel();
   }
 
+  // ===== ABRIR/CERRAR =====
+  
   function openNav() {
     topGuard?.classList.add('is-on');
     requestAnimationFrame(() => {
@@ -206,6 +212,7 @@
     overlay.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
 
+    // ✅ RESETEAR AL NIVEL MAIN AL CERRAR
     currentLevel = 'main';
     navStack = ['main'];
     sessionStorage.removeItem('luxsop_nav_level');
@@ -213,6 +220,8 @@
     renderNavLevel();
   }
 
+  // ===== EVENT LISTENERS =====
+  
   burger?.addEventListener('click', openNav);
   overlay?.addEventListener('click', closeNav);
   
@@ -225,8 +234,28 @@
     if (link) closeNav();
   });
 
+  // ===== INICIALIZACIÓN =====
+  
   window.navSystem = { navigateTo, goBack };
   restoreNavState();
 
+})();
+
+// ===== LIMPIAR ESTADOS TOUCH iOS =====
+(function(){
+  const burger = document.getElementById('navToggle');
+  if(!burger) return;
+  
+  setTimeout(function() {
+    burger.blur();
+  }, 50);
+  
+  burger.addEventListener('touchend', function() {
+    setTimeout(() => this.blur(), 10);
+  }, {passive: true});
+  
+  burger.addEventListener('click', function() {
+    setTimeout(() => this.blur(), 200);
+  });
 })();
 </script>

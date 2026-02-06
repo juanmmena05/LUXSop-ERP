@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Consumos · LuxSOP</title>
+  <!-- ✅ CSS DEL SIDEBAR (EXTERNO) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
   <style>
     :root {
       --fg: #222;
@@ -173,187 +175,41 @@
       gap: 8px;
     }
 
-    /* ===== Burger Button ===== */
-    .burger {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 1101;
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #fff;
-      cursor: pointer;
-      font-size: 20px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 1px 4px rgba(0,0,0,.06);
-    }
-
-    .burger:hover { filter: brightness(.98); }
-
-    /* ===== Overlay ===== */
-    .nav-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1100;
+    .btn-icon {
       background: transparent;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity .18s ease, visibility 0s linear .18s;
-    }
-
-    .nav-overlay.is-open {
-      background: rgba(0,0,0,.35);
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      transition: opacity .18s ease;
-    }
-
-    /* ===== Top Guard ===== */
-    .top-guard {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: env(safe-area-inset-top, 44px);
-      background: #fff;
-      z-index: 1103;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity .12s ease;
-    }
-
-    .top-guard.is-on {
-      opacity: 1;
-    }
-
-    /* ===== Sidebar ===== */
-    .side-nav {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 300px;
-      max-width: 84vw;
-      background: var(--card);
-      border-right: 1px solid var(--line);
-      box-shadow: 0 8px 30px rgba(0,0,0,.14);
-      z-index: 1102;
-      transform: translateX(-105%);
-      transition: transform .2s ease;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      overflow-y: auto;
-    }
-
-    .side-nav.is-open {
-      transform: translateX(0);
-    }
-
-    .side-nav__head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 6px;
-      min-height: 52px;
-    }
-
-    .side-nav__brand {
-      display: grid;
-      line-height: 1.1;
-    }
-
-    .side-nav__brand strong {
-      font-size: 1rem;
-    }
-
-    .side-nav__brand span {
-      font-size: .78rem;
-      color: var(--muted);
-    }
-
-    .side-nav__close,
-    .side-nav__back {
+      border: 1px solid var(--line);
+      color: var(--fg);
       width: 36px;
       height: 36px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #fff;
+      padding: 0;
+      border-radius: 8px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      transition: background 0.2s ease;
-      flex-shrink: 0;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
     }
 
-    .side-nav__close:hover,
-    .side-nav__back:hover {
-      background: #f5f5f5;
+    .btn-icon:hover {
+      background: #f8f9fa;
+      border-color: #aaa;
     }
 
-    .side-nav__link {
-      text-decoration: none;
-      color: var(--fg);
-      padding: 10px 12px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: .92rem;
-      font-weight: 500;
-      background: transparent;
-      border: none;
-      width: 100%;
-      text-align: left;
-      cursor: pointer;
-      transition: background 0.2s ease;
-    }
-
-    .side-nav__link:hover {
-      background: #f3f3f3;
-    }
-
-    .side-nav__section {
-      margin-top: 6px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(0,0,0,.08);
-      color: var(--muted);
-      font-size: .75rem;
-    }
-
-    .side-nav__content {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      opacity: 1;
-      transition: opacity .15s ease;
-    }
-
-    .side-nav__content.is-transitioning {
-      opacity: 0;
+    .btn-icon.btn-delete:hover {
+      background: #fff5f5;
+      border-color: #dc3545;
+      color: #dc3545;
     }
 
     /* ===== Modal ===== */
     .modal {
       position: fixed;
       inset: 0;
-      z-index: 2000;
+      z-index: 1300;
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 20px;
     }
 
     .modal.is-open {
@@ -361,82 +217,94 @@
     }
 
     .modal-overlay {
-      position: absolute;
+      position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(2px);
+      z-index: 1;
     }
 
     .modal-content {
       position: relative;
-      background: var(--card);
+      z-index: 2;
+      background: #fff;
       border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 90%;
       max-width: 600px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      animation: modalSlideIn 0.3s ease;
+      max-height: 85vh;
+      overflow: hidden;
+      animation: slideUp 0.3s ease;
     }
 
-    @keyframes modalSlideIn {
-      from { opacity: 0; transform: translateY(-30px); }
-      to { opacity: 1; transform: translateY(0); }
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .modal-header {
-      padding: 24px;
-      border-bottom: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
     }
 
     .modal-header h2 {
-      margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
+      margin: 0;
     }
 
     .modal-close {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: #fff;
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--muted);
       cursor: pointer;
-      font-size: 20px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s ease;
+      border-radius: 8px;
+      transition: all 0.2s ease;
     }
 
     .modal-close:hover {
-      background: #f5f5f5;
+      background: #f8f9fa;
+      color: var(--fg);
     }
 
     .modal-body {
       padding: 24px;
+      max-height: calc(85vh - 180px);
+      overflow-y: auto;
     }
 
     .modal-footer {
-      padding: 20px 24px;
+      padding: 16px 24px;
       border-top: 1px solid var(--line);
       display: flex;
       gap: 12px;
       justify-content: flex-end;
     }
 
+    /* ===== Form ===== */
     .form-group {
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
 
     .form-group label {
       display: block;
       font-size: .9rem;
       font-weight: 600;
-      color: var(--fg);
+      color: #333;
       margin-bottom: 8px;
     }
 
@@ -444,17 +312,18 @@
     .form-group select,
     .form-group textarea {
       width: 100%;
+      padding: .7rem .85rem;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px 14px;
+      border-radius: 10px;
       font-size: .95rem;
       transition: border-color 0.2s ease;
-      font-family: system-ui, sans-serif;
+      background: #fff;
+      font-family: inherit;
     }
 
     .form-group textarea {
-      resize: vertical;
       min-height: 80px;
+      resize: vertical;
     }
 
     .form-group input:focus,
@@ -466,10 +335,10 @@
     }
 
     .form-hint {
-      display: block;
-      font-size: .8rem;
+      font-size: .85rem;
       color: var(--muted);
       margin-top: 6px;
+      display: block;
     }
 
     .btn-secondary {
@@ -477,34 +346,12 @@
       color: #fff;
     }
 
-    .btn-secondary:hover {
-      filter: brightness(.95);
-    }
-
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
   </style>
 </head>
 
 <body>
-  <!-- Sidebar dinámico -->
-  <button class="burger" id="navToggle" aria-label="Abrir menú">☰</button>
-  <div class="nav-overlay" id="navOverlay" aria-hidden="true"></div>
-  <div class="top-guard" id="topGuard" aria-hidden="true"></div>
-
-  <nav class="side-nav" id="sideNav" aria-label="Menú principal">
-    <div class="side-nav__head" id="navHead">
-      <div class="side-nav__brand">
-        <strong>LuxSOP</strong>
-        <span>ERP · Limpieza</span>
-      </div>
-      <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-    </div>
-    <div class="side-nav__content" id="navContent"></div>
-  </nav>
-
+  <!-- ✅ INCLUIR COMPONENTE SIDEBAR -->
+  {% include 'components/sidebar_nav.html' %} 
   <!-- Contenido Principal -->
   <div class="head">
     <h1>📦 Consumos</h1>
@@ -539,19 +386,20 @@
           <td>{{ c.regla or '—' }}</td>
           <td>
             <div class="actions">
-              <button class="btn btn-sm btn-green btn-editar-consumo"
+              <button class="btn-icon btn-editar-consumo"
                       data-id="{{ c.consumo_id }}"
                       data-valor="{{ c.valor }}"
                       data-unidad="{{ c.unidad }}"
-                      data-regla="{{ c.regla or '' }}">
-                Editar
+                      data-regla="{{ c.regla or '' }}"
+                      title="Editar">
+                ✏️
               </button>
-              <button class="btn btn-sm btn-eliminar-consumo" 
-                      style="background: #dc3545; color: #fff;"
+              <button class="btn-icon btn-delete btn-eliminar-consumo"
                       data-id="{{ c.consumo_id }}"
                       data-valor="{{ c.valor }}"
-                      data-unidad="{{ c.unidad }}">
-                ✕
+                      data-unidad="{{ c.unidad }}"
+                      title="Eliminar">
+                🗑️
               </button>
             </div>
           </td>
@@ -627,178 +475,6 @@
   </div>
 
   <script>
-  // ===== SIDEBAR NAVIGATION =====
-  (function() {
-    'use strict';
-
-    const nav = document.getElementById('sideNav');
-    const navHead = document.getElementById('navHead');
-    const navContent = document.getElementById('navContent');
-    const burger = document.getElementById('navToggle');
-    const overlay = document.getElementById('navOverlay');
-    const topGuard = document.getElementById('topGuard');
-
-    if (!nav || !navContent) return;
-
-    const NAV_LEVELS = {
-      main: {
-        level: 0,
-        title: 'Menu Principal',
-        showBrand: true,
-        items: [
-          { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
-          { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
-          { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
-          { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
-        ]
-      },
-      catalogos: {
-        level: 1,
-        title: 'Catálogos',
-        parent: 'main',
-        showBrand: false,
-        items: [
-          { icon: '📦', text: 'Regulares', action: 'alert', message: 'Próximamente disponible' },
-          { icon: '🎯', text: 'Eventos', action: 'alert', message: 'Próximamente disponible' },
-          { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
-        ]
-      },
-      compartidos: {
-        level: 2,
-        title: 'Compartidos',
-        parent: 'catalogos',
-        showBrand: false,
-        items: [
-          { icon: '🧪', text: 'Químicos/Recetas', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
-          { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
-        ]
-      }
-    };
-
-    let currentLevel = 'main';
-    let navStack = ['main'];
-
-    function navigateTo(targetLevel) {
-      if (!NAV_LEVELS[targetLevel]) return;
-      navContent.classList.add('is-transitioning');
-      setTimeout(() => {
-        currentLevel = targetLevel;
-        navStack.push(targetLevel);
-        renderNavLevel();
-        requestAnimationFrame(() => {
-          navContent.classList.remove('is-transitioning');
-        });
-      }, 150);
-    }
-
-    function goBack() {
-      if (navStack.length <= 1) return;
-      navContent.classList.add('is-transitioning');
-      setTimeout(() => {
-        navStack.pop();
-        currentLevel = navStack[navStack.length - 1];
-        renderNavLevel();
-        requestAnimationFrame(() => {
-          navContent.classList.remove('is-transitioning');
-        });
-      }, 150);
-    }
-
-    function renderNavLevel() {
-      const levelConfig = NAV_LEVELS[currentLevel];
-      if (!levelConfig) return;
-
-      updateNavHeader(levelConfig);
-
-      let html = '';
-      levelConfig.items.forEach(item => {
-        if (item.url) {
-          html += `<a class="side-nav__link" href="${item.url}">${item.icon} ${item.text}</a>`;
-        } else if (item.action === 'navigateTo') {
-          html += `<button class="side-nav__link" onclick="navSystem.navigateTo('${item.target}')">${item.icon} ${item.text}</button>`;
-        } else if (item.action === 'alert') {
-          html += `<button class="side-nav__link" onclick="alert('${item.message}')">${item.icon} ${item.text}</button>`;
-        }
-      });
-
-      if (currentLevel === 'main') {
-        html += `
-          <div class="side-nav__section">Sesión</div>
-          <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
-            <button type="submit" class="side-nav__link">🚪 Salir</button>
-          </form>
-        `;
-      }
-
-      navContent.innerHTML = html;
-    }
-
-    function updateNavHeader(levelConfig) {
-      navHead.innerHTML = '';
-
-      if (levelConfig.showBrand) {
-        navHead.innerHTML = `
-          <div class="side-nav__brand">
-            <strong>LuxSOP</strong>
-            <span>ERP · Limpieza</span>
-          </div>
-          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-        `;
-      } else {
-        navHead.innerHTML = `
-          <button class="side-nav__back" id="navBack" aria-label="Volver">←</button>
-          <div class="side-nav__brand">
-            <strong>${levelConfig.title}</strong>
-          </div>
-          <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
-        `;
-
-        const backBtn = document.getElementById('navBack');
-        if (backBtn) backBtn.addEventListener('click', goBack);
-      }
-
-      const closeBtn = document.getElementById('navClose');
-      if (closeBtn) closeBtn.addEventListener('click', closeNav);
-    }
-
-    function openNav() {
-      topGuard?.classList.add('is-on');
-      requestAnimationFrame(() => {
-        overlay.classList.add('is-open');
-        nav.classList.add('is-open');
-        document.body.style.overflow = 'hidden';
-      });
-    }
-
-    function closeNav() {
-      nav.classList.remove('is-open');
-      overlay.classList.remove('is-open');
-      requestAnimationFrame(() => {
-        topGuard?.classList.remove('is-on');
-      });
-      document.body.style.overflow = '';
-      currentLevel = 'main';
-      navStack = ['main'];
-      renderNavLevel();
-    }
-
-    burger?.addEventListener('click', openNav);
-    overlay?.addEventListener('click', closeNav);
-    
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeNav();
-    });
-
-    nav.addEventListener('click', (e) => {
-      const link = e.target.closest('a');
-      if (link) closeNav();
-    });
-
-    window.navSystem = { navigateTo, goBack };
-    renderNavLevel();
-
-  })();
-
   // ===== CRUD DE CONSUMOS =====
   (function() {
     'use strict';

@@ -95,8 +95,10 @@ class Fraccion(db.Model):
 
     fraccion_id = db.Column(db.String, primary_key=True)
     fraccion_nombre = db.Column(db.String, nullable=False)
+    nombre_custom = db.Column(db.String(200))  # ← NUEVO: variación opcional
     nota_tecnica = db.Column(db.Text)
     grupo_fracciones = db.Column(db.String(20), nullable=True)
+
 
     metodologias = db.relationship(
         "Metodologia",
@@ -107,6 +109,14 @@ class Fraccion(db.Model):
     sop_fracciones = db.relationship("SopFraccion", back_populates="fraccion")
     elemento_sets = db.relationship("ElementoSet", back_populates="fraccion")
     kits = db.relationship("Kit", back_populates="fraccion", lazy="selectin")
+
+    # ✅ AGREGAR ESTO AL FINAL:
+    @property
+    def nombre_full(self):
+        """Retorna nombre completo: base + custom (si existe)"""
+        if self.nombre_custom:
+            return f"{self.fraccion_nombre} — {self.nombre_custom}"
+        return self.fraccion_nombre
 
 
 # ======================================================
@@ -258,14 +268,21 @@ class Kit(db.Model):
     # NUEVO: tipo de kit
     tipo_kit = db.Column(db.String(20), default='sop', nullable=False)  # 'sop' | 'evento'
 
+    # 🆕 NUEVO: Para filtrar kits de evento
+    caso_id = db.Column(db.String(50), db.ForeignKey("caso_catalogo.caso_id"), nullable=True, index=True)
+
     fraccion = db.relationship("Fraccion", back_populates="kits")
     nivel_limpieza = db.relationship("NivelLimpieza", back_populates="kits")
 
-    detalles = db.relationship(
-        "KitDetalle",
-        back_populates="kit",
-        cascade="all, delete-orphan",
-        lazy="selectin",
+    caso_catalogo = db.relationship("CasoCatalogo", back_populates="kits")
+    detalles = db.relationship( "KitDetalle", back_populates="kit", cascade="all, delete-orphan", lazy="selectin",)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "(tipo_kit = 'sop' AND fraccion_id IS NOT NULL AND caso_id IS NULL) OR "
+            "(tipo_kit = 'evento' AND caso_id IS NOT NULL AND fraccion_id IS NULL)",
+            name="ck_kit_tipo_consistency"
+        ),
     )
     
     def __repr__(self):
@@ -458,6 +475,7 @@ class CasoCatalogo(db.Model):
     descripcion = db.Column(db.Text)
     
     evento_catalogo = db.relationship("EventoCatalogo", back_populates="casos")
+    kits = db.relationship("Kit", back_populates="caso_catalogo", lazy="selectin")
 
 
 
