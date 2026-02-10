@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kits de Eventos · LuxSOP</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  <style>
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --green: #198754;
+      --card: #fff;
+      --h: 46px;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+      box-sizing: border-box;
+    }
+
+    html { background: var(--bg); }
+
+    body {
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      padding-left: 70px;
+      max-width: 1400px;
+      margin-inline: auto;
+    }
+
+    @media (max-width: 900px) {
+      body { padding-left: 2rem; }
+    }
+
+    .head {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: .85rem;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 600;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-top: .35rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      padding: 20px;
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .table-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      height: var(--h);
+      padding: .55rem 1.1rem;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: filter 0.2s ease;
+    }
+
+    .btn-blue {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn-sm {
+      height: 36px;
+      padding: .4rem .8rem;
+      font-size: .85rem;
+    }
+
+    .btn:hover {
+      filter: brightness(.95);
+    }
+
+    .filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-group label {
+      font-size: .85rem;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .filter-group select {
+      padding: .5rem .75rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: .9rem;
+      background: #fff;
+      min-width: 200px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    thead {
+      background: #f8f9fa;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid var(--line);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: .9rem;
+    }
+
+    tr:hover {
+      background: #f8f9fa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: .8rem;
+      font-weight: 600;
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .herramientas-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .herramienta-tag {
+      background: #f5f5f5;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: .8rem;
+      color: #555;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--fg);
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
+    }
+
+    .btn-icon:hover {
+      background: #f8f9fa;
+      border-color: #aaa;
+    }
+
+    .btn-icon.btn-delete:hover {
+      background: #fff5f5;
+      border-color: #dc3545;
+      color: #dc3545;
+    }
+
+    /* Modal */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.is-open {
+      display: flex;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1;
+    }
+
+    .modal-content {
+      position: relative;
+      z-index: 2;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 90%;
+      max-width: 800px;
+      max-height: 85vh;
+      overflow: hidden;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-header h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--muted);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: #f8f9fa;
+      color: var(--fg);
+    }
+
+    .modal-body {
+      padding: 24px;
+      max-height: calc(85vh - 180px);
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: .9rem;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: .7rem .85rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: .95rem;
+      transition: border-color 0.2s ease;
+      background: #fff;
+      font-family: inherit;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    }
+
+    .form-hint {
+      font-size: .85rem;
+      color: var(--muted);
+      margin-top: 6px;
+      display: block;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    /* Sección de herramientas */
+    .herramientas-section {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      background: #f8f9fa;
+    }
+
+    .herramientas-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .herramientas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 8px;
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .herramienta-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .herramienta-checkbox:hover {
+      background: #f8f9fa;
+      border-color: var(--blue);
+    }
+
+    .herramienta-checkbox input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .herramienta-info {
+      flex: 1;
+      font-size: .85rem;
+    }
+
+    .herramienta-info strong {
+      display: block;
+      color: var(--fg);
+    }
+
+    .herramienta-info small {
+      color: var(--muted);
+    }
+
+    .contador-seleccion {
+      font-size: .85rem;
+      color: var(--blue);
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  {% include 'components/sidebar_nav.html' %}
+
+  <div class="head">
+    <h1>🎯 Kits de Eventos</h1>
+    <div class="sub">Gestiona los kits de herramientas para eventos y casos específicos</div>
+  </div>
+
+  <div class="card">
+    <div class="table-header">
+      <div class="table-title">Lista de Kits de Eventos</div>
+      <button class="btn btn-blue btn-sm btn-agregar-kit">
+        Agregar Kit
+      </button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Evento</label>
+        <select id="filtroEvento">
+          <option value="">Todos los eventos</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Caso</label>
+        <select id="filtroCaso">
+          <option value="">Todos los casos</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div id="tablaContainer"></div>
+  </div>
+
+  <!-- MODAL KIT -->
+  <div class="modal" id="modalKit">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalKitTitulo">Agregar Kit de Evento</h2>
+        <button class="modal-close">✕</button>
+      </div>
+      
+      <form id="formKit">
+        <div class="modal-body">
+          
+          <!-- Evento -->
+          <div class="form-group">
+            <label for="kitEvento">1. Evento *</label>
+            <select id="kitEvento" required>
+              <option value="">Seleccionar evento...</option>
+            </select>
+            <small class="form-hint">Selecciona el tipo de evento</small>
+          </div>
+
+          <!-- Caso -->
+          <div class="form-group">
+            <label for="kitCaso">2. Caso *</label>
+            <select id="kitCaso" required>
+              <option value="">Seleccionar caso...</option>
+            </select>
+            <small class="form-hint">Selecciona el caso específico del evento</small>
+          </div>
+
+          <!-- ID Generado -->
+          <div class="form-group">
+            <label>3. ID (Generado automáticamente)</label>
+            <input type="text" id="kitId" readonly style="background: #f5f5f5; cursor: not-allowed;">
+            <small class="form-hint">Formato: KT-EV-XX-001</small>
+          </div>
+
+          <!-- Nombre -->
+          <div class="form-group">
+            <label for="kitNombre">4. Nombre del Kit *</label>
+            <input type="text" id="kitNombre" placeholder="Ej: Kit Vómito" required>
+            <small class="form-hint">Se auto-completa con el nombre del caso</small>
+          </div>
+
+          <!-- Herramientas -->
+          <div class="form-group">
+            <label>5. Seleccionar Herramientas *</label>
+            <div class="herramientas-section">
+              <div class="herramientas-header">
+                <div>
+                  <label for="filtroGrupoHerramientas" style="margin-bottom: 4px;">Filtrar por grupo:</label>
+                  <select id="filtroGrupoHerramientas" style="width: 200px; padding: .4rem .6rem;">
+                    <option value="">Todos los grupos</option>
+                  </select>
+                </div>
+                <div class="contador-seleccion" id="contadorSeleccion">0 herramientas seleccionadas</div>
+              </div>
+              <div class="herramientas-grid" id="herramientasGrid">
+                <!-- Se llena dinámicamente -->
+              </div>
+            </div>
+            <small class="form-hint">Debe seleccionar al menos 1 herramienta</small>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-cancel-kit">
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-blue" id="btnGuardarKit">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/kits_eventos.js') }}"></script>
+</body>
+</html>

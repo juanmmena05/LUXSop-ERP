@@ -482,7 +482,12 @@
                           <strong>🧼 Metodología:</strong>
                           <ol>
                             {% for paso in f.metodologia.pasos %}
-                              <li>{{ paso.instruccion if paso.instruccion is defined else paso.descripcion }}</li>
+                              <li>
+                                {% if paso.titulo %}
+                                  <strong>{{ paso.titulo }}</strong><br>
+                                {% endif %}
+                                {{ paso.instruccion if paso.instruccion is defined else paso.descripcion }}
+                              </li>
                             {% endfor %}
                           </ol>
                         </div>

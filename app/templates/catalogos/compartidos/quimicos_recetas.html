@@ -1064,7 +1064,7 @@
     let recetaActualId = null;
     let fraccionesDisponibles = [];
 
-    // ===== CARGAR FRACCIONES AL INICIAR =====
+    // ===== CARGAR FRACCIONES AL INICIAR (CON OPTGROUP) =====
     async function cargarFracciones() {
       try {
         const response = await fetch('/api/recetas/fracciones-disponibles');
@@ -1073,16 +1073,51 @@
         if (data.success) {
           fraccionesDisponibles = data.fracciones;
           
-          // Poblar dropdown
+          // Poblar dropdown con optgroup
           const select = document.getElementById('recetaFraccion');
           select.innerHTML = '<option value="">Seleccionar fracción...</option>';
           
+          // ✅ Agrupar fracciones por código
+          const fraccionesPorCodigo = {};
+          
           data.fracciones.forEach(f => {
-            const option = document.createElement('option');
-            option.value = f.codigo;
-            option.textContent = `${f.codigo} - ${f.nombre}`;
-            option.dataset.nombre = f.nombre;
-            select.appendChild(option);
+            if (!fraccionesPorCodigo[f.codigo]) {
+              fraccionesPorCodigo[f.codigo] = {
+                codigo: f.codigo,
+                nombre_base: f.nombre,
+                fracciones: []
+              };
+            }
+            fraccionesPorCodigo[f.codigo].fracciones.push(f);
+          });
+          
+          // ✅ Renderizar con optgroup si hay múltiples, sin optgroup si es único
+          Object.values(fraccionesPorCodigo).forEach(grupo => {
+            if (grupo.fracciones.length === 1) {
+              // Solo 1 fracción con este código → opción simple
+              const f = grupo.fracciones[0];
+              const option = document.createElement('option');
+              option.value = f.codigo;
+              option.textContent = `${f.codigo} - ${f.nombre_full}`;
+              option.dataset.nombre = f.nombre;
+              option.dataset.fraccionId = f.fraccion_id;
+              select.appendChild(option);
+            } else {
+              // 2+ fracciones con este código → optgroup
+              const optgroup = document.createElement('optgroup');
+              optgroup.label = `${grupo.codigo} - ${grupo.nombre_base}`;
+              
+              grupo.fracciones.forEach(f => {
+                const option = document.createElement('option');
+                option.value = f.codigo;
+                option.textContent = `${f.fraccion_id} · ${f.nombre_full}`;
+                option.dataset.nombre = f.nombre;
+                option.dataset.fraccionId = f.fraccion_id;
+                optgroup.appendChild(option);
+              });
+              
+              select.appendChild(optgroup);
+            }
           });
         }
       } catch (error) {

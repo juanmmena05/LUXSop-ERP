@@ -1,27 +1,32 @@
-// ===== KITS - CRUD COMPLETO CON CHECKBOXES PERSISTENTES =====
+// ===== KITS EVENTOS - CRUD COMPLETO =====
 (function() {
   'use strict';
 
   let modoModal = 'crear';
   let kitActualId = null;
-  let fraccionesDisponibles = [];
+  let eventosDisponibles = [];
+  let casosDisponibles = [];
   let herramientasDisponibles = [];
   let gruposHerramientas = [];
   let kitsCache = [];
-  let herramientasSeleccionadas = new Set();  // ✅ NUEVO: Persistir selecciones
+  let herramientasSeleccionadas = new Set();
   
-  const filtroFraccion = document.getElementById('filtroFraccion');
-  const filtroNivel = document.getElementById('filtroNivel');
+  const filtroEvento = document.getElementById('filtroEvento');
+  const filtroCaso = document.getElementById('filtroCaso');
   const tablaContainer = document.getElementById('tablaContainer');
 
   // ===== INICIALIZAR =====
   async function init() {
     await cargarGruposHerramientas();
-    await cargarFracciones();
+    await cargarEventos();
     await cargarKits();
     
-    filtroFraccion?.addEventListener('change', aplicarFiltros);
-    filtroNivel?.addEventListener('change', aplicarFiltros);
+    filtroEvento?.addEventListener('change', async function() {
+      await cargarCasosPorEvento(this.value);
+      aplicarFiltros();
+    });
+    
+    filtroCaso?.addEventListener('change', aplicarFiltros);
   }
 
   // ===== CARGAR GRUPOS DE HERRAMIENTAS =====
@@ -48,94 +53,90 @@
     }
   }
 
-  // ===== CARGAR FRACCIONES =====
-  async function cargarFracciones() {
+  // ===== CARGAR EVENTOS =====
+  async function cargarEventos() {
     try {
-      const response = await fetch('/api/kits/fracciones-disponibles');
+      const response = await fetch('/api/kits-eventos/eventos-disponibles');
       const data = await response.json();
       
       if (data.success) {
-        fraccionesDisponibles = data.fracciones;
+        eventosDisponibles = data.eventos;
         
-        // ===== POBLAR DROPDOWN DEL MODAL CON OPTGROUP =====
-        const selectModal = document.getElementById('kitFraccion');
-        selectModal.innerHTML = '<option value="">Seleccionar fracción...</option>';
+        // Poblar dropdown modal
+        const selectModal = document.getElementById('kitEvento');
+        selectModal.innerHTML = '<option value="">Seleccionar evento...</option>';
         
-        // Agrupar fracciones por código
-        const fraccionesPorCodigo = {};
-        
-        data.fracciones.forEach(f => {
-          if (!fraccionesPorCodigo[f.codigo]) {
-            fraccionesPorCodigo[f.codigo] = {
-              codigo: f.codigo,
-              nombre_base: f.nombre,
-              fracciones: []
-            };
-          }
-          fraccionesPorCodigo[f.codigo].fracciones.push(f);
-        });
-        
-        // Renderizar con optgroup si hay múltiples, sin optgroup si es único
-        Object.values(fraccionesPorCodigo).forEach(grupo => {
-          if (grupo.fracciones.length === 1) {
-            // Solo 1 fracción con este código → opción simple
-            const f = grupo.fracciones[0];
-
-
-            const option = document.createElement('option');
-            option.value = f.fraccion_id;  // ✅ CAMBIO 1: usar fraccion_id
-            option.textContent = `${f.codigo} - ${f.nombre_full}`;
-            option.dataset.nombre = f.nombre;
-            option.dataset.codigo = f.codigo;  // ✅ CAMBIO 2: guardar codigo
-            selectModal.appendChild(option);
-
-
-
-          } else {
-            // 2+ fracciones con este código → optgroup
-            const optgroup = document.createElement('optgroup');
-            optgroup.label = `${grupo.codigo} - ${grupo.nombre_base}`;
-            
-            grupo.fracciones.forEach(f => {
-
-
-              const option = document.createElement('option');
-              option.value = f.fraccion_id;  // ✅ CAMBIO 1: usar fraccion_id
-              option.textContent = `${f.fraccion_id} · ${f.nombre_full}`;
-              option.dataset.nombre = f.nombre;
-              option.dataset.codigo = f.codigo;  // ✅ CAMBIO 2: guardar codigo
-              optgroup.appendChild(option);
-
-
-            });
-            
-            selectModal.appendChild(optgroup);
-          }
-        });
-        
-        // ===== POBLAR FILTRO (sin optgroup, plano) =====
-        const selectFiltro = document.getElementById('filtroFraccion');
-        selectFiltro.innerHTML = '<option value="">Todas las fracciones</option>';
-        
-        // Para el filtro usamos códigos únicos (no necesita optgroup)
-        const codigosUnicos = [...new Set(data.fracciones.map(f => f.codigo))];
-        codigosUnicos.forEach(codigo => {
-          const fraccion = data.fracciones.find(f => f.codigo === codigo);
+        data.eventos.forEach(e => {
           const option = document.createElement('option');
-          option.value = codigo;
-          option.textContent = `${codigo} - ${fraccion.nombre}`;
+          option.value = e.evento_tipo_id;
+          option.textContent = `${e.evento_tipo_id} - ${e.nombre}`;
+          selectModal.appendChild(option);
+        });
+        
+        // Poblar filtro
+        const selectFiltro = document.getElementById('filtroEvento');
+        selectFiltro.innerHTML = '<option value="">Todos los eventos</option>';
+        
+        data.eventos.forEach(e => {
+          const option = document.createElement('option');
+          option.value = e.evento_tipo_id;
+          option.textContent = `${e.evento_tipo_id} - ${e.nombre}`;
           selectFiltro.appendChild(option);
         });
       }
     } catch (error) {
-      console.error('❌ Error al cargar fracciones:', error);
+      console.error('❌ Error al cargar eventos:', error);
+    }
+  }
+
+  // ===== CARGAR CASOS (por evento o todos) =====
+  async function cargarCasosPorEvento(eventoId = '') {
+    try {
+      const url = eventoId 
+        ? `/api/kits-eventos/casos-disponibles?evento_tipo=${eventoId}`
+        : '/api/kits-eventos/casos-disponibles';
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.success) {
+        casosDisponibles = data.casos;
+        
+        // Poblar dropdown modal
+        const selectModal = document.getElementById('kitCaso');
+        selectModal.innerHTML = '<option value="">Seleccionar caso...</option>';
+        
+        data.casos.forEach(c => {
+          const option = document.createElement('option');
+          option.value = c.caso_id;
+          option.textContent = `${c.caso_id} - ${c.nombre}`;
+          option.dataset.nombre = c.nombre;
+          selectModal.appendChild(option);
+        });
+        
+        // Poblar filtro
+        const selectFiltro = document.getElementById('filtroCaso');
+        selectFiltro.innerHTML = '<option value="">Todos los casos</option>';
+        
+        data.casos.forEach(c => {
+          const option = document.createElement('option');
+          option.value = c.caso_id;
+          option.textContent = `${c.caso_id} - ${c.nombre}`;
+          selectFiltro.appendChild(option);
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar casos:', error);
     }
   }
 
   // ===== CARGAR HERRAMIENTAS =====
   async function cargarHerramientas(grupo = '') {
     try {
-      const url = grupo ? `/api/kits/herramientas-disponibles?grupo=${grupo}` : '/api/kits/herramientas-disponibles';
+      const url = grupo 
+        ? `/api/kits/herramientas-disponibles?grupo=${grupo}` 
+        : '/api/kits/herramientas-disponibles';
+      
       const response = await fetch(url);
       const data = await response.json();
       
@@ -148,7 +149,7 @@
     }
   }
 
-  // ===== RENDERIZAR CHECKBOXES DE HERRAMIENTAS (CON PERSISTENCIA) =====
+  // ===== RENDERIZAR CHECKBOXES DE HERRAMIENTAS =====
   function renderHerramientasCheckboxes() {
     const grid = document.getElementById('herramientasGrid');
     
@@ -161,7 +162,6 @@
     let html = '';
     
     herramientasDisponibles.forEach(h => {
-      // ✅ Verificar si esta herramienta está seleccionada
       const isChecked = herramientasSeleccionadas.has(h.herramienta_id);
       
       html += `
@@ -182,7 +182,6 @@
     
     grid.innerHTML = html;
     
-    // ✅ Event listener para checkboxes (actualizar Set)
     grid.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
       checkbox.addEventListener('change', function() {
         if (this.checked) {
@@ -210,14 +209,13 @@
   // ===== FILTRAR HERRAMIENTAS POR GRUPO =====
   document.getElementById('filtroGrupoHerramientas')?.addEventListener('change', async function() {
     const grupo = this.value;
-    // ✅ NO limpiar herramientasSeleccionadas aquí
     await cargarHerramientas(grupo);
   });
 
   // ===== CARGAR KITS =====
   async function cargarKits() {
     try {
-      const response = await fetch('/api/kits?per_page=1000&tipo_kit=sop');
+      const response = await fetch('/api/kits-eventos?per_page=1000');
       const data = await response.json();
       
       if (data.success) {
@@ -232,21 +230,17 @@
 
   // ===== APLICAR FILTROS =====
   function aplicarFiltros() {
-    const fraccionFiltro = filtroFraccion.value;
-    const nivelFiltro = filtroNivel.value;
+    const eventoSeleccionado = filtroEvento?.value || '';
+    const casoSeleccionado = filtroCaso?.value || '';
     
     let kitsFiltrados = kitsCache;
     
-    if (fraccionFiltro) {
-      kitsFiltrados = kitsFiltrados.filter(k => k.codigo === fraccionFiltro);
+    if (eventoSeleccionado) {
+      kitsFiltrados = kitsFiltrados.filter(k => k.evento_tipo_id === eventoSeleccionado);
     }
     
-    if (nivelFiltro) {
-      if (nivelFiltro === 'general') {
-        kitsFiltrados = kitsFiltrados.filter(k => k.nivel_limpieza_id === null);
-      } else {
-        kitsFiltrados = kitsFiltrados.filter(k => k.nivel_limpieza_id === parseInt(nivelFiltro));
-      }
+    if (casoSeleccionado) {
+      kitsFiltrados = kitsFiltrados.filter(k => k.caso_id === casoSeleccionado);
     }
     
     renderTabla(kitsFiltrados);
@@ -257,9 +251,9 @@
     if (kits.length === 0) {
       tablaContainer.innerHTML = `
         <div class="empty-state">
-          <div style="font-size:3rem;margin-bottom:12px;">🧰</div>
-          <div style="font-size:1.1rem;margin-bottom:8px;">No hay kits</div>
-          <div style="font-size:.9rem;color:#999;">Agrega tu primer kit</div>
+          <div style="font-size:3rem;margin-bottom:1rem;">🧰</div>
+          <div style="font-size:1.1rem;font-weight:600;margin-bottom:.5rem;">No hay kits de eventos</div>
+          <div>Crea tu primer kit usando el botón "Agregar Kit"</div>
         </div>
       `;
       return;
@@ -269,10 +263,10 @@
       <table>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Fracción</th>
+            <th>Kit ID</th>
+            <th>Evento</th>
+            <th>Caso</th>
             <th>Nombre</th>
-            <th>Nivel</th>
             <th>Herramientas</th>
             <th>Acciones</th>
           </tr>
@@ -280,36 +274,31 @@
         <tbody>
           ${kits.map(k => `
             <tr>
-              <td><code>${k.kit_id}</code></td>
-              <td>${k.codigo}</td>
-              <td><strong>${k.nombre}</strong></td>
+              <td><strong>${k.kit_id}</strong></td>
+              <td>${k.evento_nombre}</td>
+              <td>${k.caso_nombre}</td>
+              <td>${k.nombre}</td>
               <td>
-                <span class="badge">
-                  ${k.nivel_limpieza_id === null ? 'General' : `Nivel ${k.nivel_limpieza_id}`}
-                </span>
-              </td>
-              <td>
-                <div class="herramientas-list">
-                  ${k.herramientas.slice(0, 3).map(h => `
-                    <span class="herramienta-tag" title="${h.nombre}">${h.herramienta_id}</span>
-                  `).join('')}
-                  ${k.cantidad_herramientas > 3 ? `<span class="herramienta-tag">+${k.cantidad_herramientas - 3}</span>` : ''}
-                </div>
+                <span class="badge">${k.cantidad_herramientas} herramienta${k.cantidad_herramientas !== 1 ? 's' : ''}</span>
               </td>
               <td>
                 <div class="actions">
-                  <button class="btn-icon btn-editar-kit"
-                          data-id="${k.kit_id}"
-                          data-nombre="${k.nombre}"
-                          data-nivel="${k.nivel_limpieza_id || ''}"
-                          data-herramientas='${JSON.stringify(k.herramientas.map(h => h.herramienta_id))}'
-                          title="Editar">
+                  <button 
+                    class="btn-icon btn-editar-kit" 
+                    title="Editar"
+                    data-id="${k.kit_id}"
+                    data-nombre="${k.nombre}"
+                    data-caso="${k.caso_id}"
+                    data-herramientas='${JSON.stringify(k.herramientas.map(h => h.herramienta_id))}'
+                  >
                     ✏️
                   </button>
-                  <button class="btn-icon btn-delete btn-eliminar-kit"
-                          data-id="${k.kit_id}"
-                          data-nombre="${k.nombre}"
-                          title="Eliminar">
+                  <button 
+                    class="btn-icon btn-delete btn-eliminar-kit" 
+                    title="Eliminar"
+                    data-id="${k.kit_id}"
+                    data-nombre="${k.nombre}"
+                  >
                     🗑️
                   </button>
                 </div>
@@ -323,71 +312,102 @@
     tablaContainer.innerHTML = html;
   }
 
-    // ===== AUTO-LLENAR NOMBRE Y ID AL SELECCIONAR FRACCIÓN =====
-    document.getElementById('kitFraccion')?.addEventListener('change', async function() {
-        const fraccionId = this.value;  // ✅ CAMBIO: ahora es fraccion_id completo
-        const nombreFraccion = this.options[this.selectedIndex].dataset.nombre;
-        const codigo = this.options[this.selectedIndex].dataset.codigo;  // ✅ NUEVO: extraer código
-        
-        if (!fraccionId) {
-        document.getElementById('kitId').value = '';
-        document.getElementById('kitNombre').value = '';
-        return;
-        }
-        
-        document.getElementById('kitNombre').value = `Kit ${nombreFraccion}`;
-        
-        try {
-        const response = await fetch(`/api/kits/next-id?codigo=${codigo}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            document.getElementById('kitId').value = data.kit_id;
-        }
-        } catch (error) {
-        console.error('❌ Error al obtener ID:', error);
-        }
-    });
+  // ===== AUTO-LLENAR NOMBRE Y ID AL SELECCIONAR CASO =====
+  document.getElementById('kitCaso')?.addEventListener('change', async function() {
+    const casoId = this.value;
+    const nombreCaso = this.options[this.selectedIndex].dataset.nombre;
+    
+    if (!casoId) {
+      document.getElementById('kitId').value = '';
+      document.getElementById('kitNombre').value = '';
+      return;
+    }
+    
+    document.getElementById('kitNombre').value = `Kit ${nombreCaso}`;
+    
+    try {
+      const response = await fetch(`/api/kits-eventos/next-id?caso_id=${casoId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        document.getElementById('kitId').value = data.kit_id;
+      }
+    } catch (error) {
+      console.error('❌ Error al obtener ID:', error);
+    }
+  });
+
+  // ===== AUTO-CARGAR CASOS AL SELECCIONAR EVENTO EN MODAL =====
+  document.getElementById('kitEvento')?.addEventListener('change', async function() {
+    const eventoId = this.value;
+    
+    if (!eventoId) {
+      document.getElementById('kitCaso').innerHTML = '<option value="">Seleccionar caso...</option>';
+      document.getElementById('kitId').value = '';
+      document.getElementById('kitNombre').value = '';
+      return;
+    }
+    
+    await cargarCasosPorEvento(eventoId);
+  });
 
   // ===== ABRIR MODAL =====
-  async function abrirModal(modo, id = null, nombre = '', nivel = '', herramientasExistentes = []) {
+  async function abrirModal(modo, id = null, nombre = '', casoId = '', herramientasExistentes = []) {
     modoModal = modo;
     kitActualId = id;
 
     const modal = document.getElementById('modalKit');
     const titulo = document.getElementById('modalKitTitulo');
-    const fraccionField = document.getElementById('fraccionField');
-    const fraccionSelect = document.getElementById('kitFraccion');
+    const eventoSelect = document.getElementById('kitEvento');
+    const casoSelect = document.getElementById('kitCaso');
     const idInput = document.getElementById('kitId');
     const nombreInput = document.getElementById('kitNombre');
-    const nivelSelect = document.getElementById('kitNivel');
 
     document.getElementById('formKit').reset();
     idInput.value = '';
     document.getElementById('filtroGrupoHerramientas').value = '';
 
-    // ✅ Limpiar/cargar selecciones
     herramientasSeleccionadas.clear();
     
     if (modo === 'crear') {
-      titulo.textContent = 'Agregar Kit';
-      fraccionField.style.display = 'block';
-      fraccionSelect.setAttribute('required', '');
+      titulo.textContent = 'Agregar Kit de Evento';
+      
+      // Pre-seleccionar filtros si existen
+      const filtroEventoVal = filtroEvento?.value || '';
+      const filtroCasoVal = filtroCaso?.value || '';
+      
+      if (filtroEventoVal) {
+        eventoSelect.value = filtroEventoVal;
+        await cargarCasosPorEvento(filtroEventoVal);
+        
+        if (filtroCasoVal) {
+          casoSelect.value = filtroCasoVal;
+          // Trigger change para auto-llenar nombre e ID
+          casoSelect.dispatchEvent(new Event('change'));
+        }
+      }
 
     } else if (modo === 'editar') {
-      titulo.textContent = 'Editar Kit';
-      fraccionField.style.display = 'none';
-      fraccionSelect.removeAttribute('required');
+      titulo.textContent = 'Editar Kit de Evento';
+      
+      // Ocultar selects de evento/caso en modo edición
+      eventoSelect.disabled = true;
+      casoSelect.disabled = true;
       
       idInput.value = id;
       nombreInput.value = nombre;
-      nivelSelect.value = nivel === '' || nivel === null ? 'general' : nivel;
       
-      // ✅ Cargar herramientas seleccionadas en Set
+      // Cargar caso del kit
+      const kit = kitsCache.find(k => k.kit_id === id);
+      if (kit) {
+        eventoSelect.value = kit.evento_tipo_id;
+        await cargarCasosPorEvento(kit.evento_tipo_id);
+        casoSelect.value = casoId;
+      }
+      
       herramientasExistentes.forEach(hid => herramientasSeleccionadas.add(hid));
     }
     
-    // Cargar y renderizar herramientas
     await cargarHerramientas();
 
     modal.classList.add('is-open');
@@ -402,9 +422,9 @@
     
     document.getElementById('formKit').reset();
     document.getElementById('kitId').value = '';
-    document.getElementById('fraccionField').style.display = 'block';
+    document.getElementById('kitEvento').disabled = false;
+    document.getElementById('kitCaso').disabled = false;
     
-    // ✅ Limpiar selecciones
     herramientasSeleccionadas.clear();
     
     modoModal = 'crear';
@@ -417,7 +437,6 @@
 
     const btnGuardar = document.getElementById('btnGuardarKit');
     
-    // ✅ Obtener selecciones del Set
     const herramientasArray = Array.from(herramientasSeleccionadas);
 
     if (herramientasArray.length === 0) {
@@ -432,38 +451,34 @@
       let response, data;
 
       if (modoModal === 'crear') {
-        const fraccionId = document.getElementById('kitFraccion').value;  // ✅ CAMBIO 1
-        const codigo = document.getElementById('kitFraccion').options[
-          document.getElementById('kitFraccion').selectedIndex
-        ].dataset.codigo;  // ✅ CAMBIO 2: extraer código del dataset
-        
+        const casoId = document.getElementById('kitCaso').value;
         const nombre = document.getElementById('kitNombre').value.trim();
-        const nivelValue = document.getElementById('kitNivel').value;
-        const nivel_limpieza_id = (nivelValue === '' || nivelValue === 'general') ? null : parseInt(nivelValue);
 
-        response = await fetch('/api/kits', {
+        if (!casoId) {
+          alert('Debe seleccionar un caso');
+          btnGuardar.disabled = false;
+          btnGuardar.textContent = 'Guardar';
+          return;
+        }
+
+        response = await fetch('/api/kits-eventos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            codigo,
-            fraccion_id: fraccionId,  // ✅ CAMBIO 3: enviar fraccion_id
+            caso_id: casoId,
             nombre, 
-            nivel_limpieza_id, 
             herramientas: herramientasArray
           })
         });
 
       } else if (modoModal === 'editar') {
         const nombre = document.getElementById('kitNombre').value.trim();
-        const nivelValue = document.getElementById('kitNivel').value;
-        const nivel_limpieza_id = (nivelValue === '' || nivelValue === 'general') ? null : parseInt(nivelValue);
 
-        response = await fetch(`/api/kits/${kitActualId}`, {
+        response = await fetch(`/api/kits-eventos/${kitActualId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             nombre, 
-            nivel_limpieza_id, 
             herramientas: herramientasArray
           })
         });
@@ -498,7 +513,7 @@
     if (!confirmar) return;
 
     try {
-      const response = await fetch(`/api/kits/${id}`, {
+      const response = await fetch(`/api/kits-eventos/${id}`, {
         method: 'DELETE'
       });
 
@@ -532,7 +547,7 @@
     if (e.target.closest('.btn-editar-kit')) {
       const btn = e.target.closest('.btn-editar-kit');
       const herramientas = JSON.parse(btn.dataset.herramientas);
-      abrirModal('editar', btn.dataset.id, btn.dataset.nombre, btn.dataset.nivel, herramientas);
+      abrirModal('editar', btn.dataset.id, btn.dataset.nombre, btn.dataset.caso, herramientas);
     }
 
     if (e.target.closest('.btn-eliminar-kit')) {

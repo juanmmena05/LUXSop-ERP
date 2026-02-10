@@ -36,51 +36,61 @@
 
   // ===== CONFIGURACIÓN DE NIVELES =====
   const NAV_LEVELS = {
-    main: {
-      level: 0,
-      title: 'Menu Principal',
-      showBrand: true,
-      items: [
-        { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
-        { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
-        { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
-        { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
-      ]
-    },
-    catalogos: {
-      level: 1,
-      title: 'Catálogos',
-      parent: 'main',
-      showBrand: false,
-      items: [
-        { icon: '📦', text: 'Regulares', action: 'navigateTo', target: 'regulares' },
-        { icon: '🎯', text: 'Eventos', action: 'alert', message: 'Próximamente disponible' },
-        { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
-      ]
-    },
-    regulares: {
-      level: 2,
-      title: 'Regulares',
-      parent: 'catalogos',
-      showBrand: false,
-      items: [
-        { icon: '🔧', text: 'Herramientas', url: '{{ url_for("main.catalogos_herramientas") }}' },
-        { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits") }}' },
-        { icon: '🧩', text: 'Elementos', url: '{{ url_for("main.catalogos_elementos") }}' },
-        { icon: '📊', text: 'Fracciones', action: 'alert', message: 'Próximamente disponible' }
-      ]
-    },
-    compartidos: {
-      level: 2,
-      title: 'Compartidos',
-      parent: 'catalogos',
-      showBrand: false,
-      items: [
-        { icon: '🧪', text: 'Químicos/Recetas', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
-        { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
-      ]
-    }
-  };
+  main: {
+    level: 0,
+    title: 'Menu Principal',
+    showBrand: true,
+    items: [
+      { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
+      { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
+      { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
+      { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
+    ]
+  },
+  catalogos: {
+    level: 1,
+    title: 'Catálogos',
+    parent: 'main',
+    showBrand: false,
+    items: [
+      { icon: '📦', text: 'Regulares', action: 'navigateTo', target: 'regulares' },
+      { icon: '🎯', text: 'Eventos', action: 'navigateTo', target: 'eventos' }, // ← CAMBIO AQUÍ
+      { icon: '🔗', text: 'Compartidos', action: 'navigateTo', target: 'compartidos' }
+    ]
+  },
+  regulares: {
+    level: 2,
+    title: 'Regulares',
+    parent: 'catalogos',
+    showBrand: false,
+    items: [
+      { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits") }}' },
+      { icon: '🧩', text: 'Elementos', url: '{{ url_for("main.catalogos_elementos") }}' },
+      { icon: '📊', text: 'Fracciones', url: '{{ url_for("main.catalogos_fracciones") }}' }
+    ]
+  },
+  eventos: {
+    level: 2,
+    title: 'Eventos',
+    parent: 'catalogos',
+    showBrand: false,
+    items: [
+      { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits_eventos") }}' },
+      { icon: '📊', text: 'Fracciones', url: '{{ url_for("main.catalogos_fracciones_eventos") }}' }  // ← NUEVO
+    ]
+  },
+  compartidos: {
+    level: 2,
+    title: 'Compartidos',
+    parent: 'catalogos',
+    showBrand: false,
+    items: [
+      { icon: '🔧', text: 'Herramientas', url: '{{ url_for("main.catalogos_herramientas") }}' },
+      { icon: '🧪', text: 'Químicos', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
+      { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
+    ]
+  }
+};
 
   // ===== ESTADO DE NAVEGACIÓN =====
   let currentLevel = 'main';

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fracciones de Eventos · LuxSOP</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css') }}">
+  <style>
+    :root {
+      --fg: #222;
+      --muted: #888;
+      --line: #ddd;
+      --bg: #f9f9f9;
+      --blue: #0d6efd;
+      --green: #198754;
+      --card: #fff;
+      --h: 46px;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+      box-sizing: border-box;
+    }
+
+    html { background: var(--bg); }
+
+    body {
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      margin: 0;
+      padding: 2rem;
+      padding-left: 70px;
+      max-width: 1400px;
+      margin-inline: auto;
+    }
+
+    @media (max-width: 900px) {
+      body { padding-left: 2rem; }
+    }
+
+    .head {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: .85rem;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 600;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-top: .35rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      padding: 20px;
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .table-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      height: var(--h);
+      padding: .55rem 1.1rem;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: filter 0.2s ease;
+    }
+
+    .btn-blue {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn-sm {
+      height: 36px;
+      padding: .4rem .8rem;
+      font-size: .85rem;
+    }
+
+    .btn:hover {
+      filter: brightness(.95);
+    }
+
+    .filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-group label {
+      font-size: .85rem;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .filter-group select {
+      padding: .5rem .75rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: .9rem;
+      background: #fff;
+      min-width: 250px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    thead {
+      background: #f8f9fa;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid var(--line);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: .9rem;
+    }
+
+    tr:hover {
+      background: #f8f9fa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .badge-success {
+      background: #d1f0dd;
+      color: #0f6938;
+    }
+
+    .badge-warning {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--fg);
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 1.1rem;
+    }
+
+    .btn-icon:hover {
+      background: #f8f9fa;
+      border-color: #aaa;
+    }
+
+    .btn-icon.btn-delete:hover {
+      background: #fff5f5;
+      border-color: #dc3545;
+      color: #dc3545;
+    }
+
+    /* Modal */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.is-open {
+      display: flex;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1;
+    }
+
+    .modal-content {
+      position: relative;
+      z-index: 2;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 90%;
+      max-width: 700px;
+      max-height: 85vh;
+      overflow: hidden;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-header h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--muted);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: #f8f9fa;
+      color: var(--fg);
+    }
+
+    .modal-body {
+      padding: 24px;
+      max-height: calc(85vh - 180px);
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: .9rem;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: .7rem .85rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: .95rem;
+      transition: border-color 0.2s ease;
+      background: #fff;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    }
+
+    .form-group input:disabled,
+    .form-group select:disabled {
+      background: #f5f5f5;
+      cursor: not-allowed;
+    }
+
+    .form-hint {
+      font-size: .85rem;
+      color: var(--muted);
+      margin-top: 6px;
+      display: block;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: .9rem;
+    }
+
+    .alert-warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+    }
+  </style>
+</head>
+
+<body>
+  {% include 'components/sidebar_nav.html' %}
+
+  <div class="head">
+    <h1>📊 Fracciones de Eventos</h1>
+    <div class="sub">Gestiona las fracciones y sus metodologías para eventos específicos</div>
+  </div>
+
+  <div class="card">
+    <div class="table-header">
+      <div class="table-title">Lista de Fracciones de Eventos</div>
+      <button class="btn btn-blue btn-sm btn-agregar-fraccion">
+        Agregar Fracción
+      </button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Evento</label>
+        <select id="filtroEvento">
+          <option value="">Todos los eventos</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div id="tablaContainer"></div>
+  </div>
+
+  <!-- MODAL FRACCIÓN -->
+  <div class="modal" id="modalFraccion">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalFraccionTitulo">Agregar Fracción de Evento</h2>
+        <button class="modal-close">✕</button>
+      </div>
+      
+      <form id="formFraccion">
+        <div class="modal-body">
+          
+          <!-- Evento -->
+          <div class="form-group">
+            <label for="fraccionEvento">1. Evento *</label>
+            <select id="fraccionEvento" required>
+              <option value="">Seleccionar evento...</option>
+            </select>
+            <small class="form-hint">Selecciona el tipo de evento</small>
+          </div>
+
+          <!-- Código -->
+          <div class="form-group">
+            <label for="fraccionCodigo">2. Código de Fracción *</label>
+            <select id="fraccionCodigo" required>
+              <option value="">Seleccionar código...</option>
+            </select>
+            <small class="form-hint">Códigos disponibles basados en fracciones existentes</small>
+          </div>
+
+          <!-- Alerta si no hay códigos -->
+          <div id="alertaSinCodigos" class="alert alert-warning" style="display:none;">
+            ⚠️ Este evento no tiene fracciones aún. Contacta al administrador para agregar códigos base.
+          </div>
+
+          <!-- ID Generado -->
+          <div class="form-group">
+            <label>3. ID (Generado automáticamente)</label>
+            <input type="text" id="fraccionId" readonly>
+            <small class="form-hint">Formato: FR-XX-YY-001</small>
+          </div>
+
+          <!-- Nombre Base (readonly si es 002+) -->
+          <div class="form-group" id="groupNombreBase" style="display:none;">
+            <label for="fraccionNombreBase">4. Nombre Base (del código existente)</label>
+            <input type="text" id="fraccionNombreBase" readonly style="background:#f5f5f5;">
+            <small class="form-hint">Este nombre viene de la primera fracción con este código</small>
+          </div>
+
+          <!-- Nombre Custom (obligatorio si es 002+) -->
+          <div class="form-group" id="groupNombreCustom" style="display:none;">
+            <label for="fraccionNombreCustom">5. Variante/Custom *</label>
+            <input type="text" id="fraccionNombreCustom" placeholder="Ej: Profundo, Ligero, Sanitario...">
+            <small class="form-hint">Agrega una variante para diferenciar esta fracción</small>
+          </div>
+
+          <!-- Nombre Completo (solo si es 001 - primera fracción) -->
+          <div class="form-group" id="groupNombreCompleto">
+            <label for="fraccionNombre">4. Nombre *</label>
+            <input type="text" id="fraccionNombre" placeholder="Ej: Desmontaje y Segregación" required>
+            <small class="form-hint">Nombre descriptivo de la fracción</small>
+          </div>
+
+          <!-- Descripción -->
+          <div class="form-group">
+            <label for="fraccionDescripcion">5. Descripción</label>
+            <textarea id="fraccionDescripcion" placeholder="Descripción detallada del proceso..."></textarea>
+            <small class="form-hint">Describe el proceso o actividad de esta fracción</small>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-cancel-fraccion">
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-blue" id="btnGuardarFraccion">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/fracciones_eventos.js') }}?v=2"></script>
+</body>
+</html>

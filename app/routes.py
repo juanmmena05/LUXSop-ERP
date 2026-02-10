@@ -1176,8 +1176,7 @@ def reporte_persona_dia(fecha, personal_id):
                 "es_adicional": t.es_adicional if hasattr(t, 'es_adicional') else False,
                 "sop_id": sop_id,
             })
-    # ===== PROCESAR TAREAS FIJAS (NUEVO) =====
-    # ===== PROCESAR TAREAS FIJAS (NUEVO - CORREGIDO) =====
+    # ===== PROCESAR TAREAS FIJAS (CORREGIDO) =====
     for t in tareas_fijas:
         tipo_nombre = {
             'inicio': 'INICIO',
@@ -1210,6 +1209,7 @@ def reporte_persona_dia(fecha, personal_id):
                 fracciones_evento.append({
                     "orden": detalle.orden,
                     "fraccion_nombre": fraccion.nombre if fraccion else "",
+                    "nombre_full": fraccion.nombre if fraccion else "",  # ✅ AGREGADO
                     "descripcion": metodologia.descripcion if metodologia else "",
                     "nivel_limpieza": "—",
                     "tiempo_min": detalle.tiempo_estimado,
@@ -1226,7 +1226,7 @@ def reporte_persona_dia(fecha, personal_id):
                 "nivel": "—",
                 "tiempo_total_min": tiempo_total,
                 "observacion_critica": sop_evento.descripcion,
-                "fracciones": fracciones_evento,  # ✅ Ahora con fracciones reales
+                "fracciones": fracciones_evento,
                 "orden": t.orden if t.orden is not None else 0,
                 "orden_area": 0,
                 "orden_subarea": 0,
@@ -1248,18 +1248,20 @@ def reporte_persona_dia(fecha, personal_id):
                 "nivel": "—",
                 "tiempo_total_min": tiempo_fijo,
                 "observacion_critica": None,
-                "fracciones": [],  # Sin fracciones para inicio/receso
+                "fracciones": [],
                 "orden": t.orden if t.orden is not None else 0,
                 "orden_area": 0,
                 "orden_subarea": 0,
                 "es_adicional": False,
                 "sop_id": None,
             })
-    # ===== PROCESAR EVENTOS (NUEVO) =====
+
+
+    # ===== PROCESAR EVENTOS (CORREGIDO) =====
     for t in tareas_evento:
         sop_evento = t.sop_evento
         if not sop_evento:
-            continue  # Skip si no tiene SOP de evento asignado
+            continue
         
         caso_nombre = sop_evento.caso_catalogo.nombre
         evento_nombre = sop_evento.evento_catalogo.nombre
@@ -1268,11 +1270,12 @@ def reporte_persona_dia(fecha, personal_id):
         # Calcular tiempo total sumando fracciones
         tiempo_total = sum(detalle.tiempo_estimado for detalle in sop_evento.detalles)
         
-        # Construir fracciones para el reporte (igual que SOPs)
+        # Construir fracciones para el reporte
         fracciones_evento = []
         for detalle in sop_evento.detalles:
             fraccion = detalle.fraccion
             metodologia = fraccion.metodologia if fraccion else None
+            
             # Construir tabla de recursos (formato eventos: 4 columnas)
             tabla = None
             if detalle.kit or detalle.receta or detalle.consumo:
@@ -1285,6 +1288,7 @@ def reporte_persona_dia(fecha, personal_id):
             fracciones_evento.append({
                 "orden": detalle.orden,
                 "fraccion_nombre": fraccion.nombre if fraccion else "",
+                "nombre_full": fraccion.nombre if fraccion else "",  # ✅ AGREGADO
                 "descripcion": metodologia.descripcion if metodologia else "",
                 "nivel_limpieza": "—",
                 "tiempo_min": detalle.tiempo_estimado,
@@ -1301,13 +1305,14 @@ def reporte_persona_dia(fecha, personal_id):
             "nivel": "—",
             "tiempo_total_min": tiempo_total,
             "observacion_critica": sop_evento.descripcion,
-            "fracciones": fracciones_evento,  # ← Ahora con datos reales
+            "fracciones": fracciones_evento,
             "orden": t.orden if t.orden is not None else 0,
             "orden_area": t.area.orden_area if t.area and t.area.orden_area is not None else 9999,
             "orden_subarea": t.subarea.orden_subarea if t.subarea and t.subarea.orden_subarea is not None else 9999,
             "es_adicional": False,
             "sop_id": None,
         })
+
     # Ordenar todos los detalles
     detalles.sort(key=lambda d: (d.get("orden", 0), d.get("orden_area", 9999), d.get("orden_subarea", 9999)))
 
@@ -2811,7 +2816,17 @@ def sop_crear(subarea_id):
             )
 
             for sf in sfs_to_remove:
-                # borrar detalle de ESTE nivel
+                # ✅ NUEVO: Primero borrar ElementoSet de ESTE nivel
+                for fr_id in to_remove:
+                    # Generar el elemento_set_id esperado
+                    es_id = make_es_id(sop.sop_id, fr_id, nivel_id)
+                    
+                    # Borrar ElementoSet (cascade borrará ElementoDetalle automáticamente)
+                    es = ElementoSet.query.filter_by(elemento_set_id=es_id).first()
+                    if es:
+                        db.session.delete(es)
+                
+                # Borrar detalle de ESTE nivel
                 SopFraccionDetalle.query.filter_by(
                     sop_fraccion_id=sf.sop_fraccion_id,
                     nivel_limpieza_id=nivel_id
@@ -4190,13 +4205,15 @@ def obtener_evento_ejecucion(tarea_id):
         for detalle in sop_evento.detalles:
             tiempo_total += detalle.tiempo_estimado
             
-            # Obtener pasos de metodología
+            # ✅ Obtener pasos de metodología CON título de la fracción
             pasos = []
             if detalle.fraccion.metodologia:
-                pasos = [{
-                    'numero_paso': paso.numero_paso,
-                    'descripcion': paso.descripcion
-                } for paso in detalle.fraccion.metodologia.pasos]
+                for paso in detalle.fraccion.metodologia.pasos:
+                    pasos.append({
+                        'numero_paso': paso.numero_paso,
+                        'titulo': detalle.fraccion.nombre,  # ← AGREGADO: título viene de la fracción
+                        'descripcion': paso.descripcion
+                    })
             
             fraccion_data = {
                 'detalle_id': detalle.detalle_id,
@@ -4630,6 +4647,52 @@ def sop_evento_detalle(sop_evento_id):
     """
     sop_evento = SopEvento.query.get_or_404(sop_evento_id)
     
+    # POST: Guardar cambios PRIMERO (antes de cargar detalles_list)
+    if request.method == "POST":
+        detalle_id = request.form.get("detalle_id", "").strip()
+        
+        if not detalle_id:
+            flash("Detalle ID no encontrado", "error")
+            return redirect(url_for("main.sop_evento_detalle",
+                                   sop_evento_id=sop_evento_id))
+        
+        # Obtener el detalle específico para editar
+        detalle_actual = SopEventoDetalle.query.get(int(detalle_id))
+        
+        if not detalle_actual or detalle_actual.sop_evento_id != sop_evento_id:
+            flash("Detalle no encontrado", "error")
+            return redirect(url_for("main.sop_evento_detalle",
+                                   sop_evento_id=sop_evento_id))
+        
+        # Tiempo estimado
+        tiempo_raw = request.form.get("tiempo_estimado", "").strip()
+        if tiempo_raw:
+            try:
+                detalle_actual.tiempo_estimado = int(tiempo_raw)
+            except ValueError:
+                flash("Tiempo inválido", "warning")
+                return redirect(url_for("main.sop_evento_detalle",
+                                       sop_evento_id=sop_evento_id,
+                                       detalle_id=detalle_actual.detalle_id))
+        
+        # Kit, Receta, Consumo
+        detalle_actual.kit_id = request.form.get("kit_id", "").strip() or None
+        detalle_actual.receta_id = request.form.get("receta_id", "").strip() or None
+        detalle_actual.consumo_id = request.form.get("consumo_id", "").strip() or None
+        
+        try:
+            db.session.commit()
+            flash("✅ Detalle guardado", "success")
+        except Exception as e:
+            db.session.rollback()
+            print("💥 ERROR guardando detalle evento:", repr(e))
+            flash("Error guardando detalle", "error")
+        
+        return redirect(url_for("main.sop_evento_detalle",
+                               sop_evento_id=sop_evento_id,
+                               detalle_id=detalle_actual.detalle_id))
+    
+    # GET: Cargar datos para mostrar
     # Obtener TODOS los detalles del SOP (fracciones asignadas)
     detalles_list = (
         SopEventoDetalle.query
@@ -4644,9 +4707,8 @@ def sop_evento_detalle(sop_evento_id):
                                evento_tipo_id=sop_evento.evento_tipo_id,
                                caso_id=sop_evento.caso_id))
     
-    # Determinar qué detalle estamos editando
-    detalle_id = (request.args.get("detalle_id") or 
-                  request.form.get("detalle_id") or "").strip()
+    # Determinar qué detalle estamos mostrando
+    detalle_id = request.args.get("detalle_id", "").strip()
     
     if detalle_id:
         detalle_id = int(detalle_id)
@@ -4655,7 +4717,6 @@ def sop_evento_detalle(sop_evento_id):
     else:
         detalle_actual = detalles_list[0]
     
-
     # ✅ Filtrar kits por tipo_kit='evento' Y caso_id del SOP
     kits = (
         Kit.query
@@ -4672,36 +4733,6 @@ def sop_evento_detalle(sop_evento_id):
     if detalle_actual.fraccion.metodologia:
         metodologia = detalle_actual.fraccion.metodologia
     
-    # POST: Guardar cambios
-    if request.method == "POST":
-        # Tiempo estimado
-        tiempo_raw = (request.form.get("tiempo_estimado") or "").strip()
-        if tiempo_raw:
-            try:
-                detalle_actual.tiempo_estimado = int(tiempo_raw)
-            except ValueError:
-                flash("Tiempo inválido", "warning")
-                return redirect(url_for("main.sop_evento_detalle",
-                                       sop_evento_id=sop_evento_id,
-                                       detalle_id=detalle_actual.detalle_id))
-        
-        # Kit, Receta, Consumo
-        detalle_actual.kit_id = (request.form.get("kit_id") or "").strip() or None
-        detalle_actual.receta_id = (request.form.get("receta_id") or "").strip() or None
-        detalle_actual.consumo_id = (request.form.get("consumo_id") or "").strip() or None
-        
-        try:
-            db.session.commit()
-            flash("✅ Detalle guardado", "success")
-        except Exception as e:
-            db.session.rollback()
-            print("💥 ERROR guardando detalle evento:", repr(e))
-            flash("Error guardando detalle", "error")
-        
-        return redirect(url_for("main.sop_evento_detalle",
-                               sop_evento_id=sop_evento_id,
-                               detalle_id=detalle_actual.detalle_id))
-    
     # GET: Renderizar
     return render_template(
         "sop_evento_detalle.html",
@@ -4714,7 +4745,6 @@ def sop_evento_detalle(sop_evento_id):
         metodologia=metodologia,
         hide_nav=True
     )
-
 
 # =========================
 # CATÁLOGOS - QUÍMICOS Y RECETAS
@@ -5477,31 +5507,49 @@ def api_recetas_eliminar(receta_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+
 @main_bp.route("/api/recetas/fracciones-disponibles", methods=["GET"])
 @admin_required
 def api_recetas_fracciones_disponibles():
     """
-    Lista todas las fracciones para dropdown
+    Retorna fracciones disponibles para crear recetas.
+    Incluye nombre_full para distinguir variaciones.
     """
-    fracciones = Fraccion.query.order_by(Fraccion.fraccion_nombre).all()
-    
-    return jsonify({
-        "success": True,
-        "fracciones": [
-            {
-                "codigo": f.fraccion_id.split('-')[1],  # "FR-TL-001" → "TL"
-                "nombre": f.fraccion_nombre,  # ✅ Cambiado a fraccion_nombre
-                "fraccion_id": f.fraccion_id
-            }
-            for f in fracciones
-        ]
-    })
+    try:
+        # Obtener todas las fracciones ordenadas por código
+        fracciones = Fraccion.query.order_by(Fraccion.fraccion_id).all()
+        
+        fracciones_data = []
+        for f in fracciones:
+            # Extraer código (ej: FR-MH-001 → MH)
+            partes = f.fraccion_id.split('-')
+            codigo = partes[1] if len(partes) >= 2 else ''
+            
+            # Calcular nombre_full
+            nombre_full = f.fraccion_nombre
+            if f.nombre_custom:
+                nombre_full = f"{f.fraccion_nombre} — {f.nombre_custom}"
+            
+            fracciones_data.append({
+                "fraccion_id": f.fraccion_id,
+                "codigo": codigo,
+                "nombre": f.fraccion_nombre,  # nombre base del glosario
+                "nombre_custom": f.nombre_custom,
+                "nombre_full": nombre_full  # ← NUEVO
+            })
+        
+        return jsonify({
+            "success": True,
+            "fracciones": fracciones_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # =========================
 # API - CONSUMOS (CRUD)
 # =========================
-
 @main_bp.route("/api/consumos/next-id", methods=["GET"])
 @admin_required
 def api_consumos_next_id():
@@ -6558,26 +6606,39 @@ def catalogos_herramientas():
 # =========================
 # API - KITS (CRUD)
 # =========================
-
 @main_bp.route("/api/kits/fracciones-disponibles", methods=["GET"])
 @admin_required
 def api_kits_fracciones_disponibles():
     """
-    Lista todas las fracciones para dropdown (igual que recetas).
+    Retorna fracciones disponibles para crear kits.
+    Incluye nombre_full para distinguir variaciones.
     """
     try:
-        fracciones = Fraccion.query.order_by(Fraccion.fraccion_nombre).all()
+        # Obtener todas las fracciones ordenadas por código
+        fracciones = Fraccion.query.order_by(Fraccion.fraccion_id).all()
+        
+        fracciones_data = []
+        for f in fracciones:
+            # Extraer código (ej: FR-MH-001 → MH)
+            partes = f.fraccion_id.split('-')
+            codigo = partes[1] if len(partes) >= 2 else ''
+            
+            # Calcular nombre_full
+            nombre_full = f.fraccion_nombre
+            if f.nombre_custom:
+                nombre_full = f"{f.fraccion_nombre} — {f.nombre_custom}"
+            
+            fracciones_data.append({
+                "fraccion_id": f.fraccion_id,
+                "codigo": codigo,
+                "nombre": f.fraccion_nombre,  # nombre base del glosario
+                "nombre_custom": f.nombre_custom,
+                "nombre_full": nombre_full  # ← NUEVO
+            })
         
         return jsonify({
             "success": True,
-            "fracciones": [
-                {
-                    "codigo": f.fraccion_id.split('-')[1],  # "FR-TL-001" → "TL"
-                    "nombre": f.fraccion_nombre,
-                    "fraccion_id": f.fraccion_id
-                }
-                for f in fracciones
-            ]
+            "fracciones": fracciones_data
         })
         
     except Exception as e:
@@ -6689,6 +6750,7 @@ def api_kits_listar():
         per_page = request.args.get('per_page', 50, type=int)
         fraccion = request.args.get('fraccion', '').strip().upper()
         nivel = request.args.get('nivel', '').strip()
+        tipo_kit = request.args.get('tipo_kit', '').strip()
         
         # Query base
         query = Kit.query
@@ -6703,6 +6765,9 @@ def api_kits_listar():
                 query = query.filter(Kit.nivel_limpieza_id.is_(None))
             else:
                 query = query.filter(Kit.nivel_limpieza_id == int(nivel))
+
+        if tipo_kit:
+            query = query.filter_by(tipo_kit=tipo_kit)
         
         # Ordenar y paginar
         query = query.order_by(Kit.kit_id.asc())
@@ -6752,40 +6817,33 @@ def api_kits_crear():
     Crea un nuevo kit con sus herramientas.
     Body JSON:
     {
-        "codigo": "TL",
-        "nombre": "Kit Tallar Baño",
+        "codigo": "MH",
+        "fraccion_id": "FR-MH-002",
+        "nombre": "Kit Mop Húmedo",
         "nivel_limpieza_id": null,  // null = general, o 1, 2, 3, 4
-        "herramientas": ["HE-CE-001", "HE-FI-001", "HE-GU-001"]  // IDs de herramientas
+        "herramientas": ["HE-CE-001", "HE-FI-001"]
     }
-    
-    Crea:
-    - Kit (kit_id, fraccion_id, nivel_limpieza_id, nombre, tipo_kit='sop', caso_id=null)
-    - KitDetalle (uno por cada herramienta seleccionada)
     """
     try:
         data = request.get_json()
         
-        # Validaciones
         codigo = data.get("codigo", "").strip().upper()
+        fraccion_id = data.get("fraccion_id", "").strip()
         nombre = data.get("nombre", "").strip()
         nivel_limpieza_id = data.get("nivel_limpieza_id")
         herramientas_ids = data.get("herramientas", [])
+
+        # 1. Validar código y fraccion_id
+        if not codigo or not fraccion_id:
+            return jsonify({"success": False, "error": "Código y fracción requeridos"}), 400
         
-        # 1. Validar código
-        if not codigo or len(codigo) != 2:
-            return jsonify({"success": False, "error": "Código inválido (2 caracteres)"}), 400
+        if len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
         
-        # 2. Validar que código venga de fracción existente
-        pattern_fraccion = f"FR-{codigo}-%"
-        fraccion = Fraccion.query.filter(
-            Fraccion.fraccion_id.like(pattern_fraccion)
-        ).first()
-        
+        # 2. Validar que fraccion_id existe
+        fraccion = Fraccion.query.get(fraccion_id)
         if not fraccion:
-            return jsonify({
-                "success": False,
-                "error": f"El código '{codigo}' no corresponde a ninguna fracción existente"
-            }), 400
+            return jsonify({"success": False, "error": f"Fracción {fraccion_id} no encontrada"}), 404
         
         # 3. Validar nombre
         if not nombre:
@@ -6823,14 +6881,14 @@ def api_kits_crear():
         
         kit_id = f"KT-{codigo}-{siguiente:03d}"
         
-        # 8. Crear Kit
+        # 8. Crear Kit (usar fraccion_id del frontend)
         nuevo_kit = Kit(
             kit_id=kit_id,
-            fraccion_id=fraccion.fraccion_id,
+            fraccion_id=fraccion_id,  # ✅ Usar el fraccion_id específico
             nivel_limpieza_id=nivel_limpieza_id,
             nombre=nombre,
-            tipo_kit='sop',  # Fijo para kits regulares
-            caso_id=None  # NULL para kits regulares
+            tipo_kit='sop',
+            caso_id=None
         )
         
         db.session.add(nuevo_kit)
@@ -6841,7 +6899,7 @@ def api_kits_crear():
             detalle = KitDetalle(
                 kit_id=kit_id,
                 herramienta_id=h_id,
-                nota=nombre  # Nota = nombre del kit
+                nota=nombre
             )
             db.session.add(detalle)
         
@@ -7013,18 +7071,19 @@ def api_fracciones_catalogos():
     """
     try:
         GLOSARIO_FRACCIONES = {
-            'BS': 'Sacar Basura',
-            'TL': 'Tallar Baño',
             'SE': 'Colocar Señalética',
+            'BS': 'Sacar Basura',
             'SP': 'Sacudir Superficies',
-            'TR': 'Trapear',
-            'LV': 'Lavar',
-            'PU': 'Pulir',
+            'VI': 'Limpiar Vidrios',
             'BA': 'Barrer',
-            'AS': 'Aspirar',
-            'DE': 'Desinfectar',
-            'LI': 'Limpiar',
-            'SA': 'Sanitizar',
+            'TL': 'Tallar Baño',
+            'CN': 'Reabastecer Consumibles',
+            'SA': 'Sacudir Elementos',
+            'TA': 'Lavar Trastes',
+            'AC': 'Acomodar Trastes',
+            'MS': 'Mop Seco',
+            'MH': 'Mop Húmedo',
+            'TR': 'Trapear',
         }
         
         # Convertir a lista para el frontend
@@ -7059,7 +7118,10 @@ def api_fracciones_next_id():
     """
     Genera el próximo ID disponible para un código específico.
     Query param: codigo (ej: BS, TL, SP)
-    Retorna: FR-{codigo}-{número} (ej: FR-BS-002)
+    Retorna: 
+    - fraccion_id: FR-{codigo}-{número}
+    - es_primera: true si es 001, false si es 002+
+    - customs_existentes: lista de customs ya usados en este código
     """
     codigo = request.args.get("codigo", "").strip().upper()
     
@@ -7071,7 +7133,6 @@ def api_fracciones_next_id():
     
     try:
         # Buscar la última fracción de este código
-        # Pattern: FR-{codigo}-%
         pattern = f"FR-{codigo}-%"
         ultima = Fraccion.query.filter(
             Fraccion.fraccion_id.like(pattern)
@@ -7097,16 +7158,32 @@ def api_fracciones_next_id():
         # Formatear con 3 dígitos (001, 002, ..., 999)
         nuevo_id = f"FR-{codigo}-{siguiente:03d}"
         
+        # ✅ NUEVO: Determinar si es primera
+        es_primera = (siguiente == 1)
+        
+        # ✅ NUEVO: Obtener customs existentes de este código
+        customs_existentes = []
+        if not es_primera:
+            fracciones_codigo = Fraccion.query.filter(
+                Fraccion.fraccion_id.like(pattern)
+            ).all()
+            
+            for f in fracciones_codigo:
+                if f.nombre_custom:
+                    customs_existentes.append(f.nombre_custom)
+        
         return jsonify({
             "success": True,
             "fraccion_id": nuevo_id,
             "codigo": codigo,
-            "numero": siguiente
+            "numero": siguiente,
+            "es_primera": es_primera,  # ✅ NUEVO
+            "customs_existentes": customs_existentes  # ✅ NUEVO
         })
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
+    
 
 @main_bp.route("/api/fracciones", methods=["GET"])
 @admin_required
@@ -7137,19 +7214,27 @@ def api_fracciones_listar():
         # Formatear resultados
         fracciones_data = []
         for f in pagination.items:
-            # Calcular nombre_full
-            nombre_full = f.fraccion_nombre
-            if f.nombre_custom:
-                nombre_full = f"{f.fraccion_nombre} — {f.nombre_custom}"
+            # ✅ NUEVO: Obtener niveles configurados
+            niveles = db.session.query(Metodologia.nivel_limpieza_id)\
+                .filter_by(fraccion_id=f.fraccion_id)\
+                .order_by(Metodologia.nivel_limpieza_id)\
+                .all()
+            
+            niveles_ids = [n[0] for n in niveles]  # [1, 2, 3]
+            
+            # Mapeo a letras
+            nivel_map = {1: 'B', 2: 'M', 3: 'P', 4: 'E'}
+            niveles_letras = [nivel_map.get(n, str(n)) for n in niveles_ids]
             
             fracciones_data.append({
                 'fraccion_id': f.fraccion_id,
                 'fraccion_nombre': f.fraccion_nombre,  # nombre base
                 'nombre_custom': f.nombre_custom,
-                'nombre_full': nombre_full,
                 'nota_tecnica': f.nota_tecnica,
                 'grupo_fracciones': f.grupo_fracciones,
-                'codigo': f.fraccion_id.split('-')[1] if '-' in f.fraccion_id else ''
+                'codigo': f.fraccion_id.split('-')[1] if '-' in f.fraccion_id else '',
+                'niveles': niveles_ids,  # ✅ [1, 2, 3]
+                'niveles_display': ' '.join(niveles_letras)  # ✅ "B M P"
             })
         
         return jsonify({
@@ -7171,13 +7256,11 @@ def api_fracciones_crear():
     Crea una nueva fracción.
     Body JSON:
     {
-        "codigo": "BS",                     # Del glosario
-        "nombre_custom": "Producción",      # Opcional
-        "nota_tecnica": "...",              # Opcional
-        "grupo_fracciones": "administracion" # administracion o produccion
+        "codigo": "BS",
+        "nombre_custom": "Producción",  // Obligatorio si es 002+, prohibido si es 001
+        "nota_tecnica": "...",
+        "grupo_fracciones": "administracion"
     }
-    
-    El nombre base viene automático del glosario según el código.
     """
     try:
         GLOSARIO_FRACCIONES = {
@@ -7198,7 +7281,7 @@ def api_fracciones_crear():
         
         data = request.get_json()
         
-        # Validaciones
+        # Validaciones básicas
         codigo = data.get("codigo", "").strip().upper()
         nombre_custom = data.get("nombre_custom", "").strip() or None
         nota_tecnica = data.get("nota_tecnica", "").strip() or None
@@ -7222,7 +7305,7 @@ def api_fracciones_crear():
         if grupo_fracciones and grupo_fracciones not in ['administracion', 'produccion']:
             return jsonify({"success": False, "error": "Grupo debe ser 'administracion' o 'produccion'"}), 400
         
-        # 5. Generar ID
+        # 5. Generar ID y determinar si es primera
         pattern = f"FR-{codigo}-%"
         ultima = Fraccion.query.filter(
             Fraccion.fraccion_id.like(pattern)
@@ -7238,12 +7321,48 @@ def api_fracciones_crear():
             siguiente = 1
         
         fraccion_id = f"FR-{codigo}-{siguiente:03d}"
+        es_primera = (siguiente == 1)
         
-        # 6. Crear fracción
+        # ✅ 6. VALIDACIONES DE NOMBRE_CUSTOM según es_primera
+        if es_primera:
+            # FR-XX-001: Custom NO permitido
+            if nombre_custom:
+                return jsonify({
+                    "success": False,
+                    "error": "La primera fracción no debe tener nombre custom (usa el nombre base del glosario)"
+                }), 400
+        else:
+            # FR-XX-002+: Custom OBLIGATORIO
+            if not nombre_custom:
+                return jsonify({
+                    "success": False,
+                    "error": f"Este código ya existe ({fraccion_id}). Debes agregar un nombre custom para diferenciarlo"
+                }), 400
+            
+            # Validar que custom no sea igual al nombre base
+            if nombre_custom.upper() == nombre_base.upper():
+                return jsonify({
+                    "success": False,
+                    "error": "El nombre custom no puede ser igual al nombre base"
+                }), 400
+            
+            # Validar que custom no esté repetido en este código
+            custom_duplicado = Fraccion.query.filter(
+                Fraccion.fraccion_id.like(pattern),
+                db.func.upper(Fraccion.nombre_custom) == nombre_custom.upper()
+            ).first()
+            
+            if custom_duplicado:
+                return jsonify({
+                    "success": False,
+                    "error": f"Ya existe otra fracción de este código con el custom '{nombre_custom}'"
+                }), 400
+        
+        # 7. Crear fracción
         nueva_fraccion = Fraccion(
             fraccion_id=fraccion_id,
-            fraccion_nombre=nombre_base,      # ← Nombre base del glosario
-            nombre_custom=nombre_custom,      # ← Variación opcional
+            fraccion_nombre=nombre_base,
+            nombre_custom=nombre_custom,
             nota_tecnica=nota_tecnica,
             grupo_fracciones=grupo_fracciones
         )
@@ -7264,14 +7383,15 @@ def api_fracciones_crear():
                 "nombre_custom": nueva_fraccion.nombre_custom,
                 "nombre_full": nombre_full,
                 "nota_tecnica": nueva_fraccion.nota_tecnica,
-                "grupo_fracciones": nueva_fraccion.grupo_fracciones
+                "grupo_fracciones": nueva_fraccion.grupo_fracciones,
+                "es_primera": es_primera  # ✅ Para el mensaje de éxito
             }
         }), 201
         
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
-
+    
 
 @main_bp.route("/api/fracciones/<fraccion_id>", methods=["PUT"])
 @admin_required
@@ -7338,11 +7458,12 @@ def api_fracciones_editar(fraccion_id):
 def api_fracciones_eliminar(fraccion_id):
     """
     Elimina una fracción.
-    Valida que NO esté siendo usada en:
-    - Metodologia
-    - SopFraccion
-    - ElementoSet
-    - Kit
+    
+    Validaciones:
+    - No debe estar en uso en SOPs
+    - No debe estar en elemento_sets
+    - No debe estar en kits
+    - Si tiene metodologías SIN usar → se borran en cascada
     """
     try:
         fraccion = Fraccion.query.get(fraccion_id)
@@ -7350,27 +7471,1185 @@ def api_fracciones_eliminar(fraccion_id):
         if not fraccion:
             return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
         
-        # Validar que no esté en uso
-        en_metodologia = Metodologia.query.filter_by(fraccion_id=fraccion_id).count()
-        en_sop = SopFraccion.query.filter_by(fraccion_id=fraccion_id).count()
-        en_elemento = ElementoSet.query.filter_by(fraccion_id=fraccion_id).count()
-        en_kit = Kit.query.filter_by(fraccion_id=fraccion_id).count()
+        # ===== VALIDAR USO EN SISTEMA =====
         
-        total_usos = en_metodologia + en_sop + en_elemento + en_kit
+        # 1. ¿Está en SOPs?
+        sops_count = db.session.query(SopFraccion).filter_by(fraccion_id=fraccion_id).count()
         
-        if total_usos > 0:
+        # 2. ¿Está en elemento_sets?
+        elemento_sets_count = db.session.query(ElementoSet).filter_by(fraccion_id=fraccion_id).count()
+        
+        # 3. ¿Está en kits?
+        from app.models import Kit  # Asegúrate de importar si no está
+        kits_count = db.session.query(Kit).filter(
+            Kit.fraccion_id == fraccion_id
+        ).count()
+        
+        # Si está en uso → NO BORRAR
+        if sops_count > 0 or elemento_sets_count > 0 or kits_count > 0:
             return jsonify({
                 "success": False,
-                "error": f"No se puede eliminar. Esta fracción está en uso en {total_usos} lugar(es)",
+                "error": "No se puede eliminar. La fracción está en uso.",
                 "detalles": {
-                    "metodologias": en_metodologia,
-                    "sops": en_sop,
-                    "elemento_sets": en_elemento,
-                    "kits": en_kit
+                    "sops": sops_count,
+                    "elemento_sets": elemento_sets_count,
+                    "kits": kits_count,
+                    "metodologias": 0  # No importa, no se puede borrar por otras razones
                 }
             }), 400
         
-        # Eliminar
+        # ===== SI NO ESTÁ EN USO: BORRAR EN CASCADA =====
+        
+        # Obtener todas las metodologías de esta fracción
+        metodologias = Metodologia.query.filter_by(fraccion_id=fraccion_id).all()
+        
+        metodologias_borradas = []
+        
+        for met in metodologias:
+            metodologia_base_id = met.metodologia_base_id
+            
+            # Verificar si esta metodologia_base está siendo usada por otras fracciones
+            otras_fracciones = Metodologia.query.filter(
+                Metodologia.metodologia_base_id == metodologia_base_id,
+                Metodologia.fraccion_id != fraccion_id
+            ).count()
+            
+            if otras_fracciones > 0:
+                # Esta metodologia_base está siendo usada por otras fracciones
+                # Solo borramos el link, NO la metodologia_base
+                db.session.delete(met)
+            else:
+                # Esta metodologia_base SOLO la usa esta fracción
+                # Borrar todo: link + pasos + metodologia_base
+                
+                # 1. Borrar pasos
+                MetodologiaBasePaso.query.filter_by(
+                    metodologia_base_id=metodologia_base_id
+                ).delete()
+                
+                # 2. Borrar link
+                db.session.delete(met)
+                
+                # 3. Borrar metodologia_base
+                metodologia_base = MetodologiaBase.query.get(metodologia_base_id)
+                if metodologia_base:
+                    db.session.delete(metodologia_base)
+                    metodologias_borradas.append(metodologia_base_id)
+        
+        # Borrar la fracción
+        db.session.delete(fraccion)
+        
+        db.session.commit()
+        
+        mensaje = f"Fracción {fraccion_id} eliminada correctamente"
+        if metodologias_borradas:
+            mensaje += f"\n\nMetodologías eliminadas: {', '.join(metodologias_borradas)}"
+        
+        return jsonify({
+            "success": True,
+            "message": mensaje,
+            "metodologias_borradas": metodologias_borradas
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+
+@main_bp.route("/catalogos/fracciones/<fraccion_id>/metodologias")
+@admin_required
+def fraccion_metodologias(fraccion_id):
+    """Página de configuración de metodologías de una fracción"""
+    
+    # Validar que la fracción existe
+    fraccion = Fraccion.query.get(fraccion_id)
+    
+    if not fraccion:
+        flash(f"Fracción {fraccion_id} no encontrada", "error")
+        return redirect(url_for('main.catalogos_fracciones'))
+    
+    return render_template(
+        "catalogos/regulares/metodologias_fraccion.html",
+        fraccion=fraccion
+    )
+
+@main_bp.route("/api/fracciones/<fraccion_id>/metodologias", methods=["GET"])
+@admin_required
+def api_fraccion_metodologias_get(fraccion_id):
+    """
+    Obtiene las metodologías configuradas para los 4 niveles de una fracción.
+    
+    Returns:
+    {
+        "success": true,
+        "fraccion": {...},
+        "metodologias": {
+            "1": {"metodologia_base_id": "MB-XX-001-B", "pasos": [...]},
+            "2": {"metodologia_base_id": "MB-XX-001-M", "pasos": [...]},
+            "3": null,
+            "4": null
+        }
+    }
+    """
+    try:
+        # Validar fracción
+        fraccion = Fraccion.query.get(fraccion_id)
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        # Obtener metodologías de los 4 niveles
+        metodologias_data = {}
+        
+        for nivel_id in [1, 2, 3, 4]:
+            # Buscar asignación en tabla metodologia
+            metodologia_asignacion = Metodologia.query.filter_by(
+                fraccion_id=fraccion_id,
+                nivel_limpieza_id=nivel_id
+            ).first()
+            
+            if metodologia_asignacion:
+                # Obtener metodología base y pasos
+                mb = metodologia_asignacion.metodologia_base
+                
+                pasos = []
+                for paso in mb.pasos:
+                    pasos.append({
+                        "orden": paso.orden,
+                        "instruccion": paso.instruccion
+                    })
+                
+                metodologias_data[str(nivel_id)] = {
+                    "metodologia_base_id": mb.metodologia_base_id,
+                    "nombre": mb.nombre,
+                    "descripcion": mb.descripcion,
+                    "pasos": pasos
+                }
+            else:
+                # No existe metodología para este nivel
+                metodologias_data[str(nivel_id)] = None
+        
+        # Calcular nombre_full
+        nombre_full = fraccion.fraccion_nombre
+        if fraccion.nombre_custom:
+            nombre_full = f"{fraccion.fraccion_nombre} — {fraccion.nombre_custom}"
+        
+        return jsonify({
+            "success": True,
+            "fraccion": {
+                "fraccion_id": fraccion.fraccion_id,
+                "fraccion_nombre": fraccion.fraccion_nombre,
+                "nombre_custom": fraccion.nombre_custom,
+                "nombre_full": nombre_full,
+                "codigo": fraccion.fraccion_id.split('-')[1] if '-' in fraccion.fraccion_id else ''
+            },
+            "metodologias": metodologias_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+
+@main_bp.route("/api/fracciones/<fraccion_id>/metodologias/<int:nivel_id>", methods=["POST"])
+@admin_required
+def api_fraccion_metodologias_save(fraccion_id, nivel_id):
+    """
+    Guarda/actualiza la metodología de un nivel específico.
+    
+    Body JSON:
+    {
+        "pasos": [
+            {"orden": 1, "instruccion": "Paso 1"},
+            {"orden": 2, "instruccion": "Paso 2"}
+        ]
+    }
+    
+    Proceso:
+    1. Genera/obtiene ID de metodologia_base: MB-{CODIGO}-{NUM}-{NIVEL}
+    2. Crea/actualiza metodologia_base
+    3. Borra pasos viejos
+    4. Inserta pasos nuevos
+    5. Crea/actualiza link en tabla metodologia
+    """
+    try:
+        # Validar fracción
+        fraccion = Fraccion.query.get(fraccion_id)
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        # Validar nivel
+        if nivel_id not in [1, 2, 3, 4]:
+            return jsonify({"success": False, "error": "Nivel inválido (1-4)"}), 400
+        
+        # Validar nivel_limpieza existe
+        nivel_limpieza = NivelLimpieza.query.get(nivel_id)
+        if not nivel_limpieza:
+            return jsonify({"success": False, "error": f"Nivel de limpieza {nivel_id} no encontrado"}), 404
+        
+        # Obtener pasos del body
+        data = request.get_json()
+        pasos = data.get("pasos", [])
+        
+        # Validar que haya al menos 1 paso
+        if len(pasos) == 0:
+            return jsonify({"success": False, "error": "Debe haber al menos 1 paso"}), 400
+        
+        # Validar que todos los pasos tengan instrucción
+        for paso in pasos:
+            if not paso.get("instruccion", "").strip():
+                return jsonify({"success": False, "error": "Todos los pasos deben tener instrucción"}), 400
+        
+        # Generar ID de metodologia_base
+        nivel_letra_map = {1: 'B', 2: 'M', 3: 'P', 4: 'E'}
+        nivel_letra = nivel_letra_map[nivel_id]
+        
+        # Extraer código y número de fraccion_id
+        # Ejemplo: FR-BS-001 → codigo=BS, numero=001
+        partes = fraccion_id.split('-')
+        if len(partes) != 3:
+            return jsonify({"success": False, "error": "Formato de fraccion_id inválido"}), 400
+        
+        codigo = partes[1]
+        numero = partes[2]
+        
+        metodologia_base_id = f"MB-{codigo}-{numero}-{nivel_letra}"
+        
+        # Buscar si ya existe metodologia_base
+        metodologia_base = MetodologiaBase.query.get(metodologia_base_id)
+        
+        if not metodologia_base:
+            # Crear nueva metodologia_base
+            nombre_base = fraccion.fraccion_nombre
+            
+            metodologia_base = MetodologiaBase(
+                metodologia_base_id=metodologia_base_id,
+                nombre=f"{nombre_base}-{nivel_letra}",
+                descripcion=fraccion.fraccion_nombre
+            )
+            db.session.add(metodologia_base)
+            db.session.flush()  # Para que esté disponible para los pasos
+        
+        # Borrar pasos viejos
+        MetodologiaBasePaso.query.filter_by(
+            metodologia_base_id=metodologia_base_id
+        ).delete()
+        
+        # Insertar pasos nuevos
+        for paso in pasos:
+            nuevo_paso = MetodologiaBasePaso(
+                metodologia_base_id=metodologia_base_id,
+                orden=paso["orden"],
+                instruccion=paso["instruccion"].strip()
+            )
+            db.session.add(nuevo_paso)
+        
+        # Crear/actualizar link en tabla metodologia
+        metodologia_link = Metodologia.query.filter_by(
+            fraccion_id=fraccion_id,
+            nivel_limpieza_id=nivel_id
+        ).first()
+        
+        if not metodologia_link:
+            # Crear nuevo link
+            metodologia_link = Metodologia(
+                fraccion_id=fraccion_id,
+                nivel_limpieza_id=nivel_id,
+                metodologia_base_id=metodologia_base_id
+            )
+            db.session.add(metodologia_link)
+        else:
+            # Actualizar link existente (por si cambió la metodologia_base)
+            metodologia_link.metodologia_base_id = metodologia_base_id
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "metodologia_base_id": metodologia_base_id,
+            "total_pasos": len(pasos),
+            "message": f"Metodología {metodologia_base_id} guardada correctamente"
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# =========================
+# API - KITS EVENTOS (CRUD)
+# =========================
+@main_bp.route("/catalogos/kits-eventos")
+@admin_required
+def catalogos_kits_eventos():
+    return render_template("catalogos/eventos/kits_eventos.html")
+
+
+@main_bp.route("/api/kits-eventos/eventos-disponibles", methods=["GET"])
+@admin_required
+def api_kits_eventos_eventos_disponibles():
+    """
+    Retorna eventos disponibles para dropdown.
+    """
+    try:
+        eventos = EventoCatalogo.query.order_by(EventoCatalogo.evento_tipo_id).all()
+        
+        eventos_data = [
+            {
+                "evento_tipo_id": e.evento_tipo_id,
+                "nombre": e.nombre,
+                "descripcion": e.descripcion
+            }
+            for e in eventos
+        ]
+        
+        return jsonify({
+            "success": True,
+            "eventos": eventos_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos/casos-disponibles", methods=["GET"])
+@admin_required
+def api_kits_eventos_casos_disponibles():
+    """
+    Retorna casos disponibles para dropdown.
+    Query params opcionales:
+    - evento_tipo: filtrar por evento_tipo_id (ej: EV-IN-001)
+    """
+    try:
+        evento_tipo = request.args.get('evento_tipo', '').strip()
+        
+        # Query base
+        query = CasoCatalogo.query
+        
+        # Filtro por evento_tipo
+        if evento_tipo:
+            query = query.filter_by(evento_tipo_id=evento_tipo)
+        
+        casos = query.order_by(CasoCatalogo.caso_id).all()
+        
+        casos_data = [
+            {
+                "caso_id": c.caso_id,
+                "evento_tipo_id": c.evento_tipo_id,
+                "nombre": c.nombre,
+                "descripcion": c.descripcion
+            }
+            for c in casos
+        ]
+        
+        return jsonify({
+            "success": True,
+            "casos": casos_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos/next-id", methods=["GET"])
+@admin_required
+def api_kits_eventos_next_id():
+    """
+    Genera el próximo ID disponible para un caso.
+    Query param: caso_id (ej: CA-IN-VO-001)
+    Retorna: KT-EV-{codigo}-{número} (ej: KT-EV-VO-001)
+    
+    Extrae el código del caso:
+    CA-IN-VO-001 → extrae "VO" (posición 3) → KT-EV-VO-001
+    """
+    caso_id = request.args.get("caso_id", "").strip()
+    
+    if not caso_id:
+        return jsonify({"success": False, "error": "caso_id requerido"}), 400
+    
+    try:
+        # Extraer código del caso (posición 3)
+        # CA-IN-VO-001 → ['CA', 'IN', 'VO', '001'] → 'VO'
+        partes = caso_id.split('-')
+        if len(partes) < 3:
+            return jsonify({"success": False, "error": "Formato de caso_id inválido"}), 400
+        
+        codigo = partes[2]  # Extraer código del caso (ej: VO, EQ, SA)
+        
+        if len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
+        
+        # Buscar el último kit de este código
+        pattern = f"KT-EV-{codigo}-%"
+        ultimo = Kit.query.filter(
+            Kit.kit_id.like(pattern)
+        ).order_by(
+            Kit.kit_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes_kit = ultimo.kit_id.split('-')
+            if len(partes_kit) == 4:  # KT-EV-VO-001
+                try:
+                    numero_actual = int(partes_kit[3])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            siguiente = 1
+        
+        nuevo_id = f"KT-EV-{codigo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "kit_id": nuevo_id,
+            "codigo": codigo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos", methods=["GET"])
+@admin_required
+def api_kits_eventos_listar():
+    """
+    Lista kits de tipo 'evento' con sus herramientas.
+    Query params opcionales:
+    - page: número de página (default 1)
+    - per_page: resultados por página (default 50)
+    - evento_tipo: filtrar por evento_tipo_id (ej: EV-IN-001)
+    - caso: filtrar por caso_id (ej: CA-IN-VO-001)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        evento_tipo = request.args.get('evento_tipo', '').strip()
+        caso = request.args.get('caso', '').strip()
+        
+        # Query base - solo kits de tipo 'evento'
+        query = Kit.query.filter_by(tipo_kit='evento')
+        
+        # Filtro por caso
+        if caso:
+            query = query.filter_by(caso_id=caso)
+        # Filtro por evento_tipo (requiere join con CasoCatalogo)
+        elif evento_tipo:
+            query = query.join(CasoCatalogo, Kit.caso_id == CasoCatalogo.caso_id)\
+                         .filter(CasoCatalogo.evento_tipo_id == evento_tipo)
+        
+        # Ordenar y paginar
+        query = query.order_by(Kit.kit_id.asc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Formatear con herramientas
+        kits_data = []
+        for k in pagination.items:
+            # Obtener herramientas del kit
+            detalles = KitDetalle.query.filter_by(kit_id=k.kit_id).all()
+            herramientas = [
+                {
+                    'herramienta_id': d.herramienta_id,
+                    'nombre': d.herramienta.nombre if d.herramienta else '',
+                    'nota': d.nota
+                }
+                for d in detalles
+            ]
+            
+            # Obtener info del caso
+            caso_info = CasoCatalogo.query.get(k.caso_id) if k.caso_id else None
+            evento_info = EventoCatalogo.query.get(caso_info.evento_tipo_id) if caso_info else None
+            
+            kits_data.append({
+                'kit_id': k.kit_id,
+                'caso_id': k.caso_id,
+                'caso_nombre': caso_info.nombre if caso_info else '',
+                'evento_tipo_id': caso_info.evento_tipo_id if caso_info else '',
+                'evento_nombre': evento_info.nombre if evento_info else '',
+                'nombre': k.nombre,
+                'tipo_kit': k.tipo_kit,
+                'herramientas': herramientas,
+                'cantidad_herramientas': len(herramientas)
+            })
+        
+        return jsonify({
+            "success": True,
+            "kits": kits_data,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos", methods=["POST"])
+@admin_required
+def api_kits_eventos_crear():
+    """
+    Crea un nuevo kit de tipo 'evento'.
+    Body JSON:
+    {
+        "caso_id": "CA-IN-VO-001",
+        "nombre": "Kit Vómito",
+        "herramientas": ["HE-CE-001", "HE-FI-001"]
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        caso_id = data.get("caso_id", "").strip()
+        nombre = data.get("nombre", "").strip()
+        herramientas_ids = data.get("herramientas", [])
+
+        # 1. Validar caso_id
+        if not caso_id:
+            return jsonify({"success": False, "error": "caso_id requerido"}), 400
+        
+        # 2. Validar que caso existe
+        caso = CasoCatalogo.query.get(caso_id)
+        if not caso:
+            return jsonify({"success": False, "error": f"Caso {caso_id} no encontrado"}), 404
+        
+        # 3. Validar nombre
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # 4. Validar que tenga al menos 1 herramienta
+        if not herramientas_ids or len(herramientas_ids) == 0:
+            return jsonify({"success": False, "error": "Debe seleccionar al menos 1 herramienta"}), 400
+        
+        # 5. Validar que todas las herramientas existan
+        for h_id in herramientas_ids:
+            herr = Herramienta.query.get(h_id)
+            if not herr:
+                return jsonify({"success": False, "error": f"Herramienta {h_id} no encontrada"}), 404
+        
+        # 6. Extraer código del caso y generar ID del kit
+        # CA-IN-VO-001 → 'VO' → KT-EV-VO-001
+        partes = caso_id.split('-')
+        if len(partes) < 3:
+            return jsonify({"success": False, "error": "Formato de caso_id inválido"}), 400
+        
+        codigo = partes[2]
+        
+        pattern = f"KT-EV-{codigo}-%"
+        ultimo = Kit.query.filter(
+            Kit.kit_id.like(pattern)
+        ).order_by(
+            Kit.kit_id.desc()
+        ).first()
+        
+        if ultimo:
+            partes_kit = ultimo.kit_id.split('-')
+            numero_actual = int(partes_kit[3]) if len(partes_kit) == 4 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        kit_id = f"KT-EV-{codigo}-{siguiente:03d}"
+        
+        # 7. Crear Kit de tipo 'evento'
+        nuevo_kit = Kit(
+            kit_id=kit_id,
+            fraccion_id=None,  # NULL para eventos
+            nivel_limpieza_id=None,  # NULL para eventos
+            nombre=nombre,
+            tipo_kit='evento',
+            caso_id=caso_id
+        )
+        
+        db.session.add(nuevo_kit)
+        db.session.flush()
+        
+        # 8. Crear KitDetalle para cada herramienta
+        for h_id in herramientas_ids:
+            detalle = KitDetalle(
+                kit_id=kit_id,
+                herramienta_id=h_id,
+                nota=nombre
+            )
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "kit": {
+                "kit_id": nuevo_kit.kit_id,
+                "caso_id": nuevo_kit.caso_id,
+                "nombre": nuevo_kit.nombre,
+                "herramientas": herramientas_ids
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos/<kit_id>", methods=["PUT"])
+@admin_required
+def api_kits_eventos_editar(kit_id):
+    """
+    Edita un kit de tipo 'evento' existente.
+    Solo permite editar: nombre, herramientas
+    NO permite editar: kit_id, caso_id
+    
+    Body JSON:
+    {
+        "nombre": "Kit Vómito Mejorado",
+        "herramientas": ["HE-CE-001", "HE-FI-002"]
+    }
+    """
+    try:
+        kit = Kit.query.get(kit_id)
+        
+        if not kit:
+            return jsonify({"success": False, "error": "Kit no encontrado"}), 404
+        
+        if kit.tipo_kit != 'evento':
+            return jsonify({"success": False, "error": "Este kit no es de tipo evento"}), 400
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nuevas_herramientas = data.get("herramientas", [])
+        
+        # Validaciones
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        if not nuevas_herramientas or len(nuevas_herramientas) == 0:
+            return jsonify({"success": False, "error": "Debe tener al menos 1 herramienta"}), 400
+        
+        # Validar herramientas
+        for h_id in nuevas_herramientas:
+            herr = Herramienta.query.get(h_id)
+            if not herr:
+                return jsonify({"success": False, "error": f"Herramienta {h_id} no encontrada"}), 404
+        
+        # Actualizar Kit
+        kit.nombre = nuevo_nombre
+        
+        # Actualizar herramientas - eliminar todas y recrear
+        KitDetalle.query.filter_by(kit_id=kit_id).delete()
+        
+        for h_id in nuevas_herramientas:
+            detalle = KitDetalle(
+                kit_id=kit_id,
+                herramienta_id=h_id,
+                nota=nuevo_nombre
+            )
+            db.session.add(detalle)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "kit": {
+                "kit_id": kit.kit_id,
+                "caso_id": kit.caso_id,
+                "nombre": kit.nombre,
+                "herramientas": nuevas_herramientas
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/kits-eventos/<kit_id>", methods=["DELETE"])
+@admin_required
+def api_kits_eventos_eliminar(kit_id):
+    """
+    Elimina un kit de tipo 'evento' y sus herramientas.
+    """
+    try:
+        kit = Kit.query.get(kit_id)
+        
+        if not kit:
+            return jsonify({"success": False, "error": "Kit no encontrado"}), 404
+        
+        if kit.tipo_kit != 'evento':
+            return jsonify({"success": False, "error": "Este kit no es de tipo evento"}), 400
+        
+        # Eliminar KitDetalle primero
+        KitDetalle.query.filter_by(kit_id=kit_id).delete()
+        
+        # Eliminar Kit
+        db.session.delete(kit)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Kit {kit_id} eliminado correctamente"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    
+
+# =========================
+# API - FRACCIONES EVENTOS (CRUD)
+# =========================
+
+@main_bp.route("/api/fracciones-eventos/eventos-disponibles", methods=["GET"])
+@admin_required
+def api_fracciones_eventos_eventos_disponibles():
+    """
+    Retorna eventos disponibles para dropdown.
+    """
+    try:
+        eventos = EventoCatalogo.query.order_by(EventoCatalogo.evento_tipo_id).all()
+        
+        eventos_data = [
+            {
+                "evento_tipo_id": e.evento_tipo_id,
+                "nombre": e.nombre,
+                "descripcion": e.descripcion
+            }
+            for e in eventos
+        ]
+        
+        return jsonify({
+            "success": True,
+            "eventos": eventos_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos/codigos-disponibles", methods=["GET"])
+@admin_required
+def api_fracciones_eventos_codigos_disponibles():
+    """
+    Extrae códigos únicos de fracciones existentes para un evento.
+    Query param: evento_tipo (ej: EV-LI-001)
+    
+    Retorna códigos únicos con conteo y nombre base.
+    """
+    try:
+        evento_tipo = request.args.get('evento_tipo', '').strip()
+        
+        if not evento_tipo:
+            return jsonify({"success": False, "error": "evento_tipo requerido"}), 400
+        
+        # Validar que evento existe
+        evento = EventoCatalogo.query.get(evento_tipo)
+        if not evento:
+            return jsonify({"success": False, "error": f"Evento {evento_tipo} no encontrado"}), 404
+        
+        # Extraer código del evento (EV-LI-001 → LI)
+        partes_evento = evento_tipo.split('-')
+        if len(partes_evento) < 2:
+            return jsonify({"success": False, "error": "Formato de evento_tipo inválido"}), 400
+        
+        codigo_evento = partes_evento[1]  # LI, IN, CO, etc.
+        
+        # Buscar todas las fracciones de este evento
+        pattern = f"FR-{codigo_evento}-%"
+        fracciones = SopEventoFraccion.query.filter(
+            SopEventoFraccion.evento_tipo_id == evento_tipo,
+            SopEventoFraccion.fraccion_evento_id.like(pattern)
+        ).order_by(SopEventoFraccion.fraccion_evento_id).all()
+        
+        # Agrupar por código (posición 3: FR-LI-DE-001 → DE)
+        codigos_map = {}
+        
+        for f in fracciones:
+            partes = f.fraccion_evento_id.split('-')
+            if len(partes) >= 3:
+                codigo = partes[2]  # DE, CO, CU, etc.
+                
+                if codigo not in codigos_map:
+                    codigos_map[codigo] = {
+                        "codigo": codigo,
+                        "nombre_base": f.nombre,  # Usar nombre de la primera fracción
+                        "count": 0,
+                        "ultima_fraccion": ""
+                    }
+                
+                codigos_map[codigo]["count"] += 1
+                codigos_map[codigo]["ultima_fraccion"] = f.fraccion_evento_id
+        
+        # Convertir a lista ordenada
+        codigos_data = sorted(codigos_map.values(), key=lambda x: x["codigo"])
+        
+        return jsonify({
+            "success": True,
+            "codigos": codigos_data
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos/next-id", methods=["GET"])
+@admin_required
+def api_fracciones_eventos_next_id():
+    """
+    Genera el próximo ID disponible para una fracción de evento.
+    Query params:
+    - evento_tipo: evento_tipo_id (ej: EV-LI-001)
+    - codigo: código de fracción (ej: DE)
+    
+    Retorna: FR-{evento}-{codigo}-{número}
+    Ejemplo: FR-LI-DE-003
+    """
+    try:
+        evento_tipo = request.args.get("evento_tipo", "").strip()
+        codigo = request.args.get("codigo", "").strip().upper()
+        
+        if not evento_tipo or not codigo:
+            return jsonify({"success": False, "error": "evento_tipo y codigo requeridos"}), 400
+        
+        # Extraer código del evento (EV-LI-001 → LI)
+        partes_evento = evento_tipo.split('-')
+        if len(partes_evento) < 2:
+            return jsonify({"success": False, "error": "Formato de evento_tipo inválido"}), 400
+        
+        codigo_evento = partes_evento[1]
+        
+        if len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
+        
+        # Buscar la última fracción con este patrón
+        pattern = f"FR-{codigo_evento}-{codigo}-%"
+        ultima = SopEventoFraccion.query.filter(
+            SopEventoFraccion.fraccion_evento_id.like(pattern)
+        ).order_by(
+            SopEventoFraccion.fraccion_evento_id.desc()
+        ).first()
+        
+        if ultima:
+            partes = ultima.fraccion_evento_id.split('-')
+            if len(partes) == 4:  # FR-LI-DE-001
+                try:
+                    numero_actual = int(partes[3])
+                    siguiente = numero_actual + 1
+                except ValueError:
+                    siguiente = 1
+            else:
+                siguiente = 1
+        else:
+            siguiente = 1
+        
+        nuevo_id = f"FR-{codigo_evento}-{codigo}-{siguiente:03d}"
+        
+        return jsonify({
+            "success": True,
+            "fraccion_evento_id": nuevo_id,
+            "codigo_evento": codigo_evento,
+            "codigo": codigo,
+            "numero": siguiente
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos", methods=["GET"])
+@admin_required
+def api_fracciones_eventos_listar():
+    """
+    Lista fracciones de eventos con info de metodología.
+    Query params opcionales:
+    - evento_tipo: filtrar por evento_tipo_id (ej: EV-LI-001)
+    - page: número de página (default 1)
+    - per_page: resultados por página (default 50)
+    """
+    try:
+        evento_tipo = request.args.get('evento_tipo', '').strip()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Query base
+        query = SopEventoFraccion.query
+        
+        # Filtro por evento
+        if evento_tipo:
+            query = query.filter_by(evento_tipo_id=evento_tipo)
+        
+        # Ordenar y paginar
+        query = query.order_by(SopEventoFraccion.fraccion_evento_id.asc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Formatear datos
+        fracciones_data = []
+        for f in pagination.items:
+            # Extraer código de la fracción (FR-LI-DE-001 → DE)
+            partes = f.fraccion_evento_id.split('-')
+            codigo = partes[2] if len(partes) >= 3 else ''
+            
+            # Obtener info de metodología
+            metodologia = MetodologiaEventoFraccion.query.filter_by(
+                fraccion_evento_id=f.fraccion_evento_id
+            ).first()
+            
+            tiene_metodologia = metodologia is not None
+            cantidad_pasos = 0
+            
+            if metodologia:
+                cantidad_pasos = MetodologiaEventoFraccionPaso.query.filter_by(
+                    metodologia_fraccion_id=metodologia.metodologia_fraccion_id
+                ).count()
+            
+            # Obtener nombre del evento
+            evento_info = EventoCatalogo.query.get(f.evento_tipo_id)
+            
+            fracciones_data.append({
+                'fraccion_evento_id': f.fraccion_evento_id,
+                'evento_tipo_id': f.evento_tipo_id,
+                'evento_nombre': evento_info.nombre if evento_info else '',
+                'codigo': codigo,
+                'nombre': f.nombre,
+                'descripcion': f.descripcion,
+                'tiene_metodologia': tiene_metodologia,
+                'cantidad_pasos': cantidad_pasos,
+                'metodologia_id': metodologia.metodologia_fraccion_id if metodologia else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "fracciones": fracciones_data,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos", methods=["POST"])
+@admin_required
+def api_fracciones_eventos_crear():
+    """
+    Crea una nueva fracción de evento + metodología automática.
+    
+    Body JSON:
+    {
+        "evento_tipo_id": "EV-LI-001",
+        "codigo": "DE",
+        "nombre": "Desmontaje y Segregación",
+        "descripcion": "Proceso para..."
+    }
+    
+    Crea automáticamente:
+    - SopEventoFraccion (FR-LI-DE-001)
+    - MetodologiaEventoFraccion (ME-LI-DE-001) con nombre "Metodología de {nombre}"
+    """
+    try:
+        data = request.get_json()
+        
+        evento_tipo_id = data.get("evento_tipo_id", "").strip()
+        codigo = data.get("codigo", "").strip().upper()
+        nombre = data.get("nombre", "").strip()
+        descripcion = data.get("descripcion", "").strip()
+        
+        # 1. Validar evento_tipo_id
+        if not evento_tipo_id:
+            return jsonify({"success": False, "error": "evento_tipo_id requerido"}), 400
+        
+        evento = EventoCatalogo.query.get(evento_tipo_id)
+        if not evento:
+            return jsonify({"success": False, "error": f"Evento {evento_tipo_id} no encontrado"}), 404
+        
+        # 2. Validar código
+        if not codigo or len(codigo) != 2:
+            return jsonify({"success": False, "error": "Código debe tener 2 caracteres"}), 400
+        
+        # 3. Validar nombre
+        if not nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # 4. Extraer código del evento (EV-LI-001 → LI)
+        partes_evento = evento_tipo_id.split('-')
+        if len(partes_evento) < 2:
+            return jsonify({"success": False, "error": "Formato de evento_tipo_id inválido"}), 400
+        
+        codigo_evento = partes_evento[1]
+        
+        # 5. VALIDAR NOMBRE DUPLICADO en el mismo código
+        pattern = f"FR-{codigo_evento}-{codigo}-%"
+        nombre_existente = SopEventoFraccion.query.filter(
+            SopEventoFraccion.fraccion_evento_id.like(pattern),
+            SopEventoFraccion.nombre == nombre
+        ).first()
+        
+        if nombre_existente:
+            return jsonify({
+                "success": False,
+                "error": f"Ya existe una fracción con el nombre '{nombre}'. Por favor agrega una variación para diferenciarla."
+            }), 400
+        
+        # 6. Generar ID de fracción
+        ultima = SopEventoFraccion.query.filter(
+            SopEventoFraccion.fraccion_evento_id.like(pattern)
+        ).order_by(
+            SopEventoFraccion.fraccion_evento_id.desc()
+        ).first()
+        
+        if ultima:
+            partes = ultima.fraccion_evento_id.split('-')
+            numero_actual = int(partes[3]) if len(partes) == 4 else 0
+            siguiente = numero_actual + 1
+        else:
+            siguiente = 1
+        
+        fraccion_evento_id = f"FR-{codigo_evento}-{codigo}-{siguiente:03d}"
+        
+        # 7. Crear SopEventoFraccion
+        nueva_fraccion = SopEventoFraccion(
+            fraccion_evento_id=fraccion_evento_id,
+            evento_tipo_id=evento_tipo_id,
+            nombre=nombre,
+            descripcion=descripcion
+        )
+        
+        db.session.add(nueva_fraccion)
+        db.session.flush()
+        
+        # 8. Crear MetodologiaEventoFraccion automáticamente
+        metodologia_id = f"ME-{codigo_evento}-{codigo}-{siguiente:03d}"
+        nombre_metodologia = f"Metodología de {nombre}"
+        
+        nueva_metodologia = MetodologiaEventoFraccion(
+            metodologia_fraccion_id=metodologia_id,
+            fraccion_evento_id=fraccion_evento_id,
+            nombre=nombre_metodologia,
+            descripcion=descripcion  # Usar misma descripción de la fracción
+        )
+        
+        db.session.add(nueva_metodologia)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "fraccion": {
+                "fraccion_evento_id": nueva_fraccion.fraccion_evento_id,
+                "evento_tipo_id": nueva_fraccion.evento_tipo_id,
+                "codigo": codigo,
+                "nombre": nueva_fraccion.nombre,
+                "descripcion": nueva_fraccion.descripcion,
+                "metodologia_id": nueva_metodologia.metodologia_fraccion_id
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos/<fraccion_id>", methods=["PUT"])
+@admin_required
+def api_fracciones_eventos_editar(fraccion_id):
+    """
+    Edita una fracción de evento existente.
+    Solo permite editar: nombre, descripción
+    NO permite editar: fraccion_evento_id, evento_tipo_id, código
+    
+    Body JSON:
+    {
+        "nombre": "Desmontaje y Segregación Mejorado",
+        "descripcion": "Proceso actualizado..."
+    }
+    
+    Actualiza también el nombre de la metodología asociada.
+    """
+    try:
+        fraccion = SopEventoFraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        data = request.get_json()
+        
+        nuevo_nombre = data.get("nombre", "").strip()
+        nueva_descripcion = data.get("descripcion", "").strip()
+        
+        # Validar nombre
+        if not nuevo_nombre:
+            return jsonify({"success": False, "error": "Nombre requerido"}), 400
+        
+        # Validar nombre duplicado (excluyendo la fracción actual)
+        partes = fraccion_id.split('-')
+        if len(partes) >= 3:
+            codigo_evento = partes[1]
+            codigo = partes[2]
+            pattern = f"FR-{codigo_evento}-{codigo}-%"
+            
+            nombre_existente = SopEventoFraccion.query.filter(
+                SopEventoFraccion.fraccion_evento_id.like(pattern),
+                SopEventoFraccion.nombre == nuevo_nombre,
+                SopEventoFraccion.fraccion_evento_id != fraccion_id
+            ).first()
+            
+            if nombre_existente:
+                return jsonify({
+                    "success": False,
+                    "error": f"Ya existe otra fracción con el nombre '{nuevo_nombre}'. Por favor agrega una variación para diferenciarla."
+                }), 400
+        
+        # Actualizar fracción
+        fraccion.nombre = nuevo_nombre
+        fraccion.descripcion = nueva_descripcion
+        
+        # Actualizar nombre de metodología
+        metodologia = MetodologiaEventoFraccion.query.filter_by(
+            fraccion_evento_id=fraccion_id
+        ).first()
+        
+        if metodologia:
+            metodologia.nombre = f"Metodología de {nuevo_nombre}"
+            metodologia.descripcion = nueva_descripcion
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "fraccion": {
+                "fraccion_evento_id": fraccion.fraccion_evento_id,
+                "evento_tipo_id": fraccion.evento_tipo_id,
+                "nombre": fraccion.nombre,
+                "descripcion": fraccion.descripcion
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/fracciones-eventos/<fraccion_id>", methods=["DELETE"])
+@admin_required
+def api_fracciones_eventos_eliminar(fraccion_id):
+    """
+    Elimina una fracción de evento.
+    La metodología se elimina automáticamente en cascada (definido en models).
+    """
+    try:
+        fraccion = SopEventoFraccion.query.get(fraccion_id)
+        
+        if not fraccion:
+            return jsonify({"success": False, "error": "Fracción no encontrada"}), 404
+        
+        # Validar que no esté en uso en SopEventoDetalle
+        en_uso = SopEventoDetalle.query.filter_by(fraccion_evento_id=fraccion_id).count()
+        
+        if en_uso > 0:
+            return jsonify({
+                "success": False,
+                "error": f"No se puede eliminar. Esta fracción está siendo usada en {en_uso} SOP(s) de eventos."
+            }), 400
+        
+        # Eliminar fracción (metodología se elimina en cascada)
         db.session.delete(fraccion)
         db.session.commit()
         
@@ -7378,6 +8657,178 @@ def api_fracciones_eliminar(fraccion_id):
             "success": True,
             "message": f"Fracción {fraccion_id} eliminada correctamente"
         })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/catalogos/fracciones-eventos")
+@admin_required
+def catalogos_fracciones_eventos():
+    return render_template("catalogos/eventos/fracciones_eventos.html")
+
+
+# =========================
+# METODOLOGÍAS EVENTOS - DETALLE Y PASOS
+# =========================
+
+@main_bp.route("/catalogos/metodologias-eventos/<metodologia_id>")
+@admin_required
+def metodologia_evento_detalle(metodologia_id):
+    """Página de edición de pasos de una metodología de evento"""
+    
+    # Validar que la metodología existe
+    metodologia = MetodologiaEventoFraccion.query.get(metodologia_id)
+    
+    if not metodologia:
+        flash(f"Metodología {metodologia_id} no encontrada", "error")
+        return redirect(url_for('main.catalogos_fracciones_eventos'))
+    
+    # Obtener fracción asociada
+    fraccion = metodologia.fraccion
+    
+    # Obtener evento
+    evento = EventoCatalogo.query.get(fraccion.evento_tipo_id) if fraccion else None
+    
+    return render_template(
+        "catalogos/eventos/metodologia_evento_detalle.html",
+        metodologia=metodologia,
+        fraccion=fraccion,
+        evento=evento,
+        hide_nav=True
+    )
+
+
+@main_bp.route("/api/metodologias-eventos/<metodologia_id>", methods=["GET"])
+@admin_required
+def api_metodologia_evento_get(metodologia_id):
+    """
+    Obtiene los datos de una metodología de evento con sus pasos.
+    
+    Returns:
+    {
+        "success": true,
+        "metodologia": {
+            "metodologia_fraccion_id": "ME-LI-DE-001",
+            "fraccion_evento_id": "FR-LI-DE-001",
+            "nombre": "Metodología de...",
+            "descripcion": "...",
+            "pasos": [
+                {"numero_paso": 1, "descripcion": "..."},
+                {"numero_paso": 2, "descripcion": "..."}
+            ]
+        },
+        "fraccion": {...},
+        "evento": {...}
+    }
+    """
+    try:
+        # Validar metodología
+        metodologia = MetodologiaEventoFraccion.query.get(metodologia_id)
+        if not metodologia:
+            return jsonify({"success": False, "error": "Metodología no encontrada"}), 404
+        
+        # Obtener pasos ordenados
+        pasos = []
+        for paso in metodologia.pasos:
+            pasos.append({
+                "numero_paso": paso.numero_paso,
+                "descripcion": paso.descripcion
+            })
+        
+        # Obtener fracción
+        fraccion = metodologia.fraccion
+        
+        # Obtener evento
+        evento = EventoCatalogo.query.get(fraccion.evento_tipo_id) if fraccion else None
+        
+        return jsonify({
+            "success": True,
+            "metodologia": {
+                "metodologia_fraccion_id": metodologia.metodologia_fraccion_id,
+                "fraccion_evento_id": metodologia.fraccion_evento_id,
+                "nombre": metodologia.nombre,
+                "descripcion": metodologia.descripcion,
+                "pasos": pasos
+            },
+            "fraccion": {
+                "fraccion_evento_id": fraccion.fraccion_evento_id,
+                "nombre": fraccion.nombre,
+                "descripcion": fraccion.descripcion,
+                "evento_tipo_id": fraccion.evento_tipo_id
+            } if fraccion else None,
+            "evento": {
+                "evento_tipo_id": evento.evento_tipo_id,
+                "nombre": evento.nombre
+            } if evento else None
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@main_bp.route("/api/metodologias-eventos/<metodologia_id>/pasos", methods=["POST"])
+@admin_required
+def api_metodologia_evento_save_pasos(metodologia_id):
+    """
+    Guarda/actualiza los pasos de una metodología de evento.
+    
+    Body JSON:
+    {
+        "pasos": [
+            {"numero_paso": 1, "descripcion": "Paso 1..."},
+            {"numero_paso": 2, "descripcion": "Paso 2..."}
+        ]
+    }
+    
+    Proceso:
+    1. Valida que la metodología existe
+    2. Borra pasos viejos
+    3. Inserta pasos nuevos
+    4. Valida que haya al menos 1 paso
+    """
+    try:
+        # Validar metodología
+        metodologia = MetodologiaEventoFraccion.query.get(metodologia_id)
+        if not metodologia:
+            return jsonify({"success": False, "error": "Metodología no encontrada"}), 404
+        
+        # Obtener pasos del body
+        data = request.get_json()
+        pasos = data.get("pasos", [])
+        
+        # Validar que haya al menos 1 paso
+        if len(pasos) == 0:
+            return jsonify({"success": False, "error": "Debe haber al menos 1 paso"}), 400
+        
+        # Validar que todos los pasos tengan descripción
+        for paso in pasos:
+            if not paso.get("descripcion", "").strip():
+                return jsonify({"success": False, "error": "Todos los pasos deben tener descripción"}), 400
+        
+        # Borrar pasos viejos
+        MetodologiaEventoFraccionPaso.query.filter_by(
+            metodologia_fraccion_id=metodologia_id
+        ).delete()
+        
+        # Insertar pasos nuevos
+        for paso in pasos:
+            nuevo_paso = MetodologiaEventoFraccionPaso(
+                metodologia_fraccion_id=metodologia_id,
+                numero_paso=paso["numero_paso"],
+                descripcion=paso["descripcion"].strip()
+            )
+            db.session.add(nuevo_paso)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "metodologia_fraccion_id": metodologia_id,
+            "total_pasos": len(pasos),
+            "message": f"Metodología {metodologia_id} guardada correctamente con {len(pasos)} paso(s)"
+        }), 200
         
     except Exception as e:
         db.session.rollback()
