@@ -263,7 +263,7 @@
       <h1>{{ metodologia.nombre }}</h1>
       <div class="sub">{{ metodologia.metodologia_fraccion_id }} · {{ fraccion.fraccion_evento_id if fraccion else '' }}</div>
     </div>
-    <a href="{{ url_for('main.catalogos_fracciones_eventos') }}" class="btn-back">
+    <a href="{{ url_for('catalogos.fracciones_eventos') }}" class="btn-back">
       ← Volver
     </a>
   </div>

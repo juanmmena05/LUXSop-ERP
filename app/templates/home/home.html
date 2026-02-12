@@ -281,7 +281,7 @@
 
       <!-- Caja Plantilla (Programación) -->
       <div class="plantilla-box">
-        <form action="{{ url_for('main.aplicar_plantilla_guardada_simple') }}" method="POST"
+        <form action="{{ url_for('plantillas.aplicar_plantilla_guardada_simple') }}" method="POST"
               id="form-aplicar-plantilla" class="form-line">
           <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">
           <span class="label">Plantilla</span>
@@ -305,7 +305,7 @@
         </form>
         <!-- Form oculto para vaciar semana (lo dispara la tachita) -->
         <form id="form-vaciar-semana" 
-              action="{{ url_for('main.vaciar_semana') }}" 
+              action="{{ url_for('plantillas.vaciar_semana') }}" 
               method="POST" 
               style="display:none;">
           <input type="hidden" name="lunes_destino" value="{{ lunes.strftime('%Y-%m-%d') }}">

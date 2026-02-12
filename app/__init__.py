@@ -8,15 +8,17 @@ def create_app():
 
     db.init_app(app)
 
-    # ✅ init login
+    # init login
     login_manager.init_app(app)
-    login_manager.login_view = "main.login"   # endpoint del login en tu blueprint
+    login_manager.login_view = "auth.login"   # endpoint del login en auth blueprint
 
     with app.app_context():
         from . import models  # registra modelos (incluye User)
         from .models import User
-        from .routes import main_bp
-        app.register_blueprint(main_bp)
+
+        # Registrar blueprints usando el nuevo sistema modular
+        from .routes import register_blueprints
+        register_blueprints(app)
 
         @login_manager.user_loader
         def load_user(user_id: str):

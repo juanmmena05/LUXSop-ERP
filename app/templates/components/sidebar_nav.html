@@ -41,9 +41,9 @@
     title: 'Menu Principal',
     showBrand: true,
     items: [
-      { icon: '🏠', text: 'Programación', url: '{{ url_for("main.home") }}' },
-      { icon: '📋', text: 'Plantillas', url: '{{ url_for("main.plantillas_panel") }}' },
-      { icon: '🧩', text: 'SOP', url: '{{ url_for("main.sop_panel") }}' },
+      { icon: '🏠', text: 'Programación', url: '{{ url_for("home.home") }}' },
+      { icon: '📋', text: 'Plantillas', url: '{{ url_for("plantillas.plantillas_panel") }}' },
+      { icon: '🧩', text: 'SOP', url: '{{ url_for("sop.sop_panel") }}' },
       { icon: '⚙️', text: 'Catálogos', action: 'navigateTo', target: 'catalogos' }
     ]
   },
@@ -64,9 +64,9 @@
     parent: 'catalogos',
     showBrand: false,
     items: [
-      { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits") }}' },
-      { icon: '🧩', text: 'Elementos', url: '{{ url_for("main.catalogos_elementos") }}' },
-      { icon: '📊', text: 'Fracciones', url: '{{ url_for("main.catalogos_fracciones") }}' }
+      { icon: '🧰', text: 'Kits', url: '{{ url_for("catalogos.kits") }}' },
+      { icon: '🧩', text: 'Elementos', url: '{{ url_for("catalogos.elementos") }}' },
+      { icon: '📊', text: 'Fracciones', url: '{{ url_for("catalogos.fracciones") }}' }
     ]
   },
   eventos: {
@@ -75,8 +75,8 @@
     parent: 'catalogos',
     showBrand: false,
     items: [
-      { icon: '🧰', text: 'Kits', url: '{{ url_for("main.catalogos_kits_eventos") }}' },
-      { icon: '📊', text: 'Fracciones', url: '{{ url_for("main.catalogos_fracciones_eventos") }}' }  // ← NUEVO
+      { icon: '🧰', text: 'Kits', url: '{{ url_for("catalogos.kits_eventos") }}' },
+      { icon: '📊', text: 'Fracciones', url: '{{ url_for("catalogos.fracciones_eventos") }}' }  // ← NUEVO
     ]
   },
   compartidos: {
@@ -85,9 +85,9 @@
     parent: 'catalogos',
     showBrand: false,
     items: [
-      { icon: '🔧', text: 'Herramientas', url: '{{ url_for("main.catalogos_herramientas") }}' },
-      { icon: '🧪', text: 'Químicos', url: '{{ url_for("main.catalogos_quimicos_recetas") }}' },
-      { icon: '📦', text: 'Consumos', url: '{{ url_for("main.catalogos_consumos") }}' }
+      { icon: '🔧', text: 'Herramientas', url: '{{ url_for("catalogos.herramientas") }}' },
+      { icon: '🧪', text: 'Químicos', url: '{{ url_for("catalogos.quimicos_recetas") }}' },
+      { icon: '📦', text: 'Consumos', url: '{{ url_for("catalogos.consumos") }}' }
     ]
   }
 };
@@ -148,7 +148,7 @@
     if (currentLevel === 'main') {
       html += `
         <div class="side-nav__section">Sesión</div>
-        <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+        <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
           <button type="submit" class="side-nav__link">🚪 Salir</button>
         </form>
       `;

@@ -402,8 +402,8 @@
       <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
     </div>
 
-    <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
-    <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
+    <a class="side-nav__link" href="{{ url_for('home.home') }}">🏠 Programación</a>
+    <a class="side-nav__link" href="{{ url_for('plantillas.plantillas_panel') }}">📋 Plantillas</a>
   </nav>
 {% endif %}
 
@@ -421,7 +421,7 @@
         <strong>{{ plantilla.nombre }}</strong> · {{ dia_nombre }}
       </div>
       
-      <form method="post" action="{{ url_for('main.plantilla_item_add', plantilla_id=plantilla.plantilla_id) }}" id="form-regular">
+      <form method="post" action="{{ url_for('plantillas.plantilla_item_add', plantilla_id=plantilla.plantilla_id) }}" id="form-regular">
         <input type="hidden" name="dia_index" value="{{ dia_index }}">
         <input type="hidden" name="es_adicional" value="0">
         <input type="hidden" name="tipo_sop" value="regular">
@@ -477,7 +477,7 @@
         Tarea Extra
       </h2>
       
-      <form method="post" action="{{ url_for('main.plantilla_item_add', plantilla_id=plantilla.plantilla_id) }}" id="form-adicional">
+      <form method="post" action="{{ url_for('plantillas.plantilla_item_add', plantilla_id=plantilla.plantilla_id) }}" id="form-adicional">
         <input type="hidden" name="dia_index" value="{{ dia_index }}">
         <input type="hidden" name="es_adicional" value="1">
 
@@ -533,7 +533,7 @@
         <div class="sub">Editor del día de la plantilla.</div>
       </div>
       <div class="top-actions">
-        <a href="{{ url_for('main.plantillas_panel', plantilla_id=plantilla.plantilla_id) }}">Volver a Plantillas</a>
+        <a href="{{ url_for('plantillas.plantillas_panel', plantilla_id=plantilla.plantilla_id) }}">Volver a Plantillas</a>
       </div>
     </div>
 
@@ -593,7 +593,7 @@
                   {{ etiquetas.get(it.nivel_limpieza_asignado, it.nivel_limpieza_asignado|capitalize) }}
                 </span>
               </div>
-              <form method="post" action="{{ url_for('main.plantilla_item_delete', item_id=it.item_id) }}">
+              <form method="post" action="{{ url_for('plantillas.plantilla_item_delete', item_id=it.item_id) }}">
                 <button class="btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar esta actividad del día?');">✖</button>
               </form>
             </div>
@@ -687,7 +687,7 @@
       if (target === 'regular') {
         // Box REGULAR: marca ocupadas
         subareaSelect.innerHTML = '<option value="" disabled selected>Cargando...</option>';  // ✅ AÑADIR
-        const url = '{{ url_for("main.subareas_por_area_simple", area_id="__ID__") }}'.replace('__ID__', areaId);
+        const url = '{{ url_for("rutas.subareas_por_area_simple", area_id="__ID__") }}'.replace('__ID__', areaId);
         fetch(url)
           .then(r => r.json())
           .then(data => {
@@ -706,7 +706,7 @@
       } else {
         // Box ADICIONAL: sin bloqueo
         subareaSelect.innerHTML = '<option value="" disabled selected>Cargando...</option>';  // ✅ AÑADIR
-        fetch('{{ url_for("main.subareas_con_sop", area_id="__ID__") }}'.replace('__ID__', areaId))
+        fetch('{{ url_for("api.subareas_con_sop", area_id="__ID__") }}'.replace('__ID__', areaId))
           .then(r => r.json())
           .then(data => {
             subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar</option>';
@@ -731,7 +731,7 @@
       return;
     }
     
-    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+    fetch('{{ url_for("api.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
       .replace('__SUB__', subareaId)
       .replace('__TIPO__', 'regular'))
       .then(r => r.json())
@@ -757,7 +757,7 @@
       return;
     }
     
-    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+    fetch('{{ url_for("api.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
       .replace('__SUB__', subareaId)
       .replace('__TIPO__', tipoSopReal))
       .then(r => r.json())
@@ -863,7 +863,7 @@
       });
     });
 
-    fetch('{{ url_for("main.reordenar_plantilla_items") }}', {
+    fetch('{{ url_for("rutas.reordenar_plantilla_items") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orden: orden })

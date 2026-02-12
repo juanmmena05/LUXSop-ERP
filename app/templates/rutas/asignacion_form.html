@@ -29,14 +29,14 @@
   <div class="header">
     <h1>Rutas de limpieza asignadas a {{ persona.nombre }}</h1>
     <div class="small-note">ID personal: <strong>{{ persona.personal_id }}</strong></div>
-    <p style="margin-top:8px;"><a href="{{ url_for('main.home') }}">← Volver al inicio</a></p>
+    <p style="margin-top:8px;"><a href="{{ url_for('home.home') }}">← Volver al inicio</a></p>
   </div>
 
   <div class="layout">
     <!-- Columna izquierda: Formulario nueva asignación -->
     <div class="card">
       <h2>Agregar nueva subárea</h2>
-      <form method="POST" action="{{ url_for('main.asignar_ruta', personal_id=persona.personal_id) }}">
+      <form method="POST" action="{{ url_for('rutas.asignar_ruta', personal_id=persona.personal_id) }}">
         <div>
           <label for="area_id">Área</label>
           <select required id="area_id" name="area_id">

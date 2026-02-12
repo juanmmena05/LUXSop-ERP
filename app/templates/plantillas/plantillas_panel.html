@@ -201,7 +201,7 @@
         </div>
       </div>
 
-      <form method="GET" action="{{ url_for('main.plantillas_panel') }}" class="row" style="margin-top:10px;">
+      <form method="GET" action="{{ url_for('plantillas.plantillas_panel') }}" class="row" style="margin-top:10px;">
         <span class="label">Plantilla</span>
         <select name="plantilla_id">
           <option value="">— Selecciona —</option>
@@ -217,13 +217,13 @@
 
       {% if plantilla %}
         <div class="row" style="margin-top:12px;">
-          <form method="POST" action="{{ url_for('main.plantilla_rename', plantilla_id=plantilla.plantilla_id) }}" class="row">
+          <form method="POST" action="{{ url_for('plantillas.plantilla_rename', plantilla_id=plantilla.plantilla_id) }}" class="row">
             <span class="label">Renombrar</span>
             <input type="text" name="nombre" value="{{ plantilla.nombre }}" />
             <button class="btn btn-blue" type="submit">Guardar</button>
           </form>
 
-          <form method="POST" action="{{ url_for('main.borrar_plantilla', plantilla_id=plantilla.plantilla_id) }}"
+          <form method="POST" action="{{ url_for('plantillas.borrar_plantilla', plantilla_id=plantilla.plantilla_id) }}"
                 onsubmit="return confirm('¿Seguro que deseas eliminar esta plantilla?');">
             <button class="btn btn-red" type="submit">Eliminar</button>
           </form>
@@ -235,7 +235,7 @@
       <div style="font-weight:700;">Crear plantilla nueva</div>
       <div class="muted">Crea una plantilla vacía y luego rellénala en los 6 días.</div>
 
-      <form method="POST" action="{{ url_for('main.plantillas_crear') }}" class="row" style="margin-top:10px;">
+      <form method="POST" action="{{ url_for('plantillas.plantillas_crear') }}" class="row" style="margin-top:10px;">
         <span class="label">Nombre</span>
         <input type="text" name="nombre" placeholder="Ej: Turno Mañana" />
         <button class="btn btn-blue" type="submit">Crear</button>
@@ -285,7 +285,7 @@
 
           <div class="actions">
             <a class="btn btn-blue"
-               href="{{ url_for('main.plantilla_dia', plantilla_id=plantilla.plantilla_id, dia_index=d.index) }}">
+               href="{{ url_for('plantillas.plantilla_dia', plantilla_id=plantilla.plantilla_id, dia_index=d.index) }}">
               Editar día
             </a>
           </div>

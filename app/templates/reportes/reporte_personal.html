@@ -396,9 +396,9 @@
     </div>
     <div class="spacer"></div>
     <div class="row">
-      <a class="btn secondary" href="{{ url_for('main.mi_ruta') }}">⬅ Volver</a>
+      <a class="btn secondary" href="{{ url_for('rutas.mi_ruta') }}">⬅ Volver</a>
       <a class="btn ok"
-         href="{{ url_for('main.reporte_persona_dia_pdf', fecha=fecha.strftime('%Y-%m-%d'), personal_id=persona.personal_id) }}"
+         href="{{ url_for('reportes.reporte_persona_dia_pdf', fecha=fecha.strftime('%Y-%m-%d'), personal_id=persona.personal_id) }}"
          target="_blank" title="Descargar reporte completo en PDF">
         📥 Descargar SOP
       </a>
@@ -534,7 +534,27 @@
                       {% if f.observacion_critica %}
                         <div class="nota-tecnica">📝 Nota técnica: {{ f.observacion_critica }}</div>
                       {% endif %}
-                    </li>
+                        {% if f.instructivo %}
+                          <hr style="border: none; border-top: 1px solid #e9ecef; margin: 10px 0;">
+                          <div style="margin-top: 10px; text-align: center;">
+                            <a href="{{ url_for('visor.visor_instructivo', 
+                                                instructivo_id=f.instructivo.instructivo_id,
+                                                fecha=fecha.strftime('%Y-%m-%d'),
+                                                personal_id=persona.personal_id,
+                                                tarea_id=d.tarea_id) }}" 
+                              class="btn" 
+                              style="display: inline-block; 
+                                      font-size: 0.75rem; 
+                                      padding: 0.35rem 0.5rem; 
+                                      background: #6ea8fe; 
+                                      opacity: 0.85;
+                                      max-width: 95%;
+                                      box-sizing: border-box;">
+                              📋 Ver Instructivo
+                            </a>
+                          </div>
+                        {% endif %}
+                  </li>
                   {% endfor %}
                 </ol>
               {% elif d.tipo_tarea == 'sop' %}
@@ -695,6 +715,30 @@
         section.classList.remove('is-loading');
       });
     });
+  })();
+
+  // ⭐ AGREGAR AQUÍ: Abrir y scrollear a acordeón específico al regresar
+  (function(){
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#tarea-')) {
+      const tareaId = hash.replace('#tarea-', '');
+      const accItem = document.querySelector('.acc-item[data-tarea-id="' + tareaId + '"]');
+      
+      if (accItem) {
+        // Abrir el acordeón
+        accItem.classList.add('open');
+        
+        // Scroll suave al acordeón
+        setTimeout(function() {
+          accItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        
+        // Limpiar el hash de la URL (opcional)
+        setTimeout(function() {
+          history.replaceState(null, null, ' ');
+        }, 1000);
+      }
+    }
   })();
 </script>
 </body>

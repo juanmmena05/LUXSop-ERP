@@ -89,6 +89,11 @@
       font-size:.85rem;
       gap:8px;
     }
+    .pill-tipo{
+      background:#e7f1ff;
+      border-color:#b6d4fe;
+      color:#0d6efd;
+    }
     .warn{
       background:#fff3cd;
       border:1px solid #ffe69c;
@@ -105,17 +110,21 @@
 
 <div class="head">
   <div>
-    <h1>Crear SOP Evento · Fracciones</h1>
+    <h1>Crear SOP · Fracciones</h1>
     <div class="sub">
-      SOP: <strong>{{ sop_evento_id }}</strong> · 
-      Tipo: <strong>{{ evento.nombre }}</strong> · 
-      Caso: <strong>{{ caso.nombre }}</strong>
+      Área: <strong>{{ subarea.area.area_nombre if subarea.area else subarea.area_id }}</strong> ·
+      Subárea: <strong>{{ subarea.subarea_nombre }}</strong>
+    </div>
+    <div class="sub">
+      SOP: <strong>{{ sop_id }}</strong> · 
+      Tipo: <strong>{{ tipo_sop|capitalize }}</strong> · 
+      Nivel: <strong>{{ nivel|capitalize }}</strong>
     </div>
   </div>
 
   <div class="row">
     <a class="btn btn-blue"
-       href="{{ url_for('main.sop_panel', evento_tipo_id=evento.evento_tipo_id, caso_id=caso.caso_id) }}">
+       href="{{ url_for('sop.sop_panel', area_id=subarea.area_id, subarea_id=subarea.subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
       ← Volver
     </a>
   </div>
@@ -124,20 +133,17 @@
 <div class="card">
   <div class="row" style="justify-content:space-between;">
     <div>
-      <div class="pill">Fracciones disponibles para <strong>{{ evento.nombre }}</strong></div>
-      <div class="muted" style="margin-top:6px;">
-        Marca las fracciones que usará este SOP y define su orden. El tiempo y recursos se capturan después.
-      </div>
+      <div class="pill">Solo aparecen fracciones con <strong>metodología</strong> para este nivel.</div>
+      <span class="pill pill-tipo">Tipo: <strong>{{ tipo_sop|capitalize }}</strong></span>
+      <div class="muted" style="margin-top:6px;">Marca fracciones y define su <strong>orden</strong>. (El tiempo se captura en Detalles.)</div>
       <div id="warnBox" class="warn"></div>
     </div>
   </div>
 
-  <form id="frm" method="POST" action="{{ url_for('main.sop_evento_crear') }}">
-    <!-- ✅ Hidden inputs para mantener contexto -->
-    <input type="hidden" name="evento_tipo_id" value="{{ evento.evento_tipo_id }}">
-    <input type="hidden" name="caso_id" value="{{ caso.caso_id }}">
-    
-    {% if fracciones %}
+  <form id="frm" method="POST" action="{{ url_for('sop.sop_crear', subarea_id=subarea.subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
+    <input type="hidden" name="nivel" value="{{ nivel }}">
+    <input type="hidden" name="tipo_sop" value="{{ tipo_sop }}">
+
     <table style="margin-top:12px;">
       <thead>
         <tr>
@@ -148,26 +154,23 @@
       </thead>
       <tbody>
         {% for f in fracciones %}
-          {% set is_on = (f.fraccion_evento_id in selected_ids) %}
+          {% set is_on = (selected_ids and (f.fraccion_id in selected_ids)) %}
           <tr>
             <td>
               <input type="checkbox"
-                     name="fraccion_evento_id"
-                     value="{{ f.fraccion_evento_id }}"
+                     name="fraccion_id"
+                     value="{{ f.fraccion_id }}"
                      class="chk-fr"
                      {% if is_on %}checked{% endif %}>
             </td>
             <td>
-              <div><strong>{{ f.fraccion_evento_id }}</strong> — {{ f.nombre }}</div>
-              {% if f.descripcion %}
-                <div class="muted" style="margin-top:2px;">{{ f.descripcion }}</div>
-              {% endif %}
+              <div><strong>{{ f.fraccion_id }}</strong> — {{ f.nombre_full }}</div>
             </td>
             <td>
               <input type="number" min="1" step="1"
-                     name="orden_{{ f.fraccion_evento_id }}"
+                     name="orden_{{ f.fraccion_id }}"
                      class="inp-orden"
-                     value="{{ orden_map.get(f.fraccion_evento_id, '') if orden_map else '' }}"
+                     value="{{ orden_map.get(f.fraccion_id, '') if orden_map else '' }}"
                      {% if not is_on %}disabled{% endif %}>
             </td>
           </tr>
@@ -176,15 +179,8 @@
     </table>
 
     <div class="row" style="margin-top:12px; justify-content:flex-end;">
-      <button class="btn btn-green" type="submit">Guardar y continuar</button>
+      <button class="btn btn-green" type="submit">Guardar fracciones</button>
     </div>
-    
-    {% else %}
-    <div class="warn" style="display:block; margin-top:12px;">
-      No hay fracciones disponibles para este tipo de evento. 
-      Debes crear fracciones primero en el catálogo.
-    </div>
-    {% endif %}
   </form>
 </div>
 

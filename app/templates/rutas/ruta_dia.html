@@ -144,8 +144,8 @@
   <div class="drawer-backdrop" id="backdrop"></div>
   <aside class="drawer" id="drawer" aria-label="Menú">
     <h3>LuxSOP</h3>
-    <a href="{{ url_for('main.home') }}">📅 Programación</a>
-    <a href="{{ url_for('main.plantillas_panel') }}">🗂️ Plantillas</a>
+    <a href="{{ url_for('home.home') }}">📅 Programación</a>
+    <a href="{{ url_for('plantillas.plantillas_panel') }}">🗂️ Plantillas</a>
     <div class="muted">Atajos de navegación.</div>
   </aside>
 {% endif %}
@@ -155,7 +155,7 @@
     <h1>Ruta del Día</h1>
     <div class="sub">{{ fecha.strftime('%A, %d de %B de %Y') | capitalize }}</div>
   </div>
-  <a class="btn" href="{{ url_for('main.home') }}">← Volver al inicio</a>
+  <a class="btn" href="{{ url_for('home.home') }}">← Volver al inicio</a>
 </header>
 
 <section>
@@ -167,7 +167,7 @@
           <span class="sub">ID: {{ p.personal_id }}</span>
         </div>
         <div class="reporte-link">
-          <a href="{{ url_for('main.reporte_persona_dia', fecha=fecha.strftime('%Y-%m-%d'), personal_id=p.personal_id) }}">
+          <a href="{{ url_for('reportes.reporte_persona_dia', fecha=fecha.strftime('%Y-%m-%d'), personal_id=p.personal_id) }}">
             Ver reporte
           </a>
         </div>

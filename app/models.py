@@ -1,5 +1,10 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .extensions import db
+
+def now_cdmx():
+    """Retorna datetime actual en hora de México (naive, sin tzinfo para BD)"""
+    return datetime.now(ZoneInfo('America/Mexico_City')).replace(tzinfo=None)
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -109,6 +114,14 @@ class Fraccion(db.Model):
     sop_fracciones = db.relationship("SopFraccion", back_populates="fraccion")
     elemento_sets = db.relationship("ElementoSet", back_populates="fraccion")
     kits = db.relationship("Kit", back_populates="fraccion", lazy="selectin")
+
+    # ✅ NUEVA RELACIÓN 1:1 con instructivo_trabajo
+    instructivo = db.relationship(
+        "InstructivoTrabajo",
+        back_populates="fraccion",
+        uselist=False,  # ← Esto hace que sea 1:1
+        cascade="all, delete-orphan"
+    )
 
     # ✅ AGREGAR ESTO AL FINAL:
     @property
@@ -553,7 +566,7 @@ class PlantillaSemanal(db.Model):
 
     plantilla_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     nombre = db.Column(db.String, unique=True, nullable=False)
-    creada_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creada_en = db.Column(db.DateTime, default=now_cdmx)
 
     items = db.relationship("PlantillaItem", back_populates="plantilla", cascade="all, delete-orphan")
     semanas_aplicadas = db.relationship("PlantillaSemanaAplicada", back_populates="plantilla")
@@ -585,7 +598,7 @@ class PlantillaSemanaAplicada(db.Model):
 
     semana_lunes = db.Column(db.Date, primary_key=True)
     plantilla_id = db.Column(db.Integer, db.ForeignKey('plantilla_semanal.plantilla_id'))
-    aplicada_en = db.Column(db.DateTime, default=datetime.utcnow)
+    aplicada_en = db.Column(db.DateTime, default=now_cdmx)
 
     plantilla = db.relationship("PlantillaSemanal", back_populates="semanas_aplicadas")
 
@@ -612,7 +625,7 @@ class User(db.Model, UserMixin):
     )
     personal = db.relationship("Personal", lazy="joined")
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=now_cdmx)
 
     def get_id(self):
         return str(self.user_id)
@@ -851,3 +864,110 @@ class SopEventoDetalle(db.Model):
 
     def __repr__(self):
         return f'<SopEventoDetalle SOP:{self.sop_evento_id} Fracción:{self.fraccion_evento_id} Orden:{self.orden}>'
+    
+
+class InstructivoTrabajo(db.Model):
+    __tablename__ = 'instructivo_trabajo'
+    
+    instructivo_id = db.Column(db.Integer, primary_key=True)
+    fraccion_id = db.Column(
+        db.String,
+        db.ForeignKey('fraccion.fraccion_id', ondelete='CASCADE'),
+        nullable=False,
+        unique=True
+    )
+    instructivo_nombre = db.Column(db.String(200), nullable=False)
+    instructivo_url = db.Column(db.String(500), nullable=False)
+    
+    # Relaciones
+    fraccion = db.relationship("Fraccion", back_populates="instructivo")
+    relaciones = db.relationship(
+        "InstructivoRelacion",
+        back_populates="instructivo",
+        cascade="all, delete-orphan"
+    )
+
+class TMO(db.Model):
+    __tablename__ = 'tmo'
+    
+    tmo_id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String, unique=True, nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    url_instructivo = db.Column(db.String(500), nullable=False)
+    
+    # Relación inversa
+    relaciones = db.relationship(
+        "InstructivoRelacion",
+        back_populates="tmo"
+    )
+
+class HerramientaUso(db.Model):
+    __tablename__ = 'herramienta_uso'
+    
+    herramienta_uso_id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    codigo = db.Column(db.String, unique=True, nullable=False)
+    url_instructivo = db.Column(db.String(500), nullable=False)
+    
+    # Relación inversa con nombre específico
+    relaciones = db.relationship(
+        "InstructivoRelacion",
+        back_populates="herramienta_uso"  # ← Nombre único
+    )
+
+class FichaReceta(db.Model):
+    __tablename__ = 'ficha_receta'
+    
+    ficha_receta_id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String, unique=True, nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    url_instructivo = db.Column(db.String(500), nullable=False)
+    
+    # Relación inversa
+    relaciones = db.relationship(
+        "InstructivoRelacion",
+        back_populates="ficha_receta"
+    )
+
+class InstructivoRelacion(db.Model):
+    __tablename__ = 'instructivo_relacion'
+    
+    # PK única de esta tabla
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # FK hacia instructivo_trabajo ← AQUÍ ESTÁ
+    instructivo_id = db.Column(
+        db.Integer,
+        db.ForeignKey('instructivo_trabajo.instructivo_id', ondelete='CASCADE'),
+        nullable=False
+    )
+    
+    # FK hacia tmo (nullable)
+    tmo_id = db.Column(
+        db.Integer,
+        db.ForeignKey('tmo.tmo_id', ondelete='CASCADE'),
+        nullable=True
+    )
+    
+    # FK hacia herramienta_uso (nullable)
+    herramienta_uso_id = db.Column(
+        db.Integer,
+        db.ForeignKey('herramienta_uso.herramienta_uso_id', ondelete='CASCADE'),
+        nullable=True
+    )
+    
+    # FK hacia ficha_receta (nullable)
+    ficha_receta_id = db.Column(
+        db.Integer,
+        db.ForeignKey('ficha_receta.ficha_receta_id', ondelete='CASCADE'),
+        nullable=True
+    )
+    
+    tipo = db.Column(db.String(20), nullable=False)
+    orden = db.Column(db.Integer, default=0)
+    
+    # Relaciones
+    instructivo = db.relationship("InstructivoTrabajo", back_populates="relaciones")
+    tmo = db.relationship("TMO", back_populates="relaciones")
+    herramienta_uso = db.relationship("HerramientaUso", back_populates="relaciones")
+    ficha_receta = db.relationship("FichaReceta", back_populates="relaciones")

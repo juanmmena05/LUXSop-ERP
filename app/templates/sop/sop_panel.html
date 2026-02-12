@@ -165,7 +165,7 @@
       Selecciona el tipo, área, subárea y nivel de limpieza.
     </p>
 
-    <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopFilterForm">
+    <form method="GET" action="{{ url_for('sop.sop_panel') }}" id="sopFilterForm">
       <!-- ✅ Mantener valores de SOP evento si existen -->
       {% if evento_tipo_id %}
         <input type="hidden" name="evento_tipo_id" value="{{ evento_tipo_id }}">
@@ -251,12 +251,12 @@
       <div class="right-actions">
         {% if sop and has_fracciones %}
         <a class="btn btn-green"
-            href="{{ url_for('main.sop_fracciones_edit', sop_id=sop.sop_id, nivel=nivel) }}">
+            href="{{ url_for('sop.sop_fracciones_edit', sop_id=sop.sop_id, nivel=nivel) }}">
             Modificar SOP
         </a>
         {% else %}
         <a class="btn btn-green"
-            href="{{ url_for('main.sop_crear', subarea_id=subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
+            href="{{ url_for('sop.sop_crear', subarea_id=subarea_id, nivel=nivel, tipo_sop=tipo_sop) }}">
             Crear SOP
         </a>
         {% endif %}
@@ -274,7 +274,7 @@
       Selecciona el tipo de evento y el caso específico. Los eventos no tienen niveles de limpieza.
     </p>
     
-    <form method="GET" action="{{ url_for('main.sop_panel') }}" id="sopEventoForm">
+    <form method="GET" action="{{ url_for('sop.sop_panel') }}" id="sopEventoForm">
       <!-- ✅ Mantener valores de SOP regular si existen -->
       {% if tipo_sop %}
         <input type="hidden" name="tipo_sop" value="{{ tipo_sop }}">
@@ -361,12 +361,12 @@
       <div class="right-actions">
         {% if sop_evento and has_fracciones_evento %}
         <a class="btn btn-green"
-            href="{{ url_for('main.sop_evento_editar', sop_evento_id=sop_evento.sop_evento_id) }}">
+            href="{{ url_for('sop.sop_evento_editar', sop_evento_id=sop_evento.sop_evento_id) }}">
             Modificar SOP Evento
         </a>
         {% else %}
         <a class="btn btn-green"
-            href="{{ url_for('main.sop_evento_crear', evento_tipo_id=evento_tipo_id, caso_id=caso_id) }}">
+            href="{{ url_for('sop.sop_evento_crear', evento_tipo_id=evento_tipo_id, caso_id=caso_id) }}">
             Crear SOP Evento
         </a>
         {% endif %}

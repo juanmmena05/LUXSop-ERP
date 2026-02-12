@@ -316,7 +316,7 @@
       </div>
 
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <form class="inline-form" method="POST" action="{{ url_for('main.logout') }}">
+        <form class="inline-form" method="POST" action="{{ url_for('auth.logout') }}">
           <button class="btn-sm btn-red" type="submit">Salir</button>
         </form>
       </div>
@@ -417,7 +417,7 @@
         </div>
       {% else %}
         <!-- Botón Ver Ruta -->
-        <a class="btn-ruta" href="{{ url_for('main.reporte_persona_dia', fecha=hoy_str, personal_id=current_user.personal_id) }}">
+        <a class="btn-ruta" href="{{ url_for('reportes.reporte_persona_dia', fecha=hoy_str, personal_id=current_user.personal_id) }}">
           📋 Ver Ruta Completa
         </a>
       {% endif %}

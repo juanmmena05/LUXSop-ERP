@@ -227,10 +227,10 @@
     </div>
     <button class="side-nav__close" id="navClose" aria-label="Cerrar menú">✕</button>
   </div>
-  <a class="side-nav__link" href="{{ url_for('main.home') }}">🏠 Programación</a>
-  <a class="side-nav__link" href="{{ url_for('main.plantillas_panel') }}">📋 Plantillas</a>
-  <a class="side-nav__link" href="{{ url_for('main.sop_panel') }}">🧩 SOP</a>
-  <form method="POST" action="{{ url_for('main.logout') }}" style="margin:0;">
+  <a class="side-nav__link" href="{{ url_for('home.home') }}">🏠 Programación</a>
+  <a class="side-nav__link" href="{{ url_for('plantillas.plantillas_panel') }}">📋 Plantillas</a>
+  <a class="side-nav__link" href="{{ url_for('sop.sop_panel') }}">🧩 SOP</a>
+  <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
    <button type="submit" class="side-nav__link side-nav__link-btn">🚪 Salir</button>
   </form>
 </nav>
@@ -247,7 +247,7 @@
 
   <div style="display:flex; gap:10px; flex-wrap:wrap;">
     <a class="btn btn-blue"
-       href="{{ url_for('main.sop_panel', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
+       href="{{ url_for('sop.sop_panel', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
       ← Volver
     </a>
   </div>
@@ -261,7 +261,7 @@
     <div class="sf-list">
       {% for d in detalles_list %}
         <a class="sf-link {% if d.detalle_id == detalle_actual.detalle_id %}is-active{% endif %}"
-           href="{{ url_for('main.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id, detalle_id=d.detalle_id) }}">
+           href="{{ url_for('sop.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id, detalle_id=d.detalle_id) }}">
           <strong>{{ d.orden }}. {{ d.fraccion.nombre }}</strong>
           <small>{{ d.fraccion.fraccion_evento_id }}</small>
         </a>
@@ -271,7 +271,7 @@
     <!-- Botón para volver a editar fracciones -->
     <div class="sf-action">
       <a class="sf-action-link"
-         href="{{ url_for('main.sop_evento_crear', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
+         href="{{ url_for('sop.sop_evento_crear', evento_tipo_id=sop_evento.evento_tipo_id, caso_id=sop_evento.caso_id) }}">
         Editar Fracciones
       </a>
     </div>
@@ -295,7 +295,7 @@
       </div>
       <div class="hint">{{ detalle_actual.fraccion.descripcion or '' }}</div>
 
-      <form method="POST" action="{{ url_for('main.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id) }}">
+      <form method="POST" action="{{ url_for('sop.sop_evento_detalle', sop_evento_id=sop_evento.sop_evento_id) }}">
         <input type="hidden" name="detalle_id" value="{{ detalle_actual.detalle_id }}">
 
         <div class="row" style="margin-top:10px;">

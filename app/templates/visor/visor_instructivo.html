@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ instructivo.instructivo_nombre }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  {% if is_mobile %}
+  <!-- PDF.js para móvil -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js?v=2"></script>
+  {% endif %}
+  
+  <style>
+    :root {
+      --bg: #fafafa;
+      --fg: #222;
+      --card: #ffffff;
+      --line: #ddd;
+      --accent: #0d6efd;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .header {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #6c757d;
+      color: #fff;
+      border: none;
+      padding: 0.55rem 0.8rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+    
+    .btn:hover {
+      filter: brightness(0.95);
+    }
+    
+    .title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    
+    .subtitle {
+      font-size: 0.85rem;
+      color: #666;
+      margin-left: 8px;
+    }
+    
+    /* Desktop: iframe */
+    .pdf-container {
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+      background: #f5f5f5;
+    }
+    
+    .pdf-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    /* Móvil: PDF.js */
+    #pdf-viewer {
+      flex: 1;
+      overflow-y: auto;
+      background: #525659;
+      padding: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .pdf-page {
+      margin-bottom: 10px;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    
+    .pdf-page canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    
+    @media (max-width: 768px) {
+      .header {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      
+      .title {
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  {% if tarea_id %}
+  <a href="{{ url_for('reportes.reporte_persona_dia', fecha=fecha, personal_id=personal_id) }}#tarea-{{ tarea_id }}" 
+     class="btn">
+    ← Volver al SOP
+  </a>
+  {% else %}
+  <a href="{{ url_for('reportes.reporte_persona_dia', fecha=fecha, personal_id=personal_id) }}" 
+     class="btn">
+    ← Volver al SOP
+  </a>
+  {% endif %}
+  
+  <div>
+    <span class="title">📋 {{ instructivo.instructivo_nombre }}</span>
+    <span class="subtitle">{{ fraccion.fraccion_id }}</span>
+  </div>
+</div>
+
+{% if is_mobile %}
+  <!-- Visor PDF.js para móvil -->
+  <div id="pdf-viewer">
+    <div class="loading">Cargando PDF...</div>
+  </div>
+  <script>
+  const pdfUrl = "{{ url_for('visor.pdf_proxy', url=instructivo.instructivo_url) }}";
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  
+  const viewer = document.getElementById('pdf-viewer');
+  viewer.innerHTML = '<div class="loading">Cargando PDF...</div>';
+  
+  // Cargar PDF
+  pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+    viewer.innerHTML = '';
+    
+    // Renderizar cada página
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      pdf.getPage(pageNum).then(page => {
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale: scale });
+        
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'pdf-page';
+        pageDiv.style.position = 'relative';
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        pageDiv.appendChild(canvas);
+        viewer.appendChild(pageDiv);
+        
+        // Renderizar página
+        page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise.then(() => {
+          setTimeout(() => {
+            const canvasDisplayWidth = canvas.offsetWidth;
+            
+            page.getAnnotations().then(annotations => {
+              annotations.forEach(annotation => {
+                if (annotation.subtype === 'Link' && annotation.url) {
+                  const rect = viewport.convertToViewportRectangle(annotation.rect);
+                  const displayScale = canvasDisplayWidth / canvas.width;
+                  
+                  const link = document.createElement('a');
+                  link.href = annotation.url;
+                  link.style.position = 'absolute';
+                  link.style.left = (rect[0] * displayScale) + 'px';
+                  link.style.top = ((rect[1] * displayScale) - 4) + 'px';
+                  link.style.width = ((rect[2] - rect[0]) * displayScale) + 'px';
+                  link.style.height = ((rect[3] - rect[1]) * displayScale) + 'px';
+                  link.style.border = '1px solid rgba(0,0,0,0.02)';  // ← Borde casi invisible
+                  link.style.background = 'rgba(255,255,255,0.03)';  // ← Fondo casi invisible
+                  link.style.zIndex = '10';
+                  
+                  pageDiv.appendChild(link);
+                }
+              });
+            });
+          }, 100);
+        });
+      });
+    }
+  }).catch(error => {
+    viewer.innerHTML = '<div class="loading">Error: ' + error.message + '</div>';
+  });
+</script>
+
+ 
+{% else %}
+  <!-- Desktop: iframe tradicional -->
+  <div class="pdf-container">
+    <iframe src="{{ url_for('visor.pdf_proxy', url=instructivo.instructivo_url) }}" 
+            title="{{ instructivo.instructivo_nombre }}">
+    </iframe>
+  </div>
+{% endif %}
+
+</body>
+</html>

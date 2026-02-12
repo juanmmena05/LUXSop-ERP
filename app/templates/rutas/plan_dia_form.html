@@ -274,8 +274,8 @@
   <div class="drawer-backdrop" id="backdrop"></div>
   <aside class="drawer" id="drawer" aria-label="Menú">
     <h3>LuxSOP</h3>
-    <a href="{{ url_for('main.home') }}">📅 Programación</a>
-    <a href="{{ url_for('main.plantillas_panel') }}">🗂️ Plantillas</a>
+    <a href="{{ url_for('home.home') }}">📅 Programación</a>
+    <a href="{{ url_for('plantillas.plantillas_panel') }}">🗂️ Plantillas</a>
     <div class="muted">Atajos de navegación.</div>
   </aside>
 {% endif %}
@@ -289,7 +289,7 @@
         <span class="badge">REGULAR</span>
         Limpieza Principal
       </h2>
-      <form method="post" action="{{ url_for('main.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-regular">
+      <form method="post" action="{{ url_for('rutas.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-regular">
         <!-- Campos ocultos -->
         <input type="hidden" name="es_adicional" value="0">
         <input type="hidden" name="tipo_sop" value="regular">
@@ -345,7 +345,7 @@
         <span class="badge">ADICIONAL</span>
         Tarea Extra
       </h2>
-      <form method="post" action="{{ url_for('main.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-adicional">
+      <form method="post" action="{{ url_for('rutas.plan_dia_asignar', fecha=fecha.strftime('%Y-%m-%d')) }}" id="form-adicional">
         <!-- Campo oculto -->
         <input type="hidden" name="es_adicional" value="1">
         
@@ -397,7 +397,7 @@
   <div class="content">
     <div class="top-bar">
       <h1>Asignaciones del {{ fecha.strftime('%Y-%m-%d') }}</h1>
-      <a href="{{ url_for('main.home') }}">Volver al inicio</a>
+      <a href="{{ url_for('home.home') }}">Volver al inicio</a>
     </div>
 
     <div class="filter-bar">
@@ -462,7 +462,7 @@
                 <br><small>{{ tiempos_por_tarea.get(t.tarea_id, 0)|round(1) }} min</small>
                 {% endif %} {# Cierre del if tipo_tarea #}
               </div>
-              <form method="post" action="{{ url_for('main.borrar_tarea', fecha=fecha.strftime('%Y-%m-%d'), tarea_id=t.tarea_id) }}">
+              <form method="post" action="{{ url_for('rutas.borrar_tarea', fecha=fecha.strftime('%Y-%m-%d'), tarea_id=t.tarea_id) }}">
                 <button class="btn-delete" title="Eliminar" onclick="return confirm('¿Borrar esta tarea?');">✖</button>
               </form>
             </div>
@@ -497,7 +497,7 @@
       
       if (target === 'regular') {
         // Box REGULAR: usa endpoint que marca ocupadas
-        fetch('{{ url_for("main.subareas_por_area", area_id="__ID__") }}'.replace('__ID__', areaId) + '?fecha=' + fechaActual)
+        fetch('{{ url_for("rutas.subareas_por_area", area_id="__ID__") }}'.replace('__ID__', areaId) + '?fecha=' + fechaActual)
           .then(r => r.json())
           .then(data => {
             subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar</option>';
@@ -516,7 +516,7 @@
 
         // Box ADICIONAL: usa endpoint con info de SOPs, sin bloqueo
         subareaSelect.innerHTML = '<option value="" disabled selected>Cargando...</option>'; // ✅ ANTES del fetch
-        fetch('{{ url_for("main.subareas_con_sop", area_id="__ID__") }}'.replace('__ID__', areaId))
+        fetch('{{ url_for("api.subareas_con_sop", area_id="__ID__") }}'.replace('__ID__', areaId))
           .then(r => r.json())
           .then(data => {
             subareaSelect.innerHTML = '<option value="" disabled selected>Seleccionar</option>';
@@ -546,7 +546,7 @@
       return;
     }
     
-    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+    fetch('{{ url_for("api.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
       .replace('__SUB__', subareaId)
       .replace('__TIPO__', 'regular'))
       .then(r => r.json())
@@ -573,7 +573,7 @@
       return;
     }
     
-    fetch('{{ url_for("main.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
+    fetch('{{ url_for("api.verificar_sop_existe", subarea_id="__SUB__", tipo_sop="__TIPO__") }}'
       .replace('__SUB__', subareaId)
       .replace('__TIPO__', tipoSopReal))
       .then(r => r.json())
@@ -693,7 +693,7 @@
       });
     });
 
-    fetch('{{ url_for("main.reordenar_tareas") }}', {
+    fetch('{{ url_for("rutas.reordenar_tareas") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orden: orden })
