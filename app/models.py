@@ -876,6 +876,7 @@ class InstructivoTrabajo(db.Model):
         nullable=False,
         unique=True
     )
+    codigo = db.Column(db.String(50), unique=True, nullable=False) 
     instructivo_nombre = db.Column(db.String(200), nullable=False)
     instructivo_url = db.Column(db.String(500), nullable=False)
     
