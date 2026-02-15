@@ -525,7 +525,7 @@ class LanzamientoTarea(db.Model):
     dia_id = db.Column(db.Integer, db.ForeignKey('lanzamiento_dia.dia_id'), nullable=False)
     personal_id = db.Column(db.String(50), db.ForeignKey('personal.personal_id'), nullable=False)
     
-    # Campos opcionales (NULL para tareas fijas: inicio, receso, limpieza_equipo)
+    # Campos opcionales (NULL para tareas fijas: inicio, receso)
     area_id = db.Column(db.String(50), db.ForeignKey('area.area_id'), nullable=True)
     subarea_id = db.Column(db.String(50), db.ForeignKey('sub_area.subarea_id'), nullable=True)
     sop_id = db.Column(db.String(50), db.ForeignKey('sop.sop_id'), nullable=True)
@@ -540,7 +540,7 @@ class LanzamientoTarea(db.Model):
     
     # Tipo de tarea
     tipo_tarea = db.Column(db.String(20), default='sop', nullable=False)
-    # Valores: 'sop' | 'inicio' | 'receso' | 'limpieza_equipo' | 'evento'
+    # Valores: 'sop' | 'inicio' | 'receso' | 'evento'
     
     es_arrastrable = db.Column(db.Boolean, default=True)
 

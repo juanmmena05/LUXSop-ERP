@@ -396,7 +396,7 @@
                   {{ t.area.area_nombre if t.area else 'Sin área' }} · 
                   {{ (t.sop_evento.detalles | map(attribute='tiempo_estimado') | sum) if t.sop_evento else 0 }} min
                 </div>
-              {% elif task_type in ['inicio', 'receso', 'limpieza_equipo'] %}
+              {% elif task_type in ['inicio', 'receso'] %}
                 <div class="task-meta">
                   {{ t.tiempo_estimado or 0 }} min estimados
                 </div>

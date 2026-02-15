@@ -105,7 +105,7 @@ def reporte_persona_dia(fecha, personal_id):
 
     # ===== SEPARAR TAREAS POR TIPO =====
     tareas_sop = [t for t in tareas if t.tipo_tarea == 'sop']
-    tareas_fijas = [t for t in tareas if t.tipo_tarea in ('inicio', 'receso', 'limpieza_equipo')]
+    tareas_fijas = [t for t in tareas if t.tipo_tarea in ('inicio', 'receso')]
     tareas_evento = [t for t in tareas if t.tipo_tarea == 'evento']
 
     # ===== PROCESAR SOPs =====
@@ -264,7 +264,6 @@ def reporte_persona_dia(fecha, personal_id):
         tipo_nombre = {
             'inicio': 'INICIO',
             'receso': 'RECESO',
-            'limpieza_equipo': 'LIMPIEZA DE EQUIPO'
         }.get(t.tipo_tarea, t.tipo_tarea.upper())
 
         if t.sop_evento_id and t.sop_evento:
@@ -312,7 +311,7 @@ def reporte_persona_dia(fecha, personal_id):
                 "sop_id": None,
             })
         else:
-            tiempo_fijo = {'receso': 45, 'limpieza_equipo': 60}.get(t.tipo_tarea, 0)
+            tiempo_fijo = {'receso': 45}.get(t.tipo_tarea, 0)
 
             detalles.append({
                 "tarea_id": t.tarea_id,

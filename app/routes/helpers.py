@@ -113,11 +113,10 @@ def get_or_create_dia(fecha_obj: date):
 
 
 def crear_tareas_fijas(dia_id: int, personal_id: str):
-    """Crea las 3 tareas fijas para un operario"""
+    """Crea las 2 tareas fijas para un operario"""
     tareas_fijas = [
         {'tipo_tarea': 'inicio', 'orden': -3, 'sop_evento_id': None, 'es_arrastrable': False},
         {'tipo_tarea': 'receso', 'orden': 50, 'sop_evento_id': None, 'es_arrastrable': True},
-        {'tipo_tarea': 'limpieza_equipo', 'orden': 999, 'sop_evento_id': 'SP-LI-EQ-001', 'es_arrastrable': False}
     ]
 
     for tarea in tareas_fijas:
@@ -141,7 +140,7 @@ def asegurar_tareas_fijas(dia_id: int, personal_id: str):
             db.and_(
                 LanzamientoTarea.dia_id == dia_id,
                 LanzamientoTarea.personal_id == personal_id,
-                LanzamientoTarea.tipo_tarea.in_(['inicio', 'receso', 'limpieza_equipo'])
+                LanzamientoTarea.tipo_tarea.in_(['inicio', 'receso'])
             )
         )
     ).scalar()
@@ -510,11 +509,7 @@ def calcular_tiempo_tarea(tarea):
         return 0
     elif tarea.tipo_tarea == 'receso':
         return 45
-    elif tarea.tipo_tarea == 'limpieza_equipo':
-        if tarea.sop_evento and tarea.sop_evento.detalles:
-            return sum(detalle.tiempo_estimado for detalle in tarea.sop_evento.detalles)
-        return 60
-    elif tarea.tipo_tarea == 'evento':
+    elif tarea.tipo_tarea in ('evento', 'limpieza_equipo'):
         if tarea.sop_evento and tarea.sop_evento.detalles:
             return sum(detalle.tiempo_estimado for detalle in tarea.sop_evento.detalles)
         return 0
